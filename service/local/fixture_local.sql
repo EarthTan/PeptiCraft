@@ -22,7 +22,7 @@
 --             `antibacterial` must return con_9003 alone, while the unfiltered construct
 --             list returns both.
 --
--- The pair exists so both branches of the binding logic are reachable in one run. Their
+-- The first two exist so both branches of the binding logic are reachable in one run. Their
 -- scores are chosen to land one construct clear of every veto gate and the other past two of
 -- them (haemolysis 0.71 > 0.55, MHC-I 0.44 > 0.35 under the wound-dressing route).
 --

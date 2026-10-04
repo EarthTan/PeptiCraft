@@ -12,8 +12,8 @@ What they are for:
     production;
   * every endpoint serialises against the fixture, which catches a response model that
     assumes a column the fixture does not have;
-  * the two seeded constructs take the two binding branches, so the verified/placeholder
-    split is asserted rather than assumed.
+  * the seeded constructs cover both binding branches, so the verified/placeholder split is
+    asserted rather than assumed.
 """
 from __future__ import annotations
 

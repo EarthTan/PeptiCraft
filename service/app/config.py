@@ -12,7 +12,7 @@ The remote instance is not always reachable: it lives behind a tunnel on a works
 is not always up. `IGEM_DB_BACKEND=auto` (the default) probes it once and, if the probe
 fails, serves the bundled SQLite fixture instead so the API and the interface can still be
 developed against. `postgres` and `sqlite` pin the backend and are what a deployment and a
-test run use respectively. The fixture never carries real pipeline data; it is two seeded
+test run use respectively. The fixture never carries real pipeline data; it is four seeded
 constructs that exist to exercise the code paths.
 """
 from __future__ import annotations

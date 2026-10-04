@@ -4,7 +4,7 @@ The production database lives on an Ubuntu workstation behind a tunnel, so it is
 reachable from a development machine. Without a fallback every layer above the repositories
 would be untestable whenever that host is down, which is exactly when the service most needs
 to be worked on. This module serves the same repositories from a small SQLite file that is
-built from `local/fixture_local.sql` on first use and holds two seeded constructs.
+built from `local/fixture_local.sql` on first use and holds four seeded constructs.
 
 There are three Postgres constructs the repositories use, and each is translated rather than
 removed, because removing one would change the value rather than its representation. A

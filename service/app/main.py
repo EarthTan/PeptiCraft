@@ -83,7 +83,7 @@ app = FastAPI(
         "the enrichment table, which is why they appear absent if only `constructs` is read.\n\n"
         "The remote instance is reached over a tunnel and is not always up. Under the default "
         "`IGEM_DB_BACKEND=auto`, an unreachable instance is replaced by a bundled SQLite "
-        "fixture holding two hand-made constructs, so the surface stays exercisable offline. "
+        "fixture holding four hand-made constructs, so the surface stays exercisable offline. "
         "`/api/health` names the backend that answered; fixture data is not pipeline data."
     ),
     lifespan=lifespan,

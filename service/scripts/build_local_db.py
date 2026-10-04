@@ -5,7 +5,7 @@
     python3 service/scripts/build_local_db.py --force    # delete and rebuild
     python3 service/scripts/build_local_db.py --path /tmp/x.sqlite3
 
-The fixture is two seeded constructs, not pipeline data; see local/fixture_local.sql. The
+The fixture is four seeded constructs, not pipeline data; see local/fixture_local.sql. The
 service builds it on demand the first time the fallback is used, so running this by hand is
 only needed to rebuild it after editing the SQL.
 

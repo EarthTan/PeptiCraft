@@ -29,7 +29,7 @@ def health() -> dict:
     different responses: one is a network problem, the other is a query problem.
 
     `database.backend` names which source actually answered. When it reads `sqlite` the
-    service is serving the bundled local fixture, which is seeded with two hand-made
+    service is serving the bundled local fixture, which is seeded with four hand-made
     constructs and carries no pipeline data; `database.fallback_reason` says why it took over.
     A caller that needs to know whether it is looking at real data reads this field rather
     than inferring it from the numbers.

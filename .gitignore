@@ -31,3 +31,6 @@ local/*.sqlite3-journal
 !.vscode/extensions.json
 .idea/
 *.sw?
+
+# Excel 打开工作簿时生成的锁文件
+~$*

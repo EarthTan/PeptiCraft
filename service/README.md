@@ -1,157 +1,118 @@
-# PeptiCraft backend service
+# PeptiCraft 后端服务
 
-A read-only FastAPI service over the `igem_peptides` PostgreSQL database. It is the only thing
-the front end talks to: every value the interface renders arrives through one of 19 endpoints
-under `/api`, and no score, threshold or safety verdict is computed in the browser.
+一个架在 `igem_peptides` PostgreSQL 数据库之上的只读 FastAPI 服务。前端只与它通信：界面渲染的每一个值都经由 `/api` 下 19 个接口之一送达，浏览器中不计算任何分数、阈值或安全裁决。
 
-## Running it
+## 运行
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env               # then fill in IGEM_PG_PASSWORD
+cp .env.example .env               # 然后填入 IGEM_PG_PASSWORD
 python -m uvicorn app.main:app --port 8000
 ```
 
-There is no automatic reload, so restart after a backend edit. Interactive documentation is at
-`/docs` and the OpenAPI document at `/openapi.json`.
+没有自动重载，改动之后需要重启。交互式文档在 `/docs`，OpenAPI 文档在 `/openapi.json`。
 
-## Configuration
+## 配置
 
-Settings are read from the environment or from `.env`. `service/.env.example` is the annotated
-template and carries every key.
+配置从环境变量或 `.env` 读取。`service/.env.example` 是带注释的模板，包含全部键。
 
-| Variable | Default | Meaning |
+| 变量 | 默认值 | 含义 |
 | --- | --- | --- |
-| `IGEM_PG_HOST`, `IGEM_PG_PORT`, `IGEM_PG_DB`, `IGEM_PG_USER`, `IGEM_PG_PASSWORD` | — | Connection parts. The host has no localhost default: the database runs on a separate machine and is reached by its IP address. A missing host or password is a hard error. |
-| `IGEM_PG_DSN` | unset | A full libpq string, as an alternative to the parts above. |
-| `IGEM_PG_ALLOW_LOCALHOST` | `false` | A local PostgreSQL instance does not carry the `igem` role, and a DSN pointing at localhost is rejected unless this is set. It exists for a deliberate SSH tunnel. |
-| `IGEM_DB_BACKEND` | `auto` | `auto` probes PostgreSQL once and serves the SQLite fixture when the probe fails; `postgres` never falls back; `sqlite` never touches PostgreSQL. |
-| `IGEM_SQLITE_PATH`, `IGEM_SQLITE_FIXTURE` | `local/…` | Where the fixture database is written, and the SQL it is built from. |
-| `STATEMENT_TIMEOUT_MS` | `60000` | Per-statement ceiling. `peptide_enrichment` holds 377 M rows in 130 GB, and an unbounded planner mistake should fail the request rather than hold a worker. |
-| `PG_POOL_MIN_SIZE`, `PG_POOL_MAX_SIZE`, `PG_POOL_TIMEOUT_S` | `1`, `8`, `15` | Connection pool bounds. |
-| `API_HOST`, `API_PORT` | `127.0.0.1`, `8000` | Bind address. |
-| `CORS_ORIGINS` | the Vite dev server | Allowed origins, comma-separated. |
-| `ANALYSIS_PROVIDER` | `template` | `template` renders deterministic prose from stored scores. `llm` is reserved for a model-backed generator and is not implemented; `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL` belong to it. |
+| `IGEM_PG_HOST`、`IGEM_PG_PORT`、`IGEM_PG_DB`、`IGEM_PG_USER`、`IGEM_PG_PASSWORD` | — | 连接参数。主机没有本机默认值：数据库运行在另一台机器上，按其 IP 访问。主机或密码缺失是硬错误。 |
+| `IGEM_PG_DSN` | 未设置 | 完整的 libpq 连接串，作为上述分项的替代。 |
+| `IGEM_PG_ALLOW_LOCALHOST` | `false` | 本机的 PostgreSQL 实例不带 `igem` 角色，指向 localhost 的连接串会被拒绝，除非设置此项。它为有意搭建的 SSH 隧道而存在。 |
+| `IGEM_DB_BACKEND` | `auto` | `auto` 探测一次 PostgreSQL，探测失败时提供 SQLite 夹具；`postgres` 永不回退；`sqlite` 完全不碰 PostgreSQL。 |
+| `IGEM_SQLITE_PATH`、`IGEM_SQLITE_FIXTURE` | `local/…` | 夹具数据库的写入位置，以及据以构建它的 SQL。 |
+| `STATEMENT_TIMEOUT_MS` | `60000` | 单条语句的上限。`peptide_enrichment` 有 3.77 亿行、130 GB，规划器一旦失控，应当让这次请求失败，而不是占住一个工作进程。 |
+| `PG_POOL_MIN_SIZE`、`PG_POOL_MAX_SIZE`、`PG_POOL_TIMEOUT_S` | `1`、`8`、`15` | 连接池上下限。 |
+| `API_HOST`、`API_PORT` | `127.0.0.1`、`8000` | 绑定地址。 |
+| `CORS_ORIGINS` | Vite 开发服务器 | 允许的来源，逗号分隔。 |
+| `ANALYSIS_PROVIDER` | `template` | `template` 依据已存分数渲染确定性文字。`llm` 预留给接模型的生成器，尚未实现；`LLM_BASE_URL`、`LLM_API_KEY` 与 `LLM_MODEL` 属于它。 |
 
-## The local fallback
+## 本地回退
 
-The database lives on a workstation behind a tunnel and is not always up, so the service can
-serve a bundled SQLite fixture instead. The fixture is built from `local/fixture_local.sql` on
-first use and holds four hand-made constructs, which exist to exercise code paths and are not
-pipeline output. It covers both branches of the scaffold-binding logic — one construct whose
-stored binding is the same placeholder the real 496 rows carry, one whose binding carries a real
-sequence — plus a second design direction and a second linker, so that multi-direction ranking
-and per-row linker fallback are observable rather than assumed.
+数据库位于一台通过隧道访问的工作站上，并非始终在线，因此服务可以改为提供一份随仓库打包的 SQLite 夹具。夹具在首次使用时由 `local/fixture_local.sql` 构建，内含四条手工构造，其用途是走通代码路径，不是管线产出。它覆盖骨架绑定逻辑的两条分支——一条构造的存档绑定与真实 496 行携带的是同一个占位值，一条的绑定带真实序列——另加第二个设计方向与第二个连接片段，使多方向排序与逐行连接片段回落是可观察的，而不是假定的。
 
-`/api/health` names the source that answered. `database.backend` reads `postgres` or `sqlite`,
-and when it reads `sqlite`, `database.fallback_reason` says why the fallback engaged. A caller
-that needs to know whether it is looking at real data reads this field rather than inferring it
-from the size of the numbers.
+`/api/health` 会说明实际应答的是哪个数据源。`database.backend` 取 `postgres` 或 `sqlite`；当它取 `sqlite` 时，`database.fallback_reason` 说明回退为何启用。需要知道眼前是否真实数据的调用方，读这个字段，而不是从数字大小去推断。
 
-Rebuild the fixture after editing its SQL:
+改动夹具 SQL 之后重建：
 
 ```bash
 python scripts/build_local_db.py --force
 ```
 
-`app/sqlite_backend.py` translates the PostgreSQL dialect the repositories are written in — `%s`
-placeholders, `= ANY(%s)` expanded into an `IN` list, array containment against `json_each`,
-`::text` casts — and raises on anything it cannot translate. A statement the translation does not
-cover fails as an error rather than returning a wrong answer.
+`app/sqlite_backend.py` 负责翻译各仓储所写的 PostgreSQL 方言——`%s` 占位符、`= ANY(%s)` 展开为 `IN` 列表、针对 `json_each` 的数组包含、`::text` 强制转换——遇到无法翻译的写法直接抛错。翻译覆盖不到的语句会以错误告终，而不是返回一个错误答案。
 
-## Endpoints
+## 接口
 
-All under `/api`. Eighteen read, one writes.
+全部位于 `/api` 之下。18 个读，1 个写。
 
-| Method | Path | Returns |
+| 方法 | 路径 | 返回 |
 | --- | --- | --- |
-| GET | `/api/health` | Liveness plus database reachability, and which backend answered. |
-| GET | `/api/meta/reference` | Directions, routes, tools, pipeline rounds and reference libraries in one payload. |
-| GET | `/api/meta/directions` | The four design directions. |
-| GET | `/api/meta/routes` | The five application routes and their screening profiles. |
-| GET | `/api/meta/tools` | One definition per score: the predictor, the direction of improvement, the threshold and where the threshold comes from. |
-| GET | `/api/meta/pipeline` | The screening pipeline rounds and their status. |
-| GET | `/api/meta/coverage` | How much of the peptide library each tool covers. |
-| GET | `/api/constructs` | Paged construct list. Filters: `direction`, `channel` (`top` or `bottom`), `status`, `route_id`; `limit` up to 500 and `offset`. |
-| GET | `/api/constructs/{id}` | One construct with all nine scores. `route_id` selects the screening profile; `scaffold_id` and `linker_id` name assembly targets. |
-| GET | `/api/constructs/{id}/scaffolds` | Scaffolds this construct could be assembled with. |
-| GET | `/api/constructs/{id}/peptide` | The functional peptide and its enrichment rows. |
-| GET | `/api/constructs/{id}/analysis` | Generated prose about the construct, for one `route_id`. |
-| POST | `/api/constructs/{id}/chat` | Conversational form of the analysis endpoint. The only endpoint that writes. |
-| GET | `/api/build` | Ranks the candidates for one `direction` and `route_id` and assembles each into a fused sequence. `scaffold_id` and `linker_id` are optional and each changes only the sequence, not the ranking. |
-| GET | `/api/scaffolds` | The scaffold library. Filters: `route_id`, `category`. |
-| GET | `/api/scaffolds/{id}` | One scaffold cluster. |
-| GET | `/api/scaffolds/{id}/constructs` | Constructs bound to a scaffold. |
-| GET | `/api/linkers` | The curated linker library. `include_placeholder` controls whether the sample-table entries are listed alongside it. |
-| GET | `/api/linkers/{id}` | One linker. |
+| GET | `/api/health` | 存活状态与数据库可达性，以及实际应答的后端。 |
+| GET | `/api/meta/reference` | 方向、路径、工具、管线轮次与参考库，一个响应装齐。 |
+| GET | `/api/meta/directions` | 四个设计方向。 |
+| GET | `/api/meta/routes` | 五条应用路径及其筛选档案。 |
+| GET | `/api/meta/tools` | 每项分数一条定义：预测器、改进方向、阈值及其来源。 |
+| GET | `/api/meta/pipeline` | 筛选管线的轮次与各自状态。 |
+| GET | `/api/meta/coverage` | 每个工具对肽库的覆盖量。 |
+| GET | `/api/constructs` | 分页的构造列表。筛选参数：`direction`、`channel`（`top` 或 `bottom`）、`status`、`route_id`；`limit` 最大 500，另有 `offset`。 |
+| GET | `/api/constructs/{id}` | 单条构造及其全部九项分数。`route_id` 选择筛选档案；`scaffold_id` 与 `linker_id` 指定装配目标。 |
+| GET | `/api/constructs/{id}/scaffolds` | 可用于装配这条构造的骨架。 |
+| GET | `/api/constructs/{id}/peptide` | 功能肽及其分数行。 |
+| GET | `/api/constructs/{id}/analysis` | 针对该构造生成的一段文字，按指定的 `route_id`。 |
+| POST | `/api/constructs/{id}/chat` | 分析接口的对话形式。唯一会写入的接口。 |
+| GET | `/api/build` | 为一个 `direction` 与 `route_id` 排序候选，并把每条装配成融合序列。`scaffold_id` 与 `linker_id` 可选，各自只改变序列，不改变排序。 |
+| GET | `/api/scaffolds` | 骨架库。筛选参数：`route_id`、`category`。 |
+| GET | `/api/scaffolds/{id}` | 单个骨架簇。 |
+| GET | `/api/scaffolds/{id}/constructs` | 绑定到某个骨架的构造。 |
+| GET | `/api/linkers` | 整理过的连接片段库。`include_placeholder` 控制样例表中的条目是否一并列出。 |
+| GET | `/api/linkers/{id}` | 单条连接片段。 |
 
-`/` returns a small service descriptor and is excluded from the schema.
+`/` 返回一小段服务描述，不纳入接口模式。
 
-## Source layout
+## 源码结构
 
 ```
 app/
-  main.py             the application, its error handlers and the router mounting
-  config.py           settings, and the guard that refuses a localhost DSN
-  db.py               the connection pool, and the DatabaseUnavailable / QueryFailed pair
-  sqlite_backend.py   PostgreSQL-to-SQLite translation for the fallback backend
-  models/             response models (pydantic v2), one module per endpoint group
-  repositories/       one module per table group; the only place SQL is written
-  services/           the decisions: scoring, safety, reference data, assembly
-  routers/            HTTP binding only
+  main.py             应用本体、错误处理器与路由挂载
+  config.py           配置，以及拒绝本机连接串的守卫
+  db.py               连接池，以及 DatabaseUnavailable / QueryFailed 这一对异常
+  sqlite_backend.py   为回退后端做的 PostgreSQL 到 SQLite 翻译
+  models/             响应模型（pydantic v2），每个接口组一个模块
+  repositories/       每个表组一个模块；唯一书写 SQL 的地方
+  services/           各项判断：打分、安全、参考数据、装配
+  routers/            只做 HTTP 绑定
 ```
 
-The split between the last three layers is what keeps a change local. A repository answers with
-rows; a service turns rows into a verdict or an assembled sequence; a router validates input and
-chooses a status code. Two modules hold decisions that would otherwise be duplicated across
-callers: `services/scoring.py` owns the composite score and the safety verdict, and
-`services/constructs.py` owns `assemble`, the single place a construct's segments are put
-together.
+后三层之间的分工是改动得以局限在一处的关键。仓储用行来作答；服务把行变成一项裁决或一段装配好的序列；路由校验输入并选定状态码。有两处模块收拢了本会在多个调用方之间重复的判断：`services/scoring.py` 负责综合分与安全裁决，`services/constructs.py` 负责 `assemble`，也就是把一条构造的各段拼到一起的唯一位置。
 
-## Scripts
+## 脚本
 
-| Script | Purpose |
+| 脚本 | 用途 |
 | --- | --- |
-| `scripts/migrate.py` | Applies the idempotent, additive migrations under `sql/`. |
-| `scripts/import_scaffold_library.py` | Imports the curated scaffold table from `data/scaffold_database_2026-09-06/` into `scaffold_library` and `scaffold_library_sequences`. |
-| `scripts/import_linker_library.py` | Imports the linker library into `linker_library`. |
-| `scripts/extract_linkers.mjs` | The companion that produced the linker import's input from the front end. Superseded: it reads a file the front end no longer has, so the import cannot be re-run from it as it stands. |
-| `scripts/build_local_db.py` | Builds or rebuilds the SQLite fixture. |
+| `scripts/migrate.py` | 应用 `sql/` 下的幂等、增量式迁移。 |
+| `scripts/import_scaffold_library.py` | 把 `data/scaffold_database_2026-09-06/` 的整理骨架表导入 `scaffold_library` 与 `scaffold_library_sequences`。 |
+| `scripts/import_linker_library.py` | 把连接片段库导入 `linker_library`。 |
+| `scripts/extract_linkers.mjs` | 产出连接片段导入输入的那个配套脚本，输入取自前端。已废弃：它读取的文件前端已不再保留，因此按现状无法靠它重跑导入。 |
+| `scripts/build_local_db.py` | 构建或重建 SQLite 夹具。 |
 
-## Tests
+## 测试
 
 ```bash
 python -m pytest tests
 ```
 
-44 tests, all offline. `test_sqlite_dialect.py` pins the PostgreSQL-to-SQLite translation against
-each construct it must cover; `test_local_backend.py` drives every endpoint through the real
-application against the fixture; `test_build.py` pins the ranking and the two assembly targets,
-including that naming a target changes the sequence and not the candidate set.
+44 项测试，全部离线。`test_sqlite_dialect.py` 针对翻译必须覆盖的每一种写法，钉住 PostgreSQL 到 SQLite 的转换；`test_local_backend.py` 让每个接口经由真实应用打在夹具上；`test_build.py` 钉住排序与两个装配目标，包括指定目标只改变序列、不改变候选集这一条。
 
-Editing a repository so that it emits a statement the translation cannot handle fails in this
-suite rather than in a deployment, which is the point of running the endpoints against SQLite at
-all.
+改动某个仓储、使它产出的语句落在翻译覆盖之外时，会在这套测试里失败，而不是在部署时失败——这正是让接口对着 SQLite 跑一遍的意义所在。
 
-## Rules the service holds to
+## 服务坚守的规则
 
-**A missing score is not a zero.** All nine scores are nullable, and `null` means the predictor
-did not cover that peptide while `0` means it did and returned zero. The interface renders them
-differently, and so does every aggregate.
+**缺失的分数不是零。** 九项分数全部可空，`null` 表示预测器没有覆盖那条肽，`0` 表示覆盖了且返回零。界面把两者渲染得不同，每一个汇总值也一样。
 
-**Two directions are rankings, not probabilities.** Anti-inflammatory (iMFP-LG's AIP channel) and
-antimelanin (TIPred) separate functional-looking peptides from random fragments rather than
-measuring activity, so the service tags the score with `ranking_only` semantics. Such a score can
-be ordered but is never given a probability colour or a pass/fail badge.
+**两个方向的分只能用于排序，不是概率。** 抗炎（iMFP-LG 的 AIP 通道）与抗黑素（TIPred）区分的是"像不像功能肽"，而不是测量活性，因此服务给这类分数打上 `ranking_only` 语义标记。这类分数可以排序，但绝不配概率配色或通过／不通过徽章。
 
-**Thresholds live here, and travel with the answer.** The three safety gates are toxicity,
-haemolysis and immunogenicity; B-cell epitope propensity is a soft signal rather than a gate.
-Immunogenicity has no global threshold — it is 0.35 for wound dressing and injectable filler,
-0.50 for mask/patch and topical film, and 0.60 for hair care — so the gate is applied from the
-route's profile and the profile is returned with the response. Nothing downstream re-derives a
-threshold or re-weights a component.
+**阈值只存在于这里，并随答案一同返回。** 三道安全门是毒性、溶血与免疫原性；B 细胞表位倾向是软信号，不是门。免疫原性没有全局阈值——创面敷料与注射填充为 0.35，面膜贴片与涂敷成膜为 0.50，毛发护理为 0.60——因此该门按路径档案施加，档案随响应一并返回。下游不会重新推导阈值，也不会重新加权任何分量。
 
-**Assembly is resolved once per request.** `?scaffold=` and `?linker=` are independent and either
-may be omitted, in which case that part falls back to what the construct's own row records. Both
-report their provenance separately, because one build can take its scaffold from the request and
-its linker from the row.
+**装配每次请求只解析一次。** `?scaffold=` 与 `?linker=` 相互独立，都可省略，省略时该零件回落到构造自身行所记录的值。两者分别报告各自出处，因为一次构建的骨架可以来自请求，而连接片段来自行。

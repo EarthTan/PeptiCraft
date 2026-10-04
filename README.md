@@ -1,42 +1,33 @@
 # PeptiCraft
 
-PeptiCraft is a web platform for designing recombinant fusion proteins. A construct joins three
-parts end to end: a functional peptide, a structural scaffold protein, and a linker between them.
-The platform pairs a pre-computed library of screened constructs with a guided builder, and
-evaluates each candidate against criteria that depend on how the construct is meant to be
-delivered.
+PeptiCraft 是一套用于设计重组融合蛋白的网页平台。一条构造由三段首尾相接组成：一段功能肽、一段充当支架的结构蛋白（骨架蛋白），以及连接两者的一段连接片段。平台把一份预先算好的筛选成果库与一个带引导的构建器配合使用，并按构造预期给药方式所对应的标准评估每一条候选。
 
-The project is built by the DKU iGEM 2026 team. This repository is the whole platform: the
-backend service, the web front end, the curated data behind both, the project documentation, and
-the built front end used for deployment.
+本项目由昆山杜克大学 iGEM 2026 团队开发。本仓库就是整个平台：后端服务、网页前端、两者所依赖的整理数据、项目文档，以及用于部署的已构建前端。
 
-## Layout
+## 目录结构
 
-| Path | Contents |
+| 路径 | 内容 |
 | --- | --- |
-| `app/` | Front end. React 19 and TypeScript on Vite 8; five pages; English interface. |
-| `service/` | Backend. FastAPI over the `igem_peptides` PostgreSQL database, 19 endpoints under `/api`. |
-| `data/` | Curated reference data as files: the scaffold sequence database, the patent source packs, and the scenario/delivery matrix. |
-| `docs/` | The project documentation set, in Chinese. |
-| `publish/` | The built front end plus a zero-dependency static server. |
+| `app/` | 前端。基于 Vite 8 的 React 19 与 TypeScript；五个页面；英文界面。 |
+| `service/` | 后端。架在 `igem_peptides` PostgreSQL 数据库之上的 FastAPI，`/api` 下 19 个接口。 |
+| `data/` | 以文件形式保存的整理参考数据：骨架序列表、专利源数据包，以及场景／给药矩阵。 |
+| `docs/` | 项目文档体系，中文。 |
+| `publish/` | 已构建的前端，外加一个零依赖的静态服务器。 |
 
-Two directories sit outside version control, both deliberately. `iGEM-platform-main/`, the
-screening pipeline, is left out on size grounds — its result archives run to hundreds of
-megabytes — and because it carries its own documentation. `service/.env` is left out because it
-holds the database password; `service/.env.example` is the template and lists every setting.
+有两个目录被有意排除在版本管理之外。筛选管线 `iGEM-platform-main/` 排除的原因，一是体积——它的结果归档达数百兆——二是它自带一套文档。`service/.env` 排除的原因是它保存数据库密码；`service/.env.example` 是模板，列出了全部配置项。
 
-## Running it locally
+## 本地运行
 
-The backend reads a PostgreSQL instance that lives on a separate workstation, so it starts first:
+后端读取的 PostgreSQL 实例位于另一台工作站，因此先启动后端：
 
 ```bash
 cd service
 pip install -r requirements.txt
-cp .env.example .env               # then fill in IGEM_PG_PASSWORD
+cp .env.example .env               # 然后填入 IGEM_PG_PASSWORD
 python -m uvicorn app.main:app --port 8000
 ```
 
-The front end runs in a second terminal, and proxies `/api` to port 8000:
+前端在第二个终端中运行，并把 `/api` 转发到 8000 端口：
 
 ```bash
 cd app
@@ -44,56 +35,28 @@ npm install
 npm run dev                        # http://127.0.0.1:5173
 ```
 
-The backend has no automatic reload, so a backend edit needs a manual restart. The remote
-database is not always reachable; under the default `IGEM_DB_BACKEND=auto` an unreachable
-instance is replaced by a bundled SQLite fixture of four hand-made constructs, and `/api/health`
-names the source that actually answered. Settings are listed in `service/.env.example` and
-described in `service/README.md`.
+后端没有自动重载，改动之后需要手动重启。远程数据库并非始终可达；在默认的 `IGEM_DB_BACKEND=auto` 下，连不上的实例由一份随仓库打包的 SQLite 夹具替代，其中是四条手工构造，`/api/health` 会说明实际应答的是哪一个数据源。配置项列在 `service/.env.example`，说明见 `service/README.md`。
 
-## The data
+## 数据
 
-Three layers, each of a different origin.
+分三层，来源各不相同。
 
-The **peptide library** holds 20,248,885 peptides of 1 to 30 residues, drawn from ten sources.
-Behind it sits `peptide_enrichment`, about 377 million rows, one row per peptide per tool.
+**肽库**保存 20,248,885 条长度为 1 至 30 个残基的肽，来自十个数据源。它背后是 `peptide_enrichment`，约 3.77 亿行，每条肽每个工具一行。
 
-The **construct library** holds 496 constructs across four design directions: 170 antioxidant,
-65 antibacterial, 154 anti-inflammatory and 107 antimelanin. Each carries nine scores — one
-functional, four safety, three developability, and a composite derived from the developability
-ones. The antioxidant and antibacterial directions are signed off; the other two are works in
-progress and the interface labels them as such. Every score is pre-computed and stored in the
-database; the service reads them and never re-runs a predictor.
+**构造库**保存 496 条构造，分布在四个设计方向上：抗氧化 170 条、抗菌 65 条、抗炎 154 条、抗黑素 107 条。每条带九项分数——一项功能分、四项安全分、三项成药性分，以及一项由成药性分派生的综合分。抗氧化与抗菌两个方向已签字确认，另外两个方向仍在进行中，界面照此标注。所有分数都预先算好并存入库中，服务只读取，从不重跑预测器。
 
-The **reference libraries** hold 8 scaffold protein clusters covering 16 sequences, and 15
-curated linkers.
+**参考库**保存 8 个骨架蛋白簇、共 16 条序列，以及 15 条整理过的连接片段。
 
-One property of the stored data is consequential enough to state here. All 496 constructs point
-at a single placeholder scaffold row that carries no sequence, so a fused sequence cannot be
-assembled end to end from the stored data alone. The service reports this rather than fabricating
-a segment: with no scaffold named it emits the linker and peptide segments and marks the scaffold
-segment unavailable, and it labels each binding as placeholder, verified or inferred according to
-where the sequence came from. The options for closing the gap are recorded in
-`docs/PeptiCraft-文档体系/04-技术架构与开发进度.md`.
+有一条数据性质值得在此说明。496 条构造全部指向同一行占位骨架，该行不含序列，因此单凭已存数据拼不出首尾完整的融合序列。服务如实报告这一点，而不编造片段：未指定骨架时输出连接片段与功能肽两段，并把骨架段标为不可用；同时按序列来源把每条绑定标为占位、已核实或推断。补齐这一缺口的可选做法记录在 `docs/PeptiCraft-文档体系/04-技术架构与开发进度.md`。
 
-## Status
+## 状态
 
-Both halves run against the real database, and every value the interface shows traces to a table
-and a field. The behaviour that is still provisional — the placeholder scaffold binding, the empty
-peptide-metadata table, the linker library having no route dimension, and the builder steps that
-change the assembled sequence without narrowing the candidate set — is listed in `app/README.md`
-and in the project documentation.
+两部分都在对着真实数据库运行，界面显示的每一个值都能追溯到某张表的某个字段。仍属临时形态的行为——占位骨架绑定、空的肽次级属性表、连接片段库缺少路径维度，以及构建器中那两步只改变拼出的序列而不收窄候选集——列在 `app/README.md` 与项目文档中。
 
-The platform has been exercised end to end on a local machine and has never been deployed to a
-public host. Deployment is `npm run build` in `app/`, copying `app/dist/` into `publish/`, and
-running the server from there.
+平台已在本地机器上端到端跑通，从未部署到公开主机。部署方式是在 `app/` 中执行 `npm run build`，把 `app/dist/` 复制进 `publish/`，再从那里启动服务器。
 
-## Documentation
+## 文档
 
-`docs/PeptiCraft-文档体系/` holds six documents in Chinese, about 130 KB together, written for
-three readers: the project lead, who needs the state of the work rather than the code; domain
-specialists, who need the biology and the meaning of the data; and the next person to take the
-work over. `service/README.md`, `app/README.md` and `data/README.md` describe their own
-directories.
+`docs/PeptiCraft-文档体系/` 保存六份中文文档，合计约 130 KB，面向三类读者：项目负责人，关心的是工作进展而非代码；领域专家，关心的是生物学与每一项数据的含义；以及接下来接手这项工作的人。`service/README.md`、`app/README.md` 与 `data/README.md` 各自说明自己的目录。
 
-The screening pipeline under `iGEM-platform-main/` is a separate body of work with its own
-documentation, and is not part of this set.
+`iGEM-platform-main/` 下的筛选管线是另一批独立工作，自带文档，不属于本套文档。

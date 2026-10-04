@@ -1,14 +1,10 @@
-# Published front end
+# 已发布前端
 
-The built front end, kept in the repository so a deployment needs nothing from the build
-toolchain. It is a static single-page application — `index.html`, one hashed JavaScript bundle and
-one hashed stylesheet under `assets/`, two SVG assets — served by `server.js`, a zero-dependency
-Node static server that falls back to `index.html` for unknown paths so that client-side routes
-resolve.
+已构建的前端，保存在仓库里，因此部署时不需要构建工具链里的任何东西。它是一个静态单页应用——`index.html`、`assets/` 下一个带哈希的 JavaScript 包和一个带哈希的样式表、两个 SVG 资源——由 `server.js` 提供服务，这是一个零依赖的 Node 静态服务器，对未知路径回落到 `index.html`，使客户端路由能够解析。
 
-## Producing it
+## 生成方式
 
-The contents come out of the front end build and are copied in whole:
+内容出自前端构建，整体复制过来：
 
 ```bash
 cd ../app
@@ -16,21 +12,16 @@ npm run build
 cp -R dist/. ../publish/
 ```
 
-The files are build output. Nothing here is edited by hand: a change made in this directory is
-lost the next time the bundle is copied over it, and belongs in `../app/src/` instead.
+这里的文件是构建产物。本目录中没有任何内容由手工编辑：在这里做的改动会在下一次包被复制覆盖时丢失，应当改在 `../app/src/`。
 
-## Running it
+## 运行方式
 
 ```bash
 node server.js
 ```
 
-The server listens on port 3000, or on `PORT` when that is set. It takes no other configuration
-and needs no dependencies installed.
+服务器监听 3000 端口，设置了 `PORT` 时以该值为准。它不接受其他配置，也不需要安装依赖。
 
-## Status
+## 状态
 
-The platform has never been deployed to a public host, so this directory is a prepared artefact
-rather than a running one. The front end requests `/api` on its own origin unless
-`VITE_API_BASE` is set at build time, so a deployment either serves the backend at that path on
-the same host or rebuilds the bundle pointed at the service's origin.
+平台从未部署到公开主机，因此本目录是准备好的产物，而不是正在运行的实例。前端默认向同源的 `/api` 发起请求，除非构建时设置了 `VITE_API_BASE`；因此部署时要么在同一主机的该路径上提供后端，要么重新构建包并指向服务的源站。

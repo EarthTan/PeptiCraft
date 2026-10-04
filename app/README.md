@@ -1,116 +1,84 @@
-# PeptiCraft — front end
+# PeptiCraft — 前端
 
-PeptiCraft is a web platform for designing recombinant fusion proteins. A construct is three
-parts joined together: a functional peptide, a structural scaffold protein, and a linker
-between them. The platform exposes a pre-computed library of screened constructs and a guided
-builder that scores new combinations against criteria specific to the application route.
+PeptiCraft 是一套用于设计重组融合蛋白的网页平台。一条构造由三段拼成：一段功能肽、一段充当支架的骨架蛋白，以及连接两者的一段连接片段。平台对外提供一份预先算好的筛选成果库，以及一个带引导的构建器，按应用路径各自的标准给新组合打分。
 
-This directory holds the front end only. Everything it renders comes from the backend service
-in `../service/`, which reads the `igem_peptides` PostgreSQL instance. The project is built by
-the DKU iGEM 2026 team.
+本目录只放前端。它渲染的一切都来自 `../service/` 中的后端服务，后者读取 `igem_peptides` PostgreSQL 实例。本项目由昆山杜克大学 iGEM 2026 团队开发。
 
-## Running it
+## 运行
 
-The front end needs the backend running. Start the backend first, from `../service/`:
+前端需要后端先跑起来。先在 `../service/` 中启动后端：
 
 ```bash
 python -m uvicorn app.main:app --port 8000
 ```
 
-Then, in this directory:
+然后在本目录：
 
 ```bash
 npm install
 npm run dev
 ```
 
-The dev server listens on `http://127.0.0.1:5173`. It proxies `/api` to the backend, so the
-front end only ever requests relative paths and no CORS configuration is needed in
-development. The proxy target defaults to `http://127.0.0.1:8000` and can be overridden with
-`VITE_API_PROXY_TARGET`.
+开发服务器监听 `http://127.0.0.1:5173`，并把 `/api` 转发给后端，因此前端只请求相对路径，开发时无需任何 CORS 配置。转发目标默认是 `http://127.0.0.1:8000`，可用 `VITE_API_PROXY_TARGET` 覆盖。
 
 ```bash
-npm run build     # type-check and produce a production bundle in dist/
-npm run preview   # serve the built bundle locally
+npm run build     # 类型检查并产出生产包到 dist/
+npm run preview   # 本地提供已构建的包
 npm run lint      # oxlint
 ```
 
-The backend runs without automatic reload. Restart it manually after changing backend code.
+后端运行时不自动重载。改动后端代码后需要手动重启。
 
-## Routes
+## 路由
 
-| Path | Page |
+| 路径 | 页面 |
 |---|---|
-| `/` | Landing page: platform framing, direction counts, application routes, pipeline rounds |
-| `/library` | Library browser: peptides and constructs, scaffolds, linkers |
-| `/builder` | Construct builder: a five-step guided flow |
-| `/results/:id` | Results for one construct |
-| `/library/scaffold/:id` | Scaffold details |
+| `/` | 首页：平台定位、方向计数、应用路径、管线轮次 |
+| `/library` | 库浏览器：肽与构造、骨架、连接片段 |
+| `/builder` | 构造构建器：五步引导流程 |
+| `/results/:id` | 单条构造的结果页 |
+| `/library/scaffold/:id` | 骨架详情 |
 
-## Source layout
+## 源码结构
 
 ```
 src/
-  api/          client.ts (fetch, error normalisation), index.ts (endpoint bindings),
-                types.ts (mirrors of the backend response models)
-  components/   Layout and hand-built UI primitives; construct-panels.tsx holds the three
-                panels the Library and Results pages share
-  lib/          useAsync.ts (data loading, with a ticket guard against stale responses),
-                display.ts, score.ts, derive.ts, sequence.ts
-  pages/        one module per route
+  api/          client.ts（请求、错误归一化）、index.ts（接口绑定）、
+                types.ts（后端响应模型的镜像）
+  components/   布局与手工搭建的 UI 基础件；construct-panels.tsx 保存库页与结果页
+                共用的三个面板
+  lib/          useAsync.ts（数据加载，带防止过期响应的票据守卫）、
+                display.ts、score.ts、derive.ts、sequence.ts
+  pages/        每个路由一个模块
 ```
 
-There is no state management library. Each page holds its own data, and route parameters
-carry what has to cross a page boundary.
+没有状态管理库。每个页面持有自己的数据，需要跨页面传递的就放进路由参数。
 
-Two rules hold across the front end and matter when changing it:
+有两条规则贯穿前端，改动时需要注意：
 
-**No static data.** There is no `src/data/` and no `src/types/`. Every value rendered comes
-from an endpoint. The field names in `api/types.ts` keep the backend's snake_case spelling
-deliberately, so an OpenAPI-to-TypeScript diff is a mechanical comparison rather than a
-translation.
+**不做静态数据。** 没有 `src/data/`，也没有 `src/types/`。渲染的每一个值都来自某个接口。`api/types.ts` 中的字段名有意保留后端的 snake_case 拼写，使 OpenAPI 与 TypeScript 的比对成为机械对照，而不是一次翻译。
 
-**No threshold logic.** Composite scores, safety verdicts and route-specific immunogenicity
-thresholds are all computed by the backend and returned with the response. The front end does
-not compare a score against a threshold or weight anything. This is what keeps a threshold in
-exactly one place; the alternative produced a period where the same safety thresholds were
-written out in several places and one copy disagreed with the route definitions.
+**不做阈值判断。** 综合分、安全裁决与按路径取值的免疫原性阈值都由后端算出并随响应返回。前端不把分数与阈值作比较，也不给任何东西加权。阈值因此只存在于一处；此前的做法曾导致同一套安全阈值被写在好几个地方，其中一份与路径定义不一致。
 
-## Tech stack
+## 技术栈
 
-React 19 with TypeScript, built on Vite 8. Styling is Tailwind CSS v4 using the CSS-first
-`@theme` configuration, with a component layer assembled by hand on top of Radix UI primitives
-rather than a generated component library. Routing is `react-router-dom` v7, icons are Lucide,
-and linting is Oxlint. The interface is English throughout.
+React 19 配 TypeScript，构建在 Vite 8 之上。样式用 Tailwind CSS v4，采用 CSS 优先的 `@theme` 配置，组件层是在 Radix UI 基础件之上手工搭建的，而非使用生成的组件库。路由用 `react-router-dom` v7，图标用 Lucide，检查用 Oxlint。界面通篇英文。
 
-## Status
+## 状态
 
-The five pages read real data from the database. Every value on the Library, Builder, Results
-and Scaffold pages can be traced to a table and a field.
+五个页面都在读取数据库中的真实数据。库页、构建器、结果页与骨架页上的每一个值都能追溯到某张表的某个字段。
 
-The builder walks five steps — route, function, scaffold, linker, results. The last step calls
-`/api/build`, which ranks the candidates and assembles each fused sequence on the server rather
-than in the browser.
+构建器走五步——路径、功能、骨架、连接片段、结果。最后一步调用 `/api/build`，由服务端排序候选并装配每一条的融合序列，而不是在浏览器里做。
 
-Four things are still provisional, and they are visible in the interface rather than hidden:
+有四处仍是临时形态，它们在界面上是可见的，而非被隐藏：
 
-- Neither assembly target narrows the candidate set. Every stored construct binds a placeholder
-  scaffold, and every one records the same sample-table linker; both steps say so. What the two
-  choices change is the sequence each candidate is assembled into, and the fused length
-  reported beside it.
-- The linker library is not narrowed by route. All five routes are offered the same entries,
-  because `linker_library` carries no route dimension yet.
-- The fused sequence is not emitted in full. The scaffold segment is marked unavailable, and
-  only the linker and peptide segments — which are real — are drawn. Naming a scaffold
-  explicitly re-assembles the sequence and labels the binding as inferred.
-- The Library browser has filtering but no search field and no sorting controls, and "show
-  more" increases the page size rather than paging.
+- 两个装配目标都不收窄候选集。每条已存构造都绑定占位骨架，也都记录同一条样例表中的连接片段；两步都会说明这一点。这两项选择改变的是每条候选被装配成的序列，以及旁边报告的融合长度。
+- 连接片段库不按路径收窄。五条路径拿到的是同一批条目，因为 `linker_library` 尚无路径维度。
+- 融合序列不完整输出。骨架段被标为不可用，只画出连接片段与功能肽两段——这两段是真实的。显式指定骨架会重新装配序列，并把绑定标为推断。
+- 库浏览器有筛选，但没有搜索框、没有排序控件，"显示更多"是增大每页条数，而不是分页。
 
-Two engineering points are known and unfixed: there is no catch-all route, so an unknown path
-renders blank, and `src/App.css` is unreferenced.
+另有两处已知未修的工程问题：没有兜底路由，未知路径会渲染成空白；`src/App.css` 未被引用。
 
-## Documentation
+## 文档
 
-Project documentation lives in `../docs/PeptiCraft-文档体系/` and is written in Chinese. It
-covers the product form and user experience, the data assets, the biology and screening
-pipeline, the architecture and development progress, and a technical handover reference.
+项目文档位于 `../docs/PeptiCraft-文档体系/`，以中文撰写。内容覆盖产品形态与用户体验、数据资产、生物学与筛选管线、架构与开发进度，以及一份开发交接技术参考。

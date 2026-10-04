@@ -1,31 +1,18 @@
-# Project documentation
+# 项目文档
 
-Six documents in Chinese, about 130 KB together, covering the platform from its product form down
-to the table definitions behind it. They are written for three readers at once: the project lead,
-who needs the state of the work rather than the code; domain specialists, who need the biology and
-the meaning of each field; and whoever takes the work over next, who needs to know what is
-finished, what is provisional and where the decisions are recorded.
+六份中文文档，合计约 130 KB，从产品形态一路覆盖到底层的表定义。它们同时面向三类读者：项目负责人，关心的是工作进展而非代码；领域专家，关心的是生物学与每个字段的含义；以及接下来接手的人，需要知道哪些已完成、哪些是临时形态、决策记录在哪里。
 
-| Document | Covers |
+| 文档 | 内容 |
 | --- | --- |
-| `PeptiCraft-文档体系/00-总览.md` | Project positioning and a status snapshot. Start here. |
-| `PeptiCraft-文档体系/01-产品形态与用户体验.md` | The five pages, the walkthrough, and an inventory of what is complete. |
-| `PeptiCraft-文档体系/02-数据资产与数据形态.md` | The three data layers and the conventions that govern how a value is read. |
-| `PeptiCraft-文档体系/03-生物学逻辑与筛选管线.md` | The four pipeline rounds, where each threshold came from, and the weighting. |
-| `PeptiCraft-文档体系/04-技术架构与开发进度.md` | Architecture, the endpoint surface, progress by layer, and the open risks. |
-| `PeptiCraft-文档体系/05-开发交接技术参考.md` | Full endpoint table, enumerations, invariants, and where a given change belongs in the code. |
+| `PeptiCraft-文档体系/00-总览.md` | 项目定位与状态快照。从这里开始。 |
+| `PeptiCraft-文档体系/01-产品形态与用户体验.md` | 五个页面、走查记录，以及完成度盘点。 |
+| `PeptiCraft-文档体系/02-数据资产与数据形态.md` | 三层数据，以及规定一个值该如何解读的各项约定。 |
+| `PeptiCraft-文档体系/03-生物学逻辑与筛选管线.md` | 四轮管线、每个阈值的来源，以及加权方式。 |
+| `PeptiCraft-文档体系/04-技术架构与开发进度.md` | 架构、接口面、分层进度，以及未决风险。 |
+| `PeptiCraft-文档体系/05-开发交接技术参考.md` | 完整接口表、枚举值、不变量，以及某类改动该落在代码的哪一处。 |
 
-The six are numbered rather than nested: a reader starting at `00` reaches any later document
-without having read the ones between. Terminology is explained where it first appears instead of
-being collected into a glossary or an appendix, and each document is organised by topic rather
-than by section of the codebase, so a topic is covered in one place.
+这六份采用编号而不嵌套：读者从 `00` 出发，可以不经中间几份直接读到后面任何一份。术语在首次出现处解释，而不是收进术语表或附录；每份文档按主题组织，而不是按代码结构分节，因此同一主题在一处讲完。
 
-Four documents have the same subject matter as the directory READMEs and are not duplicates of
-them. The READMEs describe how to run a directory and what is inside it; these documents carry the
-reasoning, the provenance and the unfinished business. Where the two disagree, a running endpoint
-and a `count(*)` against the database are what settle it.
+其中四份与各目录 README 主题相同，但不是它们的重复。README 说明一个目录怎么跑、里面有什么；这些文档承载理由、出处与未完成事项。两者不一致时，以运行中的接口和对数据库的一次 `count(*)` 为准。
 
-An earlier generation of project documents was retired when this set was written; the READMEs in
-`../service/`, `../app/` and `../data/` were written against the same state. The screening
-pipeline under `../iGEM-platform-main/` has its own documentation, which is a separate body of
-work and is not part of this set.
+更早一代的项目文档在本套文档写成时已退役；`../service/`、`../app/` 与 `../data/` 下的 README 是针对同一状态写的。`../iGEM-platform-main/` 下的筛选管线自带文档，是另一批独立工作，不属于本套文档。

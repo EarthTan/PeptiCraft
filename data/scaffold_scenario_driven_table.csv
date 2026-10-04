@@ -1,0 +1,15 @@
+﻿一级场景 (Using Scenario),二级场景 (Scenario Subtype),一级递送 (Delivery),二级递送 (Delivery Subtype)
+Injectable Filler/Depot,Injectable Gel,Injection Delivery,Conventional Needle Injection
+Injectable Filler/Depot,Local Depot,Injection Delivery,Conventional Needle Injection
+Injectable Filler/Depot,Reconstituted Injectable Formulation,Injection Delivery,Conventional Needle Injection
+Hair/Fiber Coating,Hair-care Formulation,Topical Application,"Hair/Fiber Surface Application, Manual Application, Spray Application"
+Hair/Fiber Coating,Hair-conditioning Film,Topical Application,"Hair/Fiber Surface Application, Manual Application, Spray Application"
+Mask/Patch,Hydrogel Mask,Topical Application,（暂无 scaffold 实例）
+Surface Coating,Barrier Coating,Topical Application,"Hair/Fiber Surface Application, Manual Application, Spray Application"
+Surface Coating,Protein Film,Topical Application,"Hair/Fiber Surface Application, Manual Application, Spray Application"
+Topical,Film-forming Topical,Topical Application,"Hair/Fiber Surface Application, Manual Application, Spray Application"
+Topical,Topical Cosmetic Formulation,Topical Application,Manual Application
+Wound Dressing,Fibrous Dressing,Topical Application,Direct Wound Contact
+Wound Dressing,Lyophilized Dressing,Topical Application,"Direct Wound Contact, Patch-mediated Application"
+Wound Dressing,Post-procedure Dressing,Topical Application,"Direct Wound Contact, Patch-mediated Application"
+Wound Dressing,Self-assembled Hydrogel Dressing,Topical Application,Direct Wound Contact

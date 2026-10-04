@@ -1,0 +1,33 @@
+# 工作区私有数据（由本地工具维护，不属项目内容）
+.workbuddy/
+
+# 管线目录：体量大（291M，含 npz / csv.gz 大数据文件），不随本仓库版本管理
+iGEM-platform-main/
+
+# 依赖与构建产物
+node_modules/
+dist/
+dist-ssr/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+logs
+*.log
+
+# 环境变量（service/.env 内含数据库连接串，不得入库）
+.env
+
+# 本地回退数据库（由 local/fixture_local.sql 按需构建）
+local/*.sqlite3
+local/*.sqlite3-journal
+
+# 系统与编辑器
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.sw?

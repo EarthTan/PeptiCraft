@@ -1,0 +1,12 @@
+{
+  "name": "pepticraft-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PeptiCraft — AI recombinant protein design platform (DKU iGEM 2026)",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

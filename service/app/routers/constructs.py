@@ -59,6 +59,19 @@ def list_constructs(
         description="Application route whose profile the composite is computed under. "
         "Affects the composite and the safety verdict, not the filtering.",
     ),
+    search: str | None = Query(
+        default=None,
+        max_length=200,
+        description="Substring match against the peptide's sequence, source, accession and "
+        "source version. Matching is case-insensitive and literal: `%` and `_` in the term "
+        "match those characters rather than acting as wildcards.",
+    ),
+    order: Literal["rank", "peptide_length", "peptide_id"] = Query(
+        default="rank",
+        description="Row order. `rank` follows the pipeline's own ordering within each "
+        "direction and channel; the other two are for locating a peptide rather than for "
+        "reading the screening result.",
+    ),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> ConstructPage:
@@ -80,6 +93,8 @@ def list_constructs(
 
     rows, total = repo.list_constructs(
         direction=direction, channel=channel, status=status,
+        search=search.strip() if search else None,
+        order=order,
         limit=limit, offset=offset,
     )
     enriched = service.load_enrichment(rows)

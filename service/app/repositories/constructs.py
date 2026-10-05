@@ -57,8 +57,16 @@ LEFT JOIN linkers lk       ON lk.id = c.linker_id
 _ORDER = {
     "rank": "c.direction, c.channel DESC, c.rank NULLS LAST, c.id",
     "id": "c.id",
-    "functional": "c.id",
+    "peptide_length": "sp.length NULLS LAST, c.id",
+    "peptide_id": "sp.id",
 }
+
+# Sort orders whose expression reads the peptides alias. The alias comes from the search
+# join, so an order that needs it has to bring that join in even when no term was typed —
+# otherwise `ORDER BY sp.length` would reference an alias the statement never declared.
+_ORDER_NEEDS_PEPTIDES = frozenset({"peptide_length", "peptide_id"})
+
+_PEPTIDES_JOIN = "JOIN peptides sp ON sp.id = c.peptide_id"
 
 
 def _where(
@@ -66,9 +74,26 @@ def _where(
     channel: str | None,
     status: str | None,
     min_rank: int | None,
-) -> tuple[str, list[Any]]:
+    search: str | None = None,
+) -> tuple[str, list[Any], str]:
+    """Build the filter clause, its parameters, and any extra join it needs.
+
+    The search term is the one filter that cannot be answered from `constructs` alone: it
+    matches on the peptide's own columns, so a statement carrying it needs a second join to
+    `peptides`. That join is returned rather than assumed, so the caller cannot count rows
+    against one statement shape and read them from another — a mismatch there would report a
+    total the page cannot reconcile with the rows it holds.
+
+    Matching is written as `lower(col) LIKE ...` with an explicit `ESCAPE`, rather than
+    `ILIKE`. `ILIKE` is Postgres syntax SQLite does not implement, and this repository has to
+    select the same rows against either backend. The `ESCAPE` clause is stated explicitly
+    because the two engines disagree on the default: Postgres already reads a backslash as an
+    escape, SQLite does not, so without it the same term would match different rows on the
+    real database and on the local fixture.
+    """
     clauses: list[str] = []
     params: list[Any] = []
+    join = ""
     if direction:
         clauses.append("c.direction = %s")
         params.append(direction)
@@ -81,7 +106,29 @@ def _where(
     if min_rank is not None:
         clauses.append("c.rank IS NOT NULL AND c.rank <= %s")
         params.append(min_rank)
-    return (" WHERE " + " AND ".join(clauses) if clauses else ""), params
+    if search:
+        join = _PEPTIDES_JOIN
+        clauses.append(
+            "(lower(sp.sequence) LIKE %s ESCAPE '\\'"
+            " OR lower(COALESCE(sp.source, '')) LIKE %s ESCAPE '\\'"
+            " OR lower(COALESCE(sp.source_accession, '')) LIKE %s ESCAPE '\\'"
+            " OR lower(COALESCE(sp.source_version, '')) LIKE %s ESCAPE '\\')"
+        )
+        # Substring match on a literal term: a peptide sequence is short enough that
+        # "contains" is what a reader means, and the metacharacters are escaped so a `%` in
+        # the term does not turn the filter into a match-everything pattern.
+        pattern = f"%{_escape_like(search)}%"
+        params.extend([pattern] * 4)
+    return (" WHERE " + " AND ".join(clauses) if clauses else ""), params, join
+
+
+def _escape_like(term: str) -> str:
+    """Neutralise the LIKE metacharacters in a user-supplied term.
+
+    Paired with `ESCAPE '\\'` on the clause, so `A_B` matches only a literal underscore and
+    `100%` matches only a literal percent sign rather than every row.
+    """
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def list_constructs(
@@ -90,19 +137,22 @@ def list_constructs(
     channel: str | None = None,
     status: str | None = None,
     min_rank: int | None = None,
+    search: str | None = None,
     limit: int = 50,
     offset: int = 0,
     order: str = "rank",
 ) -> tuple[list[dict[str, Any]], int]:
-    where, params = _where(direction, channel, status, min_rank)
+    where, params, join = _where(direction, channel, status, min_rank, search)
     order_by = _ORDER.get(order, _ORDER["rank"])
+    if order in _ORDER_NEEDS_PEPTIDES and not join:
+        join = _PEPTIDES_JOIN
 
-    total = db.count(f"SELECT count(*) AS n FROM constructs c{where}", params)
+    total = db.count(f"SELECT count(*) AS n FROM constructs c {join}{where}", params)
     if total == 0:
         return [], 0
 
     rows = db.query(
-        f"{_BASE_SELECT}{where} ORDER BY {order_by} LIMIT %s OFFSET %s",
+        f"{_BASE_SELECT} {join}{where} ORDER BY {order_by} LIMIT %s OFFSET %s",
         [*params, limit, offset],
     )
     return rows, total

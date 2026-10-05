@@ -15,4 +15,4 @@
 
 其中四份与各目录 README 主题相同，但不是它们的重复。README 说明一个目录怎么跑、里面有什么；这些文档承载理由、出处与未完成事项。两者不一致时，以运行中的接口和对数据库的一次 `count(*)` 为准。
 
-更早一代的项目文档在本套文档写成时已退役；`../service/`、`../app/` 与 `../data/` 下的 README 是针对同一状态写的。`../iGEM-platform-main/` 下的筛选管线自带文档，是另一批独立工作，不属于本套文档。
+更早一代的项目文档在本套文档写成时已退役；`../service/`、`../app/` 与 `../data/` 下的 README 是针对同一状态写的。筛选管线在本地以 `../iGEM-platform-main/` 出现，是 [EarthTan/iGEM-platform](https://github.com/EarthTan/iGEM-platform) 的副本，自带文档，不属于本套文档；三个仓库的定位与承继关系见 [`../repositories.md`](../repositories.md)。

@@ -14,7 +14,9 @@ PeptiCraft 是一套用于设计重组融合蛋白的网页平台。一条构造
 | `docs/` | 项目文档体系，中文。 |
 | `publish/` | 已构建的前端，外加一个零依赖的静态服务器。 |
 
-有两个目录被有意排除在版本管理之外。筛选管线 `iGEM-platform-main/` 排除的原因，一是体积——它的结果归档达数百兆——二是它自带一套文档。`service/.env` 排除的原因是它保存数据库密码；`service/.env.example` 是模板，列出了全部配置项。
+有两个目录被有意排除在版本管理之外。筛选管线 `iGEM-platform-main/` 排除的原因，一是体积——它的结果归档达数百兆——二是它自带一套文档；它是 [EarthTan/iGEM-platform](https://github.com/EarthTan/iGEM-platform) 的 `main` 分支在本地的副本，只保留管线运行所需的内容，代码与文档以上游地址为准。`service/.env` 排除的原因是它保存数据库密码；`service/.env.example` 是模板，列出了全部配置项。
+
+本项目另有另两个仓库：[EarthTan/iGEM-silk](https://github.com/EarthTan/iGEM-silk)（第一阶段的筛选链路）与 [EarthTan/iGEM-platform](https://github.com/EarthTan/iGEM-platform)（第二阶段的管线与数据）。三者的定位与承继关系见 [`docs/repositories.md`](docs/repositories.md)。
 
 ## 本地运行
 

@@ -79,6 +79,9 @@ export interface ConstructQuery {
   status?: "passed" | "failed_safety" | "failed_score" | "WIP" | null
   /** Application route whose screening profile the composite and safety verdict use. */
   route_id?: string | null
+  /** Case-insensitive substring match on the peptide's sequence, source, accession or version. */
+  search?: string | null
+  order?: "rank" | "peptide_length" | "peptide_id" | null
   limit?: number
   offset?: number
 }

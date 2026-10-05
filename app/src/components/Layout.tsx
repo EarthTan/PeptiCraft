@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { Link, useLocation } from "react-router-dom"
 import { Button } from "@/components/ui/button"
+import { DataSourceBanner } from "@/components/DataSourceBanner"
 import { cn } from "@/lib/utils"
 import { Dna, Menu, X } from "lucide-react"
 
@@ -114,8 +115,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         )}
       </header>
 
+      {/* Which database answered. Sits below the fixed navbar and inside the page's top
+          padding, so an offline banner pushes the content down rather than covering it. */}
+      <div className="pt-16">
+        <DataSourceBanner />
+      </div>
+
       {/* Main Content */}
-      <main className="pt-16">{children}</main>
+      <main>{children}</main>
 
       {/* Footer */}
       <footer className="border-t border-gray-200 bg-surface-alt">

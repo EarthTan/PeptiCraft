@@ -522,10 +522,19 @@ export interface ChatResponse {
 export interface HealthResponse {
   ok: boolean
   database: {
+    /**
+     * Which source answered: `postgres`, `sqlite` or `auto`. `sqlite` means the service is
+     * serving the bundled fixture, which is hand-made sample data rather than pipeline output.
+     */
+    backend: string
     host: string
     database: string
     server?: string
     now?: string
+    /** Why the fallback took over. Present only when it did. */
+    fallback_reason?: string
+    /** The service's own statement of what the fixture is. Present only when it is in use. */
+    note?: string
   }
   analysis_provider: string
   error?: string

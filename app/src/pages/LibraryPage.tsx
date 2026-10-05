@@ -12,7 +12,18 @@ import {
   SafetyGateList,
   ToolScoreGrid,
 } from "@/components/construct-panels"
-import { ArrowUpRight, ChevronDown, Dna, Eye, FlaskConical, Layers, Link2 } from "lucide-react"
+import {
+  ArrowUpRight,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Dna,
+  Eye,
+  FlaskConical,
+  Layers,
+  Link2,
+  Search,
+} from "lucide-react"
 import {
   fetchConstruct,
   fetchConstructs,
@@ -154,6 +165,26 @@ export default function LibraryPage() {
 
 const PAGE_SIZE = 25
 
+type SortOrder = "rank" | "peptide_length" | "peptide_id"
+
+const SORT_LABELS: { value: SortOrder; label: string; hint: string }[] = [
+  {
+    value: "rank",
+    label: "Pipeline rank",
+    hint: "The order the screening pipeline produced, by direction and channel.",
+  },
+  {
+    value: "peptide_length",
+    label: "Peptide length",
+    hint: "Shortest first. Useful for finding candidates inside a length budget.",
+  },
+  {
+    value: "peptide_id",
+    label: "Peptide",
+    hint: "Groups every construct built on the same peptide together.",
+  },
+]
+
 function PeptidesPanel({
   reference,
   loading,
@@ -163,8 +194,19 @@ function PeptidesPanel({
 }) {
   const [direction, setDirection] = useState<string>("all")
   const [routeId, setRouteId] = useState<string | null>(null)
-  const [limit, setLimit] = useState(PAGE_SIZE)
+  const [search, setSearch] = useState("")
+  const [order, setOrder] = useState<SortOrder>("rank")
+  const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // The typed value and the committed one are separate, so a request is not issued per
+  // keystroke against a table of twenty million rows. The committed value advances on Enter
+  // or on the field losing focus, which is also what makes the input usable with a keyboard.
+  const [term, setTerm] = useState("")
+  const commitSearch = useCallback(() => {
+    setPage(0)
+    setSearch(term.trim())
+  }, [term])
 
   const routes = reference?.routes ?? []
   const effectiveRoute = routeId ?? routes[0]?.id ?? null
@@ -176,24 +218,33 @@ function PeptidesPanel({
     return fetchConstructs({
       direction: direction === "all" ? null : direction,
       route_id: effectiveRoute,
-      limit,
-      offset: 0,
+      search: search || null,
+      order,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
     })
-  }, [direction, effectiveRoute, limit])
+  }, [direction, effectiveRoute, search, order, page])
 
   const { data, loading: rowsLoading, error, reload, refreshing } = useAsync(load, [
     direction,
     effectiveRoute,
-    limit,
+    search,
+    order,
+    page,
   ])
 
   const directions = reference?.directions ?? []
   const rows = data?.items ?? []
   const total = data?.total ?? 0
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  // A filter change can leave the reader past the last page — the third page of a four-row
+  // fixture does not exist. Clamping here rather than in an effect keeps the correction in
+  // the same render as the page it applies to, so no intermediate frame shows a stale number.
+  const currentPage = Math.min(page, pageCount - 1)
 
   const selectDirection = (id: string) => {
     setDirection(id)
-    setLimit(PAGE_SIZE)
+    setPage(0)
     setExpandedId(null)
   }
 
@@ -234,7 +285,7 @@ function PeptidesPanel({
                 key={route.id}
                 onClick={() => {
                   setRouteId(route.id)
-                  setLimit(PAGE_SIZE)
+                  setPage(0)
                 }}
                 className={cn(
                   "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all duration-200 cursor-pointer",
@@ -250,6 +301,58 @@ function PeptidesPanel({
                 </span>
               </button>
             ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <div className="relative flex-1 min-w-[15rem] max-w-md">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={term}
+                onChange={(event) => setTerm(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") commitSearch()
+                }}
+                onBlur={commitSearch}
+                placeholder="Peptide sequence, source or accession"
+                aria-label="Search peptides"
+                className="w-full pl-8 pr-16 py-1.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-200"
+              />
+              {term && (
+                <button
+                  onClick={() => {
+                    setTerm("")
+                    setSearch("")
+                    setPage(0)
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 hover:text-gray-600 cursor-pointer"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400">Sort:</span>
+              {SORT_LABELS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    setOrder(option.value)
+                    setPage(0)
+                  }}
+                  title={option.hint}
+                  className={cn(
+                    "px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all duration-200 cursor-pointer",
+                    order === option.value
+                      ? "border-primary-400 bg-primary-50 text-primary-800"
+                      : "border-gray-200 bg-white text-gray-600 hover:border-primary-200",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <p className="text-xs text-gray-400">
@@ -270,11 +373,24 @@ function PeptidesPanel({
 
         {!rowsLoading && !error && (
           <>
-            <p className="text-xs text-gray-400 mb-3">
-              {total.toLocaleString()} construct{total === 1 ? "" : "s"} match · showing{" "}
-              {rows.length}
-              {refreshing && <span className="ml-2 text-primary-400">updating…</span>}
-            </p>
+            <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+              <p className="text-xs text-gray-400">
+                {total.toLocaleString()} construct{total === 1 ? "" : "s"} match
+                {search ? (
+                  <>
+                    {" "}
+                    for <span className="font-mono text-gray-600">“{search}”</span>
+                  </>
+                ) : null}
+                {pageCount > 1 && (
+                  <>
+                    {" · "}
+                    page {currentPage + 1} of {pageCount}
+                  </>
+                )}
+                {refreshing && <span className="ml-2 text-primary-400">updating…</span>}
+              </p>
+            </div>
 
             <div className="space-y-3">
               {rows.map((construct) => (
@@ -293,19 +409,42 @@ function PeptidesPanel({
             {rows.length === 0 && (
               <div className="text-center py-16">
                 <Dna className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No constructs in this function category</p>
+                <p className="text-gray-500">
+                  {search
+                    ? `Nothing matches “${search}” in this selection`
+                    : "No constructs in this function category"}
+                </p>
               </div>
             )}
 
-            {rows.length < total && (
-              <div className="text-center mt-6">
+            {pageCount > 1 && (
+              <nav
+                className="flex items-center justify-between gap-3 mt-6 pt-4 border-t border-gray-200"
+                aria-label="Peptide library pages"
+              >
                 <Button
                   variant="outline"
-                  onClick={() => setLimit((current) => current + PAGE_SIZE)}
+                  size="sm"
+                  disabled={currentPage === 0}
+                  onClick={() => setPage(Math.max(0, currentPage - 1))}
                 >
-                  Show more ({total - rows.length} remaining)
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  Previous
                 </Button>
-              </div>
+                <span className="text-xs text-gray-400">
+                  {currentPage * PAGE_SIZE + 1}–
+                  {Math.min(total, (currentPage + 1) * PAGE_SIZE)} of {total.toLocaleString()}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= pageCount - 1}
+                  onClick={() => setPage(Math.min(pageCount - 1, currentPage + 1))}
+                >
+                  Next
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </nav>
             )}
           </>
         )}
@@ -372,6 +511,10 @@ function ConstructRow({
 
   return (
     <Card
+      // A stable hook for the offline walkthrough, which needs to tell one page of rows from
+      // another. The construct id is in the visible text, but a text match cannot
+      // distinguish a row from the detail panel it expands into.
+      data-construct-id={construct.id}
       className={cn(
         "border-gray-200 hover:border-primary-200 hover:shadow-sm transition-all duration-200 overflow-hidden",
         !isCandidate && "opacity-80",

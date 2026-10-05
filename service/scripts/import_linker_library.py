@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Import the linker library into `linker_library`.
 
-The data comes from app/src/data/linkers.ts by way of scripts/extract_linkers.mjs, which
+The data came from app/src/data/linkers.ts by way of scripts/extract_linkers.mjs, which
 evaluates that module and prints it as JSON. Nothing is retyped here.
+
+    ⚠ That source file no longer exists, so this script cannot currently run — the extractor
+    explains what is missing and what would restore it. The 15 rows remain in the
+    `linker_library` table, so the data itself is not lost; only the curated source is. See
+    the extractor's header before changing anything here.
 
 Two inconsistencies in the source are carried through rather than corrected, because
 quietly repairing a curated library would hide the fact that it needs a decision:

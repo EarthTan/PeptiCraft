@@ -1,8 +1,9 @@
 """Shared value objects.
 
-The field names here are the contract the frontend reads. Where the frontend has an
-existing TypeScript type (`app/src/types/index.ts`), names match it exactly so an
-OpenAPI-to-TypeScript diff is a mechanical comparison rather than a translation.
+The field names here are the contract the frontend reads, and they are written out by hand in
+`app/src/api/types.ts`. The two are compared by reading both rather than by generating one from
+the other: the frontend has no generated client, and a generator would add a build step to a
+service whose whole value is that it is easy to read.
 """
 from __future__ import annotations
 

@@ -42,16 +42,12 @@ IMFP_LG_ADP = "imfp_lg_ADP"
 IMFP_LG_AHP = "imfp_lg_AHP"
 TIPRED = "tipred"
 
-# The functional score each direction is ranked by, and the semantics of that number.
-# Both antimicrobial and anti-inflammatory candidates have two plausible functional tools;
-# the choice is declared here rather than left implicit, and travels to the client in
-# `ConstructDetail.semantics` so the UI never renders a ranking score as a probability.
-FUNCTIONAL_SCORE_BY_DIRECTION: dict[str, tuple[str, str]] = {
-    "antioxidant": (ANOXPEPRED_FRS, "probability"),
-    "antibacterial": (IMFP_LG_AMP, "probability"),
-    "anti_inflammatory": (IMFP_LG_AIP, "ranking_only"),
-    "antimelanin": (TIPRED, "probability"),
-}
+# The functional score each direction is ranked by, and what that number may be read as, is
+# declared once in `services.scoring.FUNCTIONAL_SCORE`. It is deliberately not restated here:
+# a second copy of that mapping is a second thing to keep correct, and this one had already
+# drifted — it named `imfp_lg_AMP` where the stored key is `amp-esm`, and read the
+# anti-melanin TIPred score as a probability when it only orders candidates. The tool-name
+# constants above are the shared vocabulary; the choice among them is not this layer's to make.
 
 
 def scores_for_peptides(

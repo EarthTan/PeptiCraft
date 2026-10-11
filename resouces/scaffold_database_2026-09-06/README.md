@@ -29,18 +29,14 @@
 
 ## 主要改进
 - 原来的场景、子类、递送方式及递送子类标签已全部删除。
-- 应用标签收敛为五列：Topical appliance（涂敷成膜）、Mask patch、Hair care、Wound dressing、Injectable filler。
-- 标签字典工作表目前只给出其中四项（Topical appliance、Mask patch、Wound dressing、Injectable filler）的定义，Hair care 一列尚无字典条目。
-
-当前簇级标记数量（同一构建体的多条序列不重复计数）：
-- Topical appliance：2 个构建体（Bolt 18B、FHLC）
-- Mask patch：4 个构建体（锦波 HC8/HC16、锦波 16× 重复、羽松 SF-4/SF-10、FHLC）
-- Hair care：2 个构建体（创健 COL17、eADF4(C16)）
-- Wound dressing：4 个构建体（武汉 TRHCIII-1、创健 COL17、羽松 SF-4/SF-10、FHLC）
-- Injectable filler：2 个构建体（锦波 HC8/HC16、锦波 16× 重复）
-
-16 条记录每条至少带一个标签，标记依据写在该行自己的「产品/用途」与「潜在应用（中文整合）」两列里。重复单元与纯化标签版本（`eADF4_C16_repeat_unit_35aa`、`TRAUTEC_COL17_STREP_170801_HIS6_SEQID4_249aa`）同样带标签。
-
+- 改成四个可筛选的应用列：涂敷成膜、Mask patch、Wound dressing、Injectable filler。
+- 标签字典也已缩减为这四项。
+当前标记数量：
+- 涂敷成膜：2 条
+- Mask patch：3 条
+- Wound dressing：4 条
+- Injectable filler：1 条
+重复单元、纯化标签版本及缺少应用证据的构建体保持空白，没有继承母体蛋白的标签。
 ## FASTA 白名单
 
 1. `JINBO_HC8_CN103122027B_257aa.fasta`

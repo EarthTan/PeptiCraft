@@ -1,0 +1,29 @@
+{
+  // The Pages Function, which the app's own project does not cover: `tsconfig.app.json` includes
+  // `src` and this file lives in `functions/`, so before this project existed the model proxy —
+  // the one piece of TypeScript in the repository that runs in production but not in a browser —
+  // was never type-checked by `npm run build`.
+  //
+  // The options follow `tsconfig.app.json` so the two projects agree on what TypeScript means by
+  // the language; `strict` is off there and off here for the same reason. `types` is empty on
+  // purpose: the file declares its own `Env` interface and touches nothing from Node, and the
+  // Workers globals it does use — `fetch`, `Request`, `Response`, `crypto`, `AbortController` —
+  // are in the DOM library.
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.functions.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": [],
+    "skipLibCheck": true,
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "allowArbitraryExtensions": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["functions"]
+}

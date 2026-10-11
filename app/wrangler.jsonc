@@ -1,0 +1,11 @@
+{
+  // The Pages configuration surface, and nothing else. The Functions directory is not
+  // configurable on Pages — it is always `<root>/functions`, next to this file — and
+  // `observability` belongs to a Worker's configuration, not a Pages project's. Both were
+  // listed here before and both are unsupported keys, which Wrangler rejects rather than
+  // ignores.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pepticraft",
+  "compatibility_date": "2026-10-01",
+  "pages_build_output_dir": "dist"
+}

@@ -532,6 +532,13 @@ export interface ChatResponse {
 
 export interface HealthResponse {
   ok: boolean
+  /**
+   * Which database the answers came from when a static export produced them. Present only on
+   * a static deployment, where `database.backend` reads `static` and therefore cannot say
+   * whether the files are pipeline output or the bundled fixture. `sqlite` here means the
+   * export was made from the fixture, and every number on the site is sample data.
+   */
+  source_backend?: string
   database: {
     /**
      * Which source answered: `postgres`, `sqlite` or `auto`. `sqlite` means the service is

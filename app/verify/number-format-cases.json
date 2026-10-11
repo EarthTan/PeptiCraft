@@ -1,0 +1,27 @@
+{
+  "note": "The numbers a fact-block figure has to come out as, on both paths. The service writes every figure with Python's `f\"{value:.6g}\"` and the Pages Function writes it with its own `formatNumber`, and the two are compared against this one table rather than against each other: `service/tests/test_llm.py` runs the values through Python's formatter, `app/verify/static-export-check.mjs` runs them through the deployed function. A divergence here is silent — both blocks look right on their own — and its consequence is that a model quotes a figure the reader cannot find on the page. The values sit on both sides of `%g`'s notation switch, because that is the only place the two languages disagree by default: below 1e-4 and at or above 1e6 the service writes exponential notation, and JavaScript's own number-to-string conversion does not.",
+  "cases": [
+    { "value": 0.5, "expected": "0.5" },
+    { "value": 0.31, "expected": "0.31" },
+    { "value": 0.38, "expected": "0.38" },
+    { "value": 0.99, "expected": "0.99" },
+    { "value": 1.0, "expected": "1" },
+    { "value": 2.0, "expected": "2" },
+    { "value": 100.0, "expected": "100" },
+    { "value": 0.0, "expected": "0" },
+    { "value": 0.1234567, "expected": "0.123457" },
+    { "value": -0.5, "expected": "-0.5" },
+    { "value": 0.0001, "expected": "0.0001" },
+    { "value": 9.999e-05, "expected": "9.999e-05" },
+    { "value": 1.23e-05, "expected": "1.23e-05" },
+    { "value": 1e-06, "expected": "1e-06" },
+    { "value": 1.23e-07, "expected": "1.23e-07" },
+    { "value": 5e-08, "expected": "5e-08" },
+    { "value": -1.23e-05, "expected": "-1.23e-05" },
+    { "value": 1000000.0, "expected": "1e+06" },
+    { "value": 999999.5, "expected": "1e+06" },
+    { "value": 1234567.0, "expected": "1.23457e+06" },
+    { "value": 12345678.0, "expected": "1.23457e+07" },
+    { "value": -1234567.0, "expected": "-1.23457e+06" }
+  ]
+}

@@ -4,10 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "VITE_STATIC=1 vite",
+    "dev:api": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:static": "node verify/static-export-check.mjs"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.20",

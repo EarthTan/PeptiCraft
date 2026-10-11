@@ -1,0 +1,11 @@
+# The site is a single-page application: every route is served by the same HTML shell, and the
+# router resolves it in the browser. Without this, a refresh on /constructs/con_0001 would 404
+# and a shared link would be broken.
+#
+# The chat endpoint needs no rule of its own. Redirects and rewrites declared here are not
+# applied to requests served by a Pages Function, whatever the path matches — Functions run
+# before the asset server, so `/api/constructs/{id}/chat` reaches the function and never the
+# shell. A rule pointing that path at index.html would be inert, and would become a wrong
+# answer to a POST if the function were ever removed, so it is not written.
+
+/*  /index.html  200

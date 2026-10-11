@@ -39,3 +39,12 @@ local/*.sqlite3-journal
 
 # Excel 打开工作簿时生成的锁文件
 ~$*
+
+# 走查脚本的临时编译产物
+app/.verify-cache/
+
+# 静态导出：由 service/scripts/export_static.py 从数据库生成，不入库。
+# 当前工作区里那份来自本机 PostgreSQL（496 条构造，manifest 的 source_backend 报 postgres）；
+# 换一台机器要么照 app/DEPLOY.md 重新导一次，要么改用读服务的那条路径。
+# 脚本默认拒绝从 SQLite 夹具导出——夹具导出的 source_backend 是 sqlite，界面上的样例数据提示据此出现。
+app/public/data/

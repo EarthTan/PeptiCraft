@@ -11,7 +11,26 @@
  * Vite proxy, which keeps the browser on one origin and avoids any CORS configuration during
  * development. A deployment that serves the built assets from a different host than the API
  * sets `VITE_API_BASE` to the service's origin at build time.
+ *
+ * Static first. The platform is served as files in production and, by default, in development
+ * too: `npm run dev` sets `VITE_STATIC=1`, so the export answers before anything goes out and
+ * the frontend runs with no service started beside it. `npm run dev:api` leaves the flag unset
+ * and goes to the service instead, which is the mode for work that has to see current data —
+ * a static read shows the snapshot the export was made from, not the database as it stands.
+ *
+ * The lookup happens before the request so the two paths cannot disagree about a shape — they
+ * are the same functions' output, one read from a file. A GET that the export does not cover
+ * falls through to the network. The exchange is one-way on purpose: a request the export
+ * *does* cover is answered from the file and never reaches the service.
+ *
+ * A covered path whose record is missing is the one case that does not fall through. Falling
+ * through would send it to a service that a static deployment does not have, and the request
+ * would land on the SPA fallback and come back as HTML — reported to the reader as a malformed
+ * response instead of as a missing record. The export is the authority for the paths it holds,
+ * absence included, so this raises `not_found` directly.
  */
+
+import { serveStaticResult, staticAvailable, staticEnabled } from "./static"
 
 export type ApiErrorKind =
   | "network"
@@ -42,7 +61,11 @@ export class ApiError extends Error {
 }
 
 export function apiBase(): string {
-  const raw = import.meta.env.VITE_API_BASE as string | undefined
+  // `import.meta.env` is replaced at build time by Vite and is undefined when this module is
+  // loaded outside a bundle, which the static export check does. An empty base is the right
+  // answer in both cases: it means "same origin".
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env
+  const raw = env?.VITE_API_BASE
   if (!raw) return ""
   return raw.replace(/\/+$/, "")
 }
@@ -71,7 +94,40 @@ function classify(status: number, body: ErrorBody): ApiErrorKind {
   return "server"
 }
 
+/** Split a path into its segments-free form and its query, so the static layer can read both. */
+function splitPath(path: string): { bare: string; params: URLSearchParams } {
+  const mark = path.indexOf("?")
+  if (mark === -1) return { bare: path, params: new URLSearchParams() }
+  return {
+    bare: path.slice(0, mark),
+    params: new URLSearchParams(path.slice(mark + 1)),
+  }
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase()
+
+  // Static first, in a build that has no service. A path the export does not cover falls
+  // through, which is the normal answer for the chat POST and for any endpoint added after the
+  // export was made. A path it does cover is answered here either way — with the record, or
+  // with a not-found when the record is not in the snapshot.
+  if (method === "GET" && staticEnabled()) {
+    const { bare, params } = splitPath(path)
+    const served = await serveStaticResult(method, bare, params)
+    if (served.covered) {
+      if (served.payload === null || served.payload === undefined) {
+        throw new ApiError("not_found", "This record is not in the deployment's dataset.", {
+          detail: bare,
+          hint:
+            "This deployment serves a snapshot exported from the database at a point in time. " +
+            "The record may have been added after that export, or removed from the database " +
+            "since. Re-running the export refreshes it.",
+        })
+      }
+      return served.payload as T
+    }
+  }
+
   const url = `${apiBase()}${path}`
   let response: Response
   try {
@@ -80,16 +136,21 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
     })
   } catch (cause) {
-    throw new ApiError(
-      "network",
-      "The API could not be reached.",
-      {
-        detail: cause instanceof Error ? cause.message : String(cause),
-        hint:
-          "Start the service (uvicorn app.main:app) and confirm the Vite dev server is " +
+    // In static mode a failed request usually means the export is not there at all: the call
+    // fell through every path the export could have answered and reached a service this mode
+    // does not start. Telling the reader to start the service would send them after the one
+    // thing the mode exists to avoid, so the two situations get different sentences.
+    const noExport = staticEnabled() && !(await staticAvailable())
+    throw new ApiError("network", "The API could not be reached.", {
+      detail: cause instanceof Error ? cause.message : String(cause),
+      hint: noExport
+        ? "This frontend reads a static export and there is none under public/data. Produce " +
+          "one by running scripts/export_static.py in service/ (add --allow-fixture for a " +
+          "local export before the database is reachable), or run against the service " +
+          "instead with `npm run dev:api`."
+        : "Start the service (uvicorn app.main:app) and confirm the Vite dev server is " +
           "proxying /api to it.",
-      },
-    )
+    })
   }
 
   if (!response.ok) {

@@ -98,6 +98,9 @@ export function fetchConstruct(
     linker_id?: string | null
   } = {},
 ): Promise<ConstructDetail> {
+  // A named scaffold or linker travels in the query string. The service assembles the fused
+  // sequence from it, and so does the static export, each on its own path — so whichever one
+  // answers, the sequence came from that source and neither overwrites the other.
   return request<ConstructDetail>(`/api/constructs/${id}${queryString({ ...options })}`)
 }
 

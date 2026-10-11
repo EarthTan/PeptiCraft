@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse
 from . import db
 from .config import get_settings
 from .routers import build, catalog, constructs, linkers, scaffolds
+from .services import analysis as analysis_service
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,10 +49,19 @@ async def lifespan(app: FastAPI):
         settings.analysis_provider,
     )
     if settings.analysis_provider == "llm":
-        log.warning(
-            "ANALYSIS_PROVIDER=llm is set but no model-backed generator is registered; the "
-            "template generator remains active. See app/services/analysis.py."
-        )
+        generator = analysis_service.ensure_generator()
+        if generator.name == "llm":
+            log.info("analysis provider: model-backed (%s)", settings.llm_model)
+        else:
+            # The settings ask for a model and there is none reachable, so the template stays
+            # active. Said plainly at startup because a deployment that thinks it has a model
+            # and does not would otherwise present template prose as model output until a
+            # reader noticed.
+            log.warning(
+                "ANALYSIS_PROVIDER=llm is set but no model is reachable (%s); the template "
+                "generator remains active and every response says provider=template.",
+                "no base URL or API key" if not settings.llm_base_url else "the request failed",
+            )
     db.init_pool()
     try:
         db.ping()

@@ -12,7 +12,11 @@ that a reviewer can tell deterministic prose from model output.
 """
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# How much of a conversation is kept. The interface sends every turn it has, and only the last
+# few are ever read, so the rest is dropped rather than carried.
+MAX_HISTORY_TURNS = 50
 
 
 class AnalysisBlock(BaseModel):
@@ -49,7 +53,11 @@ class ChatAction(BaseModel):
 class ChatMessage(BaseModel):
     id: str
     role: str = Field(description="`user` or `assistant`.")
-    content: str
+    # Bounded because the value is echoed back to a model. A question is capped at 2,000
+    # characters on the request, and an answer at 700 output tokens, which is under this in
+    # either language; the ceiling exists for a client that sends something else, not for the
+    # interface, which cannot reach it.
+    content: str = Field(max_length=4000)
     timestamp: str
     actions: list[ChatAction] = Field(default_factory=list)
 
@@ -67,6 +75,20 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     route_id: str | None = None
     history: list[ChatMessage] = Field(default_factory=list)
+
+    @field_validator("history", mode="before")
+    @classmethod
+    def _keep_the_recent_turns(cls, value: object) -> object:
+        """Keep the tail of the conversation instead of rejecting a long one.
+
+        The interface sends its whole transcript, so a reader who has asked twenty-five
+        questions would otherwise start getting an error they could do nothing about. Only the
+        last few turns reach the model, so dropping the head changes no answer, and the bound
+        is what keeps one request from carrying an unbounded amount of text.
+        """
+        if isinstance(value, list) and len(value) > MAX_HISTORY_TURNS:
+            return value[-MAX_HISTORY_TURNS:]
+        return value
 
 
 class ChatResponse(BaseModel):

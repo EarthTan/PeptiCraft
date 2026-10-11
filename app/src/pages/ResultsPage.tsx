@@ -131,11 +131,14 @@ export default function ResultsPage() {
       timestamp: new Date().toISOString(),
       actions: [],
     }
-    const history = [...messages, outgoing]
-    setMessages(history)
+    // The turns before this one travel as history; this question travels as the question. It
+    // is shown in the transcript immediately — that is what the reader just typed — but it is
+    // not also sent as history, or the model would read it twice and tend to answer the first
+    // copy, the one with no fact block under it.
+    setMessages([...messages, outgoing])
     setInput("")
 
-    const response = await chat.run(id, text, routeId, history)
+    const response = await chat.run(id, text, routeId, messages)
     if (response) setMessages((current) => [...current, response.message])
   }
 
@@ -430,10 +433,16 @@ export default function ResultsPage() {
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
             {messages.length === 0 && (
               <div className="text-xs text-gray-400 leading-relaxed">
-                Answers are derived from this construct's own record. The service is stateless and
-                idempotent, so the same question under the same route always returns the same
-                text. The immunogenicity gate and the composite change with the route, so the same
-                question can have a different correct answer under another one.
+                {chat.data?.llm_configured
+                  ? "Answers are written by a language model from this construct's record. Every " +
+                    "figure it quotes is a field shown on this page; it is asked not to produce a " +
+                    "number the record does not carry. The record itself does not change — the " +
+                    "immunogenicity gate and the composite move with the route, so the same " +
+                    "question can have a different correct answer under another one."
+                  : "Answers are derived from this construct's own record, so the same question " +
+                    "under the same route describes the same numbers every time. The " +
+                    "immunogenicity gate and the composite move with the route, so the same " +
+                    "question can have a different correct answer under another one."}
               </div>
             )}
             {messages.map((message) => (

@@ -201,14 +201,18 @@ def analysis(
 def chat(construct_id: str, request: ChatRequest) -> ChatResponse:
     """Answer a question about one construct.
 
-    Stateless and idempotent: the answer is derived from the construct's record, so the same
-    question under the same route always returns the same text. `history` is accepted and
-    currently ignored; it exists so a model-backed generator can be dropped in without a
-    request-shape change.
+    The answer is derived from the construct's own record, so the same question under the same
+    route describes the same numbers every time. `history` is passed to the generator, which
+    uses it to read a follow-up against the turns before it — the template ignores it, because
+    what the record says does not depend on what was asked earlier, and a model-backed
+    generator uses it to resolve a question like "and the one above it". Either way the
+    history changes how the question is read and not what the record contains; `provider` on
+    the response says which of the two answered.
     """
     route_id = request.route_id
     _validate_route(route_id)
     row = _load(construct_id)
     enriched = enrichment.scores_for_peptides([row["peptide_id"]])
     detail = service.build_detail(row, enriched.get(row["peptide_id"], {}), route_id=route_id)
-    return analysis_service.chat(detail, request.message)
+    analysis_service.ensure_generator()
+    return analysis_service.chat(detail, request.message, history=request.history)

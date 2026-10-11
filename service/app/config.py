@@ -75,8 +75,9 @@ class Settings(BaseSettings):
     cors_origins: str = Field(default="http://127.0.0.1:5173,http://localhost:5173")
 
     # --- analysis ---------------------------------------------------------
-    # `template` renders deterministic prose from real scores. `llm` is reserved and not
-    # implemented yet; see app/services/analysis.py for the generator protocol.
+    # `template` renders deterministic prose from real scores. `llm` answers with a model
+    # configured by the three settings below, and falls back to the template — labelled as the
+    # template — whenever the model cannot answer. See app/services/llm.py.
     analysis_provider: str = Field(default="template")
     llm_base_url: str | None = Field(default=None)
     llm_api_key: str | None = Field(default=None)

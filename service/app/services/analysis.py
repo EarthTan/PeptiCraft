@@ -14,12 +14,21 @@ referenced by any page and had drifted well past the data — it still advertise
 library, a 1,760 Da figure and "8 rounds of screening" long after the platform carried 15
 linkers, no molecular-weight figure and four rounds.
 
-`provider` travels on every response. When the LLM implementation is registered, that field
-changes and the frontend can label the output accordingly rather than presenting template
-prose as model output.
+`provider` travels on every response, and it names the generator that produced *that* answer.
+The distinction matters because a model-backed generator can fail: when it does, the answer
+falls back to the template's, and the response has to say so. That decision is made in
+`chat` — one place, so the label and the text cannot disagree — rather than inside the
+generator, which would leave the label saying `llm` over the template's own prose.
+
+This replaces `app/src/data/chat.ts`, a 453-line module of fixed strings that was never
+referenced by any page and had drifted well past the data — it still advertised a 32-linker
+library, a 1,760 Da figure and "8 rounds of screening" long after the platform carried 15
+linkers, no molecular-weight figure and four rounds.
 """
 from __future__ import annotations
 
+import inspect
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Protocol
@@ -29,17 +38,41 @@ from ..models.common import BackboneBinding, ScoreSemantics
 from ..models.construct import ConstructDetail
 from . import reference
 
+log = logging.getLogger("pepticraft.analysis")
+
 PROVIDER_TEMPLATE = "template"
+PROVIDER_LLM = "llm"
+
+
+class ModelUnavailable(RuntimeError):
+    """Raised by a model-backed generator that could not produce an answer.
+
+    Defined here rather than in the module that raises it so there is no import cycle —
+    `llm` imports this module, not the other way round — and so the generator protocol and
+    its failure mode are stated together.
+    """
 
 
 class AnalysisGenerator(Protocol):
-    """Implemented by the template generator today and by an LLM generator later."""
+    """Implemented by the template generator and by the model-backed one.
+
+    `answer` takes the conversation so far. The template ignores it — it answers from the
+    record, and there is nothing in a previous turn that changes what the record says — while a
+    model-backed generator needs it to resolve a question like "and the one above it". The
+    parameter is keyword-only with a default so a generator that does not need it can declare
+    `answer(self, construct, question)` and still satisfy the protocol.
+
+    `answer` raises `ModelUnavailable` when the generator cannot answer at all. A generator
+    that always can — the template — never raises it.
+    """
 
     name: str
 
     def blocks(self, construct: ConstructDetail) -> list[AnalysisBlock]: ...
 
-    def answer(self, construct: ConstructDetail, question: str) -> str: ...
+    def answer(
+        self, construct: ConstructDetail, question: str, *, history: list[dict[str, str]] | None = None
+    ) -> str: ...
 
 
 # ---------------------------------------------------------------------------
@@ -418,7 +451,16 @@ class TemplateGenerator:
         )
 
     # -- chat ---------------------------------------------------------------
-    def answer(self, c: ConstructDetail, question: str) -> str:
+    def answer(
+        self,
+        c: ConstructDetail,
+        question: str,
+        *,
+        history: list[dict[str, str]] | None = None,
+    ) -> str:
+        # `history` is accepted and unused. A template answers from the record, so a previous
+        # turn cannot change what the record says; the parameter exists so the model-backed
+        # generator can be dropped in without a request-shape change.
         q = question.lower().strip()
 
         if any(w in q for w in ("safe", "safety", "tox", "hemo", "immun", "gate")):
@@ -503,9 +545,81 @@ def register_generator(generator: AnalysisGenerator) -> None:
 
 
 def llm_configured() -> bool:
+    """Whether a model is configured at all, by settings.
+
+    Not the same question as "did this answer come from a model". A model can be configured
+    and still fail on one turn; the answer then falls back to the template, and the response's
+    `provider` is what says so. This function is used to decide whether to build a model-backed
+    generator in the first place.
+    """
     from ..config import get_settings
     s = get_settings()
     return bool(s.llm_base_url and s.llm_api_key and s.analysis_provider == "llm")
+
+
+def build_llm_generator() -> "AnalysisGenerator | None":
+    """A model-backed generator, or None when no model is reachable.
+
+    Kept out of module import scope on purpose: the transport is a deployment concern, and the
+    analysis module is imported by the tests, by the static exporter and by the service alike.
+    A module that reached for an HTTP client at import time would make all three of them depend
+    on a model being configured.
+    """
+    if not llm_configured():
+        return None
+    try:
+        from ..config import get_settings
+        from .llm import TIMEOUT_SECONDS, LlmGenerator, chat_completions_endpoint
+        import json
+        import urllib.request
+
+        s = get_settings()
+        endpoint = chat_completions_endpoint(s.llm_base_url or "")
+
+        def call_model(messages: list[dict[str, str]]) -> str | None:
+            payload = json.dumps({
+                "model": s.llm_model,
+                "messages": messages,
+                "temperature": 0.2,
+                "max_tokens": 700,
+            }).encode("utf-8")
+            request = urllib.request.Request(
+                endpoint,
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {s.llm_api_key}",
+                },
+            )
+            with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+                body = json.loads(response.read().decode("utf-8"))
+            return body["choices"][0]["message"]["content"]
+
+        return LlmGenerator(call_model)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("could not build the model-backed generator: %s", exc)
+        return None
+
+
+def ensure_generator() -> AnalysisGenerator:
+    """Register the model generator when one is configured, and report which is active.
+
+    Idempotent in the sense that a service which already has a model-backed generator is not
+    given a second one. With no model configured the check cannot short-circuit — the
+    registered generator is the template, whose name is not `llm` — so the settings are read
+    once more per call. That is deliberate: the alternative is a flag that would keep the
+    service from noticing a model configured after startup, and what it buys back is one
+    `lru_cache` hit on a `Settings` object.
+    """
+    global _generator
+    if getattr(_generator, "name", None) == PROVIDER_LLM:
+        return _generator
+    model_generator = build_llm_generator()
+    if model_generator is not None:
+        _generator = model_generator
+        from ..config import get_settings
+        log.info("analysis provider: model-backed (%s)", get_settings().llm_model)
+    return _generator
 
 
 def build_response(c: ConstructDetail) -> tuple[str, list[AnalysisBlock]]:
@@ -513,9 +627,53 @@ def build_response(c: ConstructDetail) -> tuple[str, list[AnalysisBlock]]:
     return g.name, g.blocks(c)
 
 
-def chat(c: ConstructDetail, question: str) -> ChatResponse:
+def _accepts_history(generator: AnalysisGenerator) -> bool:
+    """Whether this generator's `answer` takes the `history` keyword.
+
+    Asked of the signature rather than discovered by catching `TypeError`. A `TypeError`
+    raised *inside* an answer is a bug in that generator, and a fallback that retried the call
+    without the keyword would swallow it and return prose written past the failing line.
+    """
+    try:
+        parameters = inspect.signature(generator.answer).parameters
+    except (TypeError, ValueError):  # not inspectable, e.g. a C-level callable
+        return False
+    return "history" in parameters or any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()
+    )
+
+
+def chat(
+    c: ConstructDetail,
+    question: str,
+    history: list[ChatMessage] | None = None,
+) -> ChatResponse:
+    """Answer one question, and say which generator answered it.
+
+    The fallback lives here rather than inside the model-backed generator because the two
+    things that must agree — the text and the label naming its source — are decided together
+    at this point and nowhere else. A generator that fails raises `ModelUnavailable`; the
+    template's answer is written here, and `provider` moves with it, so a response whose text
+    came from the template cannot claim to be a model's.
+    """
     g = get_generator()
-    content = g.answer(c, question)
+    turns = [
+        {"role": m.role, "content": m.content}
+        for m in (history or [])
+        if m.role in ("user", "assistant")
+    ]
+
+    if _accepts_history(g):
+        try:
+            content, provider = g.answer(c, question, history=turns), g.name
+        except ModelUnavailable as exc:
+            log.warning("no model answer for %s (%s); answering from the record", c.id, exc)
+            content, provider = TemplateGenerator().answer(c, question), PROVIDER_TEMPLATE
+    else:
+        # A generator written against the original two-argument protocol. Kept so a
+        # third-party generator does not have to be rewritten to keep working.
+        content, provider = g.answer(c, question), g.name
+
     message = ChatMessage(
         id=f"msg_{uuid.uuid4().hex[:12]}",
         role="assistant",
@@ -525,9 +683,9 @@ def chat(c: ConstructDetail, question: str) -> ChatResponse:
     )
     suggested = getattr(g, "suggested_questions", None)
     return ChatResponse(
-        provider=g.name,
+        provider=provider,
         construct_id=c.id,
         message=message,
         suggested_questions=suggested(c) if callable(suggested) else [],
-        llm_configured=llm_configured(),
+        llm_configured=(provider == PROVIDER_LLM),
     )

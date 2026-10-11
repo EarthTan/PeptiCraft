@@ -68,6 +68,39 @@ def test_search_matches_the_source_accession_including_its_underscore(client):
     assert body["total"] > 0
 
 
+def test_a_row_carries_the_provenance_a_search_can_match_on(client):
+    """The listed row has to carry the columns `search` matches, not only the sequence.
+
+    The query covers four columns and three of them are provenance, which the row did not
+    otherwise hold: a construct was searchable by a field it could not report. That matters
+    beyond tidiness, because a client that applies the same four-column filter to the same rows
+    — the static export does, since a deployment has no database to send the query to — can
+    only match what the row carries. A row matched by accession would be kept by the service
+    and dropped by the export, so the same term would answer with rows on one deployment and
+    with nothing on the other, and nothing about either answer would look wrong.
+    """
+    item = client.get("/api/constructs", params={"search": ACCESSION_7001}).json()["items"][0]
+    assert item["peptide_source"] == SOURCE
+    assert item["peptide_source_accession"] == ACCESSION_7001
+    # A string on both backends, which the filters on both sides rely on: the comparison is a
+    # case-insensitive substring test, and a client lowercases the column to apply it.
+    assert item["peptide_source_version"] == VERSION
+    assert isinstance(item["peptide_source_version"], str)
+
+
+def test_a_row_without_provenance_reports_none_rather_than_a_placeholder(client):
+    """A null column stays null in the payload.
+
+    The export's own filter reads these fields, and a value that arrived as the literal text
+    `None` or `undefined` would match a search for that word. Nothing in the fixture is missing
+    provenance, so this pins the contract rather than the fixture: whatever the database holds,
+    the field is a string or null and never a rendering of one.
+    """
+    for item in client.get("/api/constructs", params={"limit": 200}).json()["items"]:
+        for key in ("peptide_source", "peptide_source_accession", "peptide_source_version"):
+            assert item[key] is None or isinstance(item[key], str), (key, item[key])
+
+
 def test_underscore_in_a_term_does_not_act_as_a_wildcard(client):
     """`FIXX0001` would match `FIX_0001` if `_` were a wildcard. It must match nothing."""
     wildcard = client.get("/api/constructs", params={"search": "FIXX0001"}).json()

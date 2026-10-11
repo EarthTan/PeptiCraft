@@ -310,9 +310,19 @@ export default function BuilderPage() {
               Step 3: Scaffold Protein
             </h2>
             <p className="text-sm text-gray-500 mb-1 max-w-3xl leading-relaxed">
-              Already narrowed by <strong>{routeObj.name}</strong> to {candidates.length} scaffold
-              {candidates.length === 1 ? "" : "s"} — the ones the patent dataset tags for this
-              application.
+              {candidates.length === 0 ? (
+                <>
+                  No scaffold in the patent dataset is tagged for{" "}
+                  <strong>{routeObj.name}</strong>. The route still sets the screening profile;
+                  the full library stays selectable under the second tab.
+                </>
+              ) : (
+                <>
+                  Already narrowed by <strong>{routeObj.name}</strong> to {candidates.length}{" "}
+                  scaffold{candidates.length === 1 ? "" : "s"} — the ones the patent dataset tags
+                  for this application.
+                </>
+              )}
             </p>
             <p className="text-xs text-gray-400 mb-4 max-w-3xl leading-relaxed">
               Material form is a property of each scaffold. Use the chips to filter if you want a
@@ -320,10 +330,11 @@ export default function BuilderPage() {
             </p>
 
             <Notice tone="caution" title="The scaffold is an assembly target, not a filter" className="mb-4">
-              No stored construct carries a real scaffold binding — all 496 point at a placeholder
-              row. Choosing a scaffold here therefore does not narrow the candidate list below: the
-              same peptides come back either way. What it changes is the sequence each one is built
-              into once the build runs, and the fused length reported beside it.
+              Choosing a scaffold here does not narrow the candidate list below: the same
+              peptides come back either way. What it changes is the sequence each one is built
+              into once the build runs, and the fused length reported beside it. Every stored
+              construct already carries a scaffold, assigned by its application route, so this
+              step overrides that assignment rather than making the pairing for the first time.
             </Notice>
 
             <Tabs defaultValue="matched" className="w-full">
@@ -364,7 +375,9 @@ export default function BuilderPage() {
                   ))}
                   {visibleCandidates.length === 0 && (
                     <p className="text-sm text-gray-400 py-6 text-center">
-                      No scaffold in this route has that material form.
+                      {candidates.length === 0
+                        ? "No scaffold carries this route's tag. Pick one from the full library instead."
+                        : "No scaffold in this route has that material form."}
                     </p>
                   )}
                 </div>
@@ -552,7 +565,11 @@ function RouteStep({
                     {route.contact_interface}
                   </p>
                   <div className="flex items-center gap-1.5 mt-2 text-[11px] font-mono text-gray-400 flex-wrap">
-                    <span>{admitted.length} scaffolds</span>
+                    <span>
+                      {admitted.length === 0
+                        ? "no scaffold available"
+                        : `${admitted.length} scaffold${admitted.length === 1 ? "" : "s"}`}
+                    </span>
                     <span>·</span>
                     <span>{route.barrier_label}</span>
                   </div>

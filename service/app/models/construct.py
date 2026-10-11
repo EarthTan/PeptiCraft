@@ -160,6 +160,15 @@ class ConstructSummary(BaseModel):
     direction_label: str
     peptide_sequence: str
     peptide_length: int
+    # The provenance of the peptide, carried on the list row because the list's `search`
+    # matches on it: the query covers the sequence, the source, the accession and the source
+    # version, so a row that matched by accession has to be able to say what matched. Without
+    # these the row is searchable by a field it does not carry, and a client that filters the
+    # list itself — the static export does — can only match the sequence, silently returning
+    # nothing for a provenance term the service answers with rows.
+    peptide_source: str | None = None
+    peptide_source_accession: str | None = None
+    peptide_source_version: str | None = None
     backbone_name: str | None = None
     backbone_id: str | None = None
     linker_name: str | None = None

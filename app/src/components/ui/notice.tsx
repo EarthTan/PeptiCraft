@@ -32,11 +32,12 @@ const TONE = {
 /**
  * A statement about the limits of the data on screen.
  *
- * These are not decoration. Three facts in this platform are true of the data and would be
- * misleading if omitted: every stored construct binds a placeholder scaffold, two of the four
- * function directions hold rows the pipeline has not signed off, and the anti-inflammatory
- * and anti-melanin scores order candidates without measuring activity. Each one travels with
- * the content it qualifies rather than being collected in a disclaimer elsewhere.
+ * These are not decoration. Facts about the platform that are true of the data and would be
+ * misleading if omitted travel with the content they qualify: two of the four function
+ * directions hold rows the pipeline has not signed off, the anti-inflammatory and anti-melanin
+ * scores order candidates without measuring activity, and a stored scaffold binding records
+ * the application route's default scaffold rather than a pairing the pipeline chose. Each one
+ * sits beside what it qualifies rather than being collected in a disclaimer elsewhere.
  */
 export function Notice({
   tone = "caution",

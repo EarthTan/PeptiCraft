@@ -38,9 +38,11 @@ export type WeightTier = "high" | "medium" | "low"
 export type ScoreSemantics = "probability" | "ranking_only" | "class_label"
 
 /**
- * Where a construct's scaffold came from. Every stored construct currently binds a
- * placeholder, so `placeholder` is what the library shows today; `inferred` marks a scaffold
- * named at request time, which is a faithful assembly but not a pipeline result.
+ * Where a construct's scaffold came from. `verified` is a scaffold recorded on the construct
+ * itself — which after the backfill is the application route's default, chosen by the platform
+ * rather than by the pipeline. `inferred` marks a scaffold named at request time, a faithful
+ * assembly of real parts but not a stored pairing. `placeholder` remains for a row whose
+ * scaffold is still a marker string, which is what an unbackfilled database holds.
  */
 export type BackboneBinding = "verified" | "placeholder" | "inferred"
 
@@ -178,6 +180,15 @@ export interface ConstructSummary {
   direction_label: string
   peptide_sequence: string
   peptide_length: number
+  /**
+   * The peptide's provenance. On the list row because the list's `search` matches on it: the
+   * query covers the sequence, the source, the accession and the source version, so a row that
+   * matched by accession has to carry what matched. A client that filters exported rows itself
+   * needs the same four columns or it answers a provenance term with nothing.
+   */
+  peptide_source: string | null
+  peptide_source_accession: string | null
+  peptide_source_version: string | null
   backbone_name: string | null
   backbone_id: string | null
   linker_name: string | null

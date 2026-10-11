@@ -27,14 +27,19 @@ from . import assembly, linkers as linker_service, reference, scoring
 log = logging.getLogger("pepticraft.constructs")
 
 # The scenario strings the pipeline wrote, and which application routes each one plausibly
-# belongs to. This is a hint for narrowing a candidate list, NOT a binding: the stored
-# constructs carry no verified scaffold, and `scenario` records the pipeline run rather than
-# a product decision.
+# belongs to. The first route listed is the one a construct defaults to when the service
+# resolves a scaffold binding for it — see `scripts/bind_construct_backbones.py`, which uses
+# this same table rather than carrying a second copy of the relation. The remaining entries
+# widen the choice offered on a construct's page.
+#
+# `depigmentation` used to list `hair-coating` as well. The curated scaffold vocabulary drops
+# the Hair care tag, so that route now holds no scaffold at all and listing it would offer a
+# route that can never answer.
 SCENARIO_ROUTE_HINT: dict[str, list[str]] = {
     "wound_care": ["wound-dressing"],
     "wound_careing": ["wound-dressing"],
     "inflammation": ["wound-dressing", "topical-film"],
-    "depigmentation": ["mask-patch", "topical-film", "hair-coating"],
+    "depigmentation": ["mask-patch", "topical-film"],
 }
 
 PLACEHOLDER_BINDING_NOTE = (
@@ -429,6 +434,17 @@ def build_summaries(
             direction_label=direction_label(row["direction"]),
             peptide_sequence=row["peptide_sequence"],
             peptide_length=row["peptide_length"],
+            # Carried so the list row can account for a match on provenance: `search` covers
+            # these columns, and a client that applies the same filter to the same rows has to
+            # have them or it drops the match. `source_version` is written with `str` because
+            # the column is not a string in every backend and the field is.
+            peptide_source=row.get("peptide_source"),
+            peptide_source_accession=row.get("peptide_source_accession"),
+            peptide_source_version=(
+                str(row["peptide_source_version"])
+                if row.get("peptide_source_version") is not None
+                else None
+            ),
             # Only a verified binding names a scaffold on the card. A placeholder binding
             # carries a marker string, not a scaffold name, and printing it would read as a
             # real choice.

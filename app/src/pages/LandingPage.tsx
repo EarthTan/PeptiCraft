@@ -334,7 +334,11 @@ function ApplicationRoutes({
                   </CardDescription>
 
                   <div className="mt-3 flex items-center gap-1.5 text-[11px] font-mono text-gray-400 flex-wrap">
-                    <span>{admitted.length} scaffolds</span>
+                    <span>
+                      {admitted.length === 0
+                        ? "no scaffold available"
+                        : `${admitted.length} scaffold${admitted.length === 1 ? "" : "s"}`}
+                    </span>
                     <span>·</span>
                     <span
                       className={tightest ? "text-amber-600" : "text-gray-400"}

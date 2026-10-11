@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Import the curated scaffold table into `scaffold_library` / `scaffold_library_sequences`.
 
-Source: data/scaffold_database_2026-09-06/scaffold_sequence_database.tsv — 16 sequence rows
-covering 8 protein clusters, 30 columns, written in Chinese because it is the primary
-research record.
+Source: resouces/scaffold_database_2026-09-06/scaffold_sequence_database.tsv — 16 sequence
+rows covering 8 protein clusters, 30 columns, written in Chinese because it is the primary
+research record. (`resouces/` is where the reference material lives; the directory was named
+`data/` until it was renamed, and the spelling of the new name is not a typo.)
 
 Two layers go into the two tables:
 
@@ -26,14 +27,23 @@ the project has retired.
 
     python3 service/scripts/import_scaffold_library.py --dry-run
     python3 service/scripts/import_scaffold_library.py
+    python3 service/scripts/import_scaffold_library.py --target sqlite
 
 Idempotent: every write is an upsert keyed on the natural key.
+
+`--target sqlite` writes the same two tables into the local fixture database rather than the
+remote instance, which is what makes the curated library visible on a machine that cannot
+reach the project database. That copy is a development stand-in and reads the SQLite-shaped
+tables: the schema there has no `updated_at`, and the list-valued columns hold JSON text
+rather than arrays. Everything else is identical, and the parse is the same one both targets
+share — so the two can never disagree about a sequence.
 """
 from __future__ import annotations
 
 import argparse
 import csv
 import json
+import sqlite3
 import sys
 from collections import OrderedDict
 from pathlib import Path
@@ -42,12 +52,12 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SERVICE_ROOT.parent
 sys.path.insert(0, str(SERVICE_ROOT))
 
-import psycopg  # noqa: E402
-
 from app.config import get_settings  # noqa: E402
 
 # --- source layout ----------------------------------------------------------
-TSV_PATH = REPO_ROOT / "data" / "scaffold_database_2026-09-06" / "scaffold_sequence_database.tsv"
+TSV_PATH = (
+    REPO_ROOT / "resouces" / "scaffold_database_2026-09-06" / "scaffold_sequence_database.tsv"
+)
 SOURCE_VERSION = "2026-09-06"  # snapshot date of the scaffold dataset
 EXPECTED_HEADER_LEN = 30
 EXPECTED_SEQUENCE_ROWS = 16
@@ -66,7 +76,6 @@ C_APPLICANT = 8
 C_CLUSTER = 9
 C_PRODUCT_USE = 10
 C_POTENTIAL_USES_CN = 11
-C_TAGS = (12, 13, 14, 15, 16)
 C_REGULATORY_STATUS = 17
 C_SAFETY_SUMMARY = 18
 C_EVIDENCE = 19
@@ -81,16 +90,29 @@ C_PATENT_URL = 27
 C_REGULATORY_URL = 28
 C_CONFIDENCE_LIMITATIONS = 29
 
-# Five application tags, one per populated tag column in the TSV. The mapping to route ids
-# is the only place the tag vocabulary is translated; `app/services/reference.py` declares
-# the matching five routes and reads `application_tag` back off them.
-TAG_TO_ROUTE = OrderedDict([
-    ("Topical appliance", "topical-film"),
-    ("Mask patch", "mask-patch"),
-    ("Hair care", "hair-coating"),
-    ("Wound dressing", "wound-dressing"),
-    ("Injectable filler", "injectable-filler"),
-])
+# The tag columns the source table carries, in column order, each paired with the route id it
+# maps to. This is the only place the tag vocabulary is translated; `app/services/reference.py`
+# declares the matching routes and reads `application_tag` back off them.
+#
+# The team's label dictionary declares four application tags and states that the old scene,
+# subtype and delivery tags have been deleted. Hair care is not among the four. Its marking
+# column is nevertheless still present in the table and still populated, so the column is read
+# — the header check below covers all five positions — and deliberately mapped to no route.
+# The consequence is that `route_ids` never contains `hair-coating`, which leaves that route
+# holding no scaffold: the two clusters tagged Hair care were the only ones it had. The route
+# itself stays declared in `reference.py`, so the interface shows it with an empty scaffold
+# list rather than dropping it.
+TAG_COLUMNS: list[tuple[int, str, str | None]] = [
+    (12, "Topical appliance", "topical-film"),
+    (13, "Mask patch", "mask-patch"),
+    (14, "Hair care", None),
+    (15, "Wound dressing", "wound-dressing"),
+    (16, "Injectable filler", "injectable-filler"),
+]
+
+TAG_TO_ROUTE = OrderedDict(
+    (tag, route) for _pos, tag, route in TAG_COLUMNS if route is not None
+)
 
 # Cluster-level editorial metadata, keyed by the first sequence record id of the cluster.
 # Values are the English renderings the interface displays; the Chinese originals remain in
@@ -398,7 +420,7 @@ def read_source() -> tuple[OrderedDict, list[list[str]]]:
             f"column {C_SEQ_ID} is {header[C_SEQ_ID]!r} and column {C_SEQUENCE} is "
             f"{header[C_SEQUENCE]!r}; expected the sequence id and sequence columns"
         )
-    for pos, tag in zip(C_TAGS, TAG_TO_ROUTE):
+    for pos, tag, _route in TAG_COLUMNS:
         if header[pos] != tag:
             raise RuntimeError(f"column {pos} is {header[pos]!r}, expected tag {tag!r}")
     if len(data) != EXPECTED_SEQUENCE_ROWS:
@@ -428,7 +450,7 @@ def build_rows(clusters):
                 f"the database by hand"
             )
 
-        tags = [t for t, pos in zip(TAG_TO_ROUTE, C_TAGS) if first[pos].strip()]
+        tags = [tag for pos, tag, route in TAG_COLUMNS if route and first[pos].strip()]
         routes = [TAG_TO_ROUTE[t] for t in tags]
         evidence = first[C_EVIDENCE].strip()
         if not evidence:
@@ -591,10 +613,73 @@ ON CONFLICT (sequence_id) DO UPDATE SET
 """
 
 
+# --- local SQLite target ----------------------------------------------------
+#
+# The two statements above are Postgres: `%(name)s` parameters, `now()`, and a `text[]` column
+# taking a Python list through psycopg's adapter. None of that runs on the fixture, so the
+# same write is expressed once more for that dialect. The column list is taken from the rows
+# themselves rather than restated, so a column added to `build_rows` cannot end up in one
+# statement and not the other.
+
+LIBRARY_KEY = "id"
+SEQUENCE_KEY = "sequence_id"
+
+# Stored as JSON text in the fixture, the counterpart of the Postgres array columns.
+JSON_FIELDS = frozenset({"application_tags", "route_ids", "material_forms", "registrations"})
+
+
+def upsert_sql(table: str, columns: tuple[str, ...], key: str) -> str:
+    """An upsert on `key` for the fixture tables, which carry no `updated_at`."""
+    values = ", ".join(f":{c}" for c in columns)
+    updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in columns if c != key)
+    return (
+        f"INSERT INTO {table} (\n    {', '.join(columns)}\n)\n"
+        f"VALUES (\n    {values}\n)\n"
+        f"ON CONFLICT ({key}) DO UPDATE SET\n    {updates}\n"
+    )
+
+
+def as_sqlite_rows(rows: list[dict]) -> list[dict]:
+    """Copy the rows with the list-valued columns serialised, leaving the originals alone."""
+    return [
+        {
+            k: (json.dumps(v, ensure_ascii=False) if k in JSON_FIELDS else v)
+            for k, v in row.items()
+        }
+        for row in rows
+    ]
+
+
+def write_sqlite(path: str, library_rows: list[dict], sequence_rows: list[dict]) -> tuple[int, int]:
+    """Upsert both row sets into the local fixture. Returns the two table counts."""
+    library_sql = upsert_sql("scaffold_library", tuple(library_rows[0]), LIBRARY_KEY)
+    sequence_sql = upsert_sql(
+        "scaffold_library_sequences", tuple(sequence_rows[0]), SEQUENCE_KEY
+    )
+    with sqlite3.connect(path) as conn:
+        conn.executemany(library_sql, as_sqlite_rows(library_rows))
+        conn.executemany(sequence_sql, as_sqlite_rows(sequence_rows))
+        conn.commit()
+        lib_count = conn.execute("SELECT count(*) FROM scaffold_library").fetchone()[0]
+        seq_count = conn.execute("SELECT count(*) FROM scaffold_library_sequences").fetchone()[0]
+    return lib_count, seq_count
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--dump", metavar="PATH", help="also write the parsed rows as JSON")
+    parser.add_argument(
+        "--target",
+        choices=("postgres", "sqlite"),
+        default="postgres",
+        help="which database to write; sqlite is the local fixture stand-in",
+    )
+    parser.add_argument(
+        "--sqlite-path",
+        default=None,
+        help="SQLite file to write, when --target is sqlite (default: the configured fixture)",
+    )
     args = parser.parse_args()
 
     clusters, data = read_source()
@@ -621,6 +706,28 @@ def main() -> int:
         return 0
 
     settings = get_settings()
+
+    if args.target == "sqlite":
+        target = (
+            Path(args.sqlite_path).expanduser() if args.sqlite_path else settings.sqlite_file
+        )
+        if not target.exists():
+            print(
+                f"{target} does not exist; build it first with scripts/build_local_db.py",
+                file=sys.stderr,
+            )
+            return 1
+        lib_count, seq_count = write_sqlite(str(target), library_rows, sequence_rows)
+        print(
+            f"committed to {target}: scaffold_library={lib_count} rows, "
+            f"scaffold_library_sequences={seq_count} rows"
+        )
+        return 0
+
+    # Imported here rather than at module level: the dry run, the JSON dump and the SQLite
+    # target all work on a machine that has no Postgres driver and no database to talk to.
+    import psycopg
+
     with psycopg.connect(settings.dsn) as conn:
         with conn.cursor() as cur:
             cur.executemany(LIBRARY_SQL, library_rows)

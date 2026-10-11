@@ -4,10 +4,17 @@
     python3 service/scripts/build_local_db.py            # build if absent
     python3 service/scripts/build_local_db.py --force    # delete and rebuild
     python3 service/scripts/build_local_db.py --path /tmp/x.sqlite3
+    python3 service/scripts/build_local_db.py --force --with-reference
 
 The fixture is four seeded constructs, not pipeline data; see local/fixture_local.sql. The
 service builds it on demand the first time the fallback is used, so running this by hand is
 only needed to rebuild it after editing the SQL.
+
+`--with-reference` additionally loads the curated scaffold library from
+`resouces/scaffold_database_2026-09-06/` into the new database, so the scaffold the interface
+shows on a machine that cannot reach the project database is the real one rather than the two
+placeholder rows in the base file. It is opt-in because the test suite builds a database from
+the same SQL and counts what is in it; see `scripts/import_scaffold_library.py --target sqlite`.
 
 It prints what it built so the contents are checkable without opening sqlite3.
 """
@@ -27,6 +34,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--force", action="store_true", help="delete an existing database first")
     parser.add_argument("--path", default=None, help="override the database path")
+    parser.add_argument(
+        "--with-reference",
+        action="store_true",
+        help="also load the curated scaffold library from resouces/ into the new database",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -53,7 +65,32 @@ def main() -> int:
         conn.close()
 
     print(f"built {target} from {fixture}")
+    if args.with_reference:
+        _load_reference(target)
     return _report(target)
+
+
+def _load_reference(target: Path) -> None:
+    """Load the curated scaffold library from `resouces/` into a freshly built database.
+
+    Kept out of the plain build deliberately. The test suite builds its own database from the
+    same SQL and asserts what it holds, so the curated rows cannot live in the base file
+    without making those counts depend on a dataset the team edits on its own schedule. The
+    copy made here is the development one: it is what the interface reads when the project
+    database is unreachable.
+    """
+    scripts = Path(__file__).resolve().parent
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    from import_scaffold_library import build_rows, read_source, write_sqlite
+
+    clusters, _rows = read_source()
+    library_rows, sequence_rows = build_rows(clusters)
+    lib_count, seq_count = write_sqlite(str(target), library_rows, sequence_rows)
+    print(
+        f"  curated reference: scaffold_library={lib_count} rows, "
+        f"scaffold_library_sequences={seq_count} rows"
+    )
 
 
 def _report(path: Path) -> int:

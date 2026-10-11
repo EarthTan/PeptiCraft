@@ -4,7 +4,7 @@ Grain note, because two different grains exist in the database and conflating th
 easiest mistake to make here. `scaffold_patent_records` holds 27 rows at the *sequence
 record* grain: 16 with a FASTA sequence plus 11 patent or product entries that have none.
 The frontend works at the *protein cluster* grain: one row per construct, with the patent
-sequence variants nested inside. `data/scaffold_database_2026-09-06/
+sequence variants nested inside. `resouces/scaffold_database_2026-09-06/
 scaffold_sequence_database.tsv` is the authoritative cluster-grain table — 16 rows
 covering 8 clusters, 30 columns — and it is what `scaffold_library` is imported from.
 

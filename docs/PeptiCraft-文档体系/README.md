@@ -16,4 +16,4 @@
 
 其中四份与各目录 README 主题相同，但不是它们的重复。README 说明一个目录怎么跑、里面有什么；这些文档承载理由、出处与未完成事项。两者不一致时，以运行中的接口和对数据库的一次 `count(*)` 为准；部署形态相关的部分以《06》为准，它写于形态改变之后。
 
-更早一代的项目文档在本套文档写成时已退役；`../service/`、`../app/` 与 `../data/` 下的 README 是针对同一状态写的。筛选管线在本地以 `../iGEM-platform-main/` 出现，是 [EarthTan/iGEM-platform](https://github.com/EarthTan/iGEM-platform) 的副本，自带文档，不属于本套文档；三个仓库的定位与承继关系见 [`../repositories.md`](../repositories.md)。部署步骤本身记在 [`../../app/DEPLOY.md`](../../app/DEPLOY.md)，那是给执行部署的人看的操作文档，本套文档只说明部署形态的取舍与边界。
+更早一代的项目文档在本套文档写成时已退役；`../service/`、`../app/` 与 `../resouces/` 下的 README 是针对同一状态写的。筛选管线在本地以 `../iGEM-platform-main/` 出现，是 [EarthTan/iGEM-platform](https://github.com/EarthTan/iGEM-platform) 的副本，自带文档，不属于本套文档；三个仓库的定位与承继关系见 [`../repositories.md`](../repositories.md)。部署步骤本身记在 [`../../app/DEPLOY.md`](../../app/DEPLOY.md)，那是给执行部署的人看的操作文档，本套文档只说明部署形态的取舍与边界。

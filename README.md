@@ -10,7 +10,7 @@ PeptiCraft 是一套用于设计重组融合蛋白的网页平台。一条构造
 | --- | --- |
 | `app/` | 前端。基于 Vite 8 的 React 19 与 TypeScript；五个页面；英文界面。 |
 | `service/` | 后端。架在 `igem_peptides` PostgreSQL 数据库之上的 FastAPI，`/api` 下 19 个接口。 |
-| `data/` | 以文件形式保存的整理参考数据：骨架序列表、专利源数据包，以及场景／给药矩阵。 |
+| `resouces/` | 以文件形式保存的整理参考数据：骨架序列表、专利源数据包，以及场景／给药矩阵。 |
 | `docs/` | 项目文档体系，中文。 |
 | `publish/` | 已构建的前端，外加一个零依赖的静态服务器。 |
 
@@ -59,6 +59,6 @@ npm run dev                        # http://127.0.0.1:5173
 
 ## 文档
 
-`docs/PeptiCraft-文档体系/` 保存六份中文文档，合计约 130 KB，面向三类读者：项目负责人，关心的是工作进展而非代码；领域专家，关心的是生物学与每一项数据的含义；以及接下来接手这项工作的人。`service/README.md`、`app/README.md` 与 `data/README.md` 各自说明自己的目录。
+`docs/PeptiCraft-文档体系/` 保存六份中文文档，合计约 130 KB，面向三类读者：项目负责人，关心的是工作进展而非代码；领域专家，关心的是生物学与每一项数据的含义；以及接下来接手这项工作的人。`service/README.md`、`app/README.md` 与 `resouces/README.md` 各自说明自己的目录。
 
 `iGEM-platform-main/` 下的筛选管线是另一批独立工作，自带文档，不属于本套文档。

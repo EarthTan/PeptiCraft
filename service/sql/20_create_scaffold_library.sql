@@ -1,6 +1,6 @@
 -- 20_create_scaffold_library.sql
 --
--- 目的：把 data/scaffold_database_2026-09-06/scaffold_sequence_database.tsv 这份团队整理
+-- 目的：把 resouces/scaffold_database_2026-09-06/scaffold_sequence_database.tsv 这份团队整理
 --       的骨架主表落进数据库，让后端服务能按骨架维度供数。
 --
 -- 为什么需要新表：库里已有的 scaffold_patent_records(27 行) / scaffold_groups(11 行) /

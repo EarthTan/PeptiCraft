@@ -106,12 +106,14 @@ because the build copies it:
     npm run build
     npx wrangler pages deploy dist --project-name pepticraft
 
-Uploading a directory directly rather than connecting the repository is the arrangement that
-fits this project, and it is not a preference. The export is produced from a database on a
-workstation that Cloudflare's build environment cannot reach, so a build command that tries to
-produce it there would fail; a deployment from the repository's files alone would have no
-`dist/data` and would fall back on every page. The export is not in the repository — it is
-git-ignored — so the machine that has the data is the machine that builds.
+Uploading a directory directly rather than connecting the repository is the arrangement this
+project uses. The export is produced from a database that Cloudflare's build environment cannot
+reach, so the machine that has the data is the machine that builds and uploads.
+
+The export is committed (`app/public/data/`), which is what lets a teammate clone the repository
+and serve the site without a database or a re-export. The cost is the other direction: a
+re-export has to be committed as well, or the repository's copy drifts behind the deployed one
+while looking exactly as authoritative.
 
 Settings, for a dashboard-connected project:
 

@@ -13,7 +13,7 @@ npm install
 npm run dev
 ```
 
-开发服务器监听 `http://127.0.0.1:5173`，页面上的每一个值都来自 `public/data/` 下的导出文件。这份导出由 `../service/scripts/export_static.py` 从数据库生成，不入版本库，数据变化后要重新导出才会在页面上体现：
+开发服务器监听 `http://127.0.0.1:5173`，页面上的每一个值都来自 `public/data/` 下的导出文件。这份导出由 `../service/scripts/export_static.py` 从数据库生成，已随仓库入库，clone 之后不必先做导出即可运行；数据变化后要重新导出才会在页面上体现：
 
 ```bash
 cd ../service && python scripts/export_static.py --out ../app/public/data
@@ -21,7 +21,7 @@ cd ../service && python scripts/export_static.py --out ../app/public/data
 
 当前工作区里那份来自真实数据库：496 条构造、团队整理的 8 个蛋白簇骨架库、15 条连接片段。`manifest.json` 里的 `source_backend` 记着它从哪来——为 `postgres` 时页面顶部不出现任何提示，为 `sqlite` 时提示条会说明这是样例数据。导出会整体替换 `public/data/` 而不是并入其中，所以上一份留下的文件不会被继续提供。
 
-导出不在版本库里，因此换一台机器时要么先照 `DEPLOY.md` 的说法做一次导出，要么改用下面的连后端模式。
+仓库里带着的这份是导出当时的快照，不随后续改库自动更新；要看数据库此刻的状态，改用下面的连后端模式。
 
 需要看数据库此刻的状态时，改用连后端的模式。先在 `../service/` 中启动服务：
 

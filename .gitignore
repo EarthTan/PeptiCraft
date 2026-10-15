@@ -43,8 +43,9 @@ local/*.sqlite3-journal
 # 走查脚本的临时编译产物
 app/.verify-cache/
 
-# 静态导出：由 service/scripts/export_static.py 从数据库生成，不入库。
-# 当前工作区里那份来自本机 PostgreSQL（496 条构造，manifest 的 source_backend 报 postgres）；
-# 换一台机器要么照 app/DEPLOY.md 重新导一次，要么改用读服务的那条路径。
-# 脚本默认拒绝从 SQLite 夹具导出——夹具导出的 source_backend 是 sqlite，界面上的样例数据提示据此出现。
-app/public/data/
+# 静态导出：由 service/scripts/export_static.py 从数据库生成，这里有意入库。
+# 项目已进入收尾，这份导出不再变化，入库是为了让队友 clone 之后既不必连数据库、也不必
+# 重新导出就能把页面跑起来（npm run dev 直接读 public/data）。内容来自本机 PostgreSQL，
+# 496 条构造，manifest.json 与 health.json 的 source_backend 均记 postgres。
+# 导出会整体替换 public/data/：真重新导过一次，就得连同新文件一起提交，否则仓库里那份
+# 会静默变旧，而它看起来与新的没有区别。

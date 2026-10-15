@@ -246,10 +246,26 @@ check(
   'the step states that the linker does not filter the candidates either',
   (host.textContent ?? '').includes('not a filter'),
 )
+// The order used to be whatever the query happened to return — length then name, which put the
+// three-residue entries first for no stated reason. It is now the library's recommendation, and
+// the step has to say so rather than leaving a reader to guess whether position means anything.
+check(
+  'the step states what the order of the list means',
+  (host.textContent ?? '').includes('recommendation order'),
+  (host.textContent ?? '').slice(0, 200),
+)
+check(
+  'the top of that order is marked as the recommended entry',
+  (host.textContent ?? '').includes('Recommended'),
+)
 
 // The length the chosen linker adds is what makes the assembled sequence distinguishable from
 // both the default choice and every stored linker, so the assertion cannot pass by accident.
-const chosenLinker = linkers.find((linker) => linker.id === 'LK_GS3') ?? linkers[linkers.length - 1]
+// Found by that property rather than by id: this check runs against whichever backend is
+// running, and the curated library and the local fixture do not use the same ids.
+const chosenLinker =
+  linkers.find((linker) => linker.sequence !== LINKER && linker.length !== LINKER.length) ??
+  linkers[linkers.length - 1]
 check(
   `the linker this check chooses is not the default and not what any row stores (${chosenLinker.id})`,
   chosenLinker != null && chosenLinker.sequence !== LINKER && chosenLinker.length !== LINKER.length,

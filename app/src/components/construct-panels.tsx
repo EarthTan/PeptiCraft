@@ -289,9 +289,17 @@ function ScoreCard({
 export function AnalysisBlocks({
   constructId,
   routeId,
+  previewing = false,
 }: {
   constructId: string
   routeId: string | null
+  /**
+   * Whether the page is showing a scaffold or a linker named in the URL rather than the record
+   * as it stands. The prose is generated per construct and exported with it, so it describes the
+   * stored record either way; saying so is what keeps a reader from taking a paragraph about the
+   * stored placeholder for a description of the pairing above it.
+   */
+  previewing?: boolean
 }) {
   const [blocks, setBlocks] = useState<AnalysisBlock[] | null>(null)
   const [provider, setProvider] = useState("")
@@ -388,6 +396,14 @@ export function AnalysisBlocks({
       </div>
 
       <div className="p-4 space-y-2.5">
+        {previewing && (
+          <p className="text-[11px] text-amber-700 leading-relaxed">
+            These paragraphs are generated from this construct's stored record. The scaffold or
+            linker named in the URL is shown as a preview, so the sequence, the summary and the
+            linker tab follow that pairing while the assembly described below still describes
+            the record.
+          </p>
+        )}
         {resolved.map((block) => (
           <AnalysisBlockCard key={block.id} block={block} />
         ))}
@@ -428,6 +444,18 @@ function AnalysisBlockCard({ block }: { block: AnalysisBlock }) {
 }
 
 /** Convenience wrapper used where a caller already holds the detail response. */
-export function AnalysisOf({ detail }: { detail: ConstructDetail }) {
-  return <AnalysisBlocks constructId={detail.id} routeId={detail.safety.route_id} />
+export function AnalysisOf({
+  detail,
+  previewing = false,
+}: {
+  detail: ConstructDetail
+  previewing?: boolean
+}) {
+  return (
+    <AnalysisBlocks
+      constructId={detail.id}
+      routeId={detail.safety.route_id}
+      previewing={previewing}
+    />
+  )
 }

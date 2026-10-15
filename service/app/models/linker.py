@@ -39,6 +39,22 @@ class LinkerView(BaseModel):
     description: str | None = None
     reference: str | None = None
 
+    # The recommendation, carried on the view rather than only on the detail because the list is
+    # where a choice is made: the Builder renders the library in this order and prints the reason
+    # for the entry that is selected, and the order it arrives in is the order it displays.
+    # `priority_rank` is the entry's position, 1 first; null means the entry is not ranked —
+    # the six sample rows are not, and neither is any library row the table does not cover.
+    priority_rank: int | None = Field(
+        default=None,
+        description="Position in the library's recommendation order, 1 first. Null when the "
+        "entry is not ranked. See `services/linker_priority.py` for the rule the order states.",
+    )
+    priority_reason: str | None = Field(
+        default=None,
+        description="Why the entry sits where it does. Served from the library's own column "
+        "when that column is populated, and from the recommendation table otherwise.",
+    )
+
 
 class LinkerDetail(LinkerView):
     flexible_count: int | None = None
@@ -49,4 +65,3 @@ class LinkerDetail(LinkerView):
         "sample table. It is a coarse two-value convention, not a measured property, and "
         "the frontend's five-band `rigidity` label is a presentation choice layered on top.",
     )
-    priority_reason: str | None = None

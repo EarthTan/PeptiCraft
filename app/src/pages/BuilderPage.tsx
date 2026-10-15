@@ -107,8 +107,10 @@ export default function BuilderPage() {
 
   // The linker library is short, is not narrowed by the route, and is the one choice on this
   // page a user has no basis for making from nothing — so the first entry stands in until an
-  // explicit choice is made, rather than blocking the step on a click. Deriving it here keeps
-  // the fallback out of an effect and out of state.
+  // explicit choice is made, rather than blocking the step on a click. That the first entry is
+  // the library's own recommendation is what makes the fallback defensible rather than
+  // arbitrary: the list arrives in recommendation order, most suitable first. Deriving it here
+  // keeps the fallback out of an effect and out of state.
   const effectiveLinkerId = linkerId || linkers[0]?.id || ""
   const selectedLinker = linkers.find((linker) => linker.id === effectiveLinkerId) ?? null
 
@@ -422,12 +424,19 @@ export default function BuilderPage() {
             <h2 className="text-lg font-semibold text-primary-900 mb-2">Step 4: Linker</h2>
             <p className="text-sm text-gray-500 mb-1 max-w-3xl leading-relaxed">
               The whole library, {linkers.length} entries — the linker sits between the scaffold
-              and the peptide, and the route does not narrow this choice.
+              and the peptide, and the route does not narrow this choice. The list is in the
+              library's recommendation order, most suitable first, and the entry the reader does
+              not change is the one at the top.
             </p>
             <p className="text-xs text-gray-400 mb-4 max-w-3xl leading-relaxed">
-              A flexible linker lets the peptide move; a rigid one holds it away from the
-              scaffold surface. Both are legitimate; which one suits a construct depends on
-              whether the peptide needs to reach its target freely.
+              The order follows one argument rather than a measurement: a short functional
+              peptide has to stay reachable on the outside of a large structural protein, so
+              flexible Gly-Ser linkers come first — they hold the peptide clear without occluding
+              it and without disturbing the scaffold's own assembly — and the rigid α-helical and
+              proline entries come last, because fixing the geometry is a specialist answer
+              rather than a default. Every entry states why it sits where it does when it is
+              selected. No experiment in the pipeline compared two linkers on one fusion, so the
+              order is a judgement about assembly, not a claim about activity.
             </p>
 
             <Notice
@@ -919,10 +928,29 @@ function LinkerOption({
             <Badge variant="outline" className="text-xs">
               {linker.rigidity}
             </Badge>
+            {/* The list is in recommendation order, so an entry's position is information the
+                reader would otherwise have to infer from the sequence of the page. Only the top
+                one is called out, and only a ranked entry can be: the sample table's rows are
+                not ranked, and one of them may be a reader's stored linker. */}
+            {linker.priority_rank === 1 && (
+              <Badge variant="accent" className="text-xs">
+                Recommended
+              </Badge>
+            )}
+            {linker.priority_rank !== null && linker.priority_rank > 1 && (
+              <span className="text-[11px] text-gray-400">#{linker.priority_rank} in order</span>
+            )}
           </div>
           <p className="font-mono text-xs text-primary-700 mt-1.5 break-all">{linker.sequence}</p>
           {linker.description && (
             <p className="text-xs text-gray-500 mt-1 leading-relaxed">{linker.description}</p>
+          )}
+          {/* Why this one sits here, shown for the chosen entry rather than for all fifteen:
+              the reason is a paragraph, and fifteen of them at once is a wall. */}
+          {selected && linker.priority_reason && (
+            <p className="text-xs text-primary-700 mt-2 leading-relaxed border-l-2 border-primary-300 pl-2.5">
+              {linker.priority_reason}
+            </p>
           )}
           {linker.reference && (
             <p className="text-xs text-gray-400 mt-1 italic leading-relaxed">{linker.reference}</p>

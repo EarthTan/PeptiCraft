@@ -289,6 +289,7 @@ export default function ResultsPage() {
                 reference={reference}
                 activeRouteId={routeId}
                 activeRouteName={activeRouteName}
+                previewingPairing={Boolean(scaffoldId || linkerId)}
                 onSelectRoute={setRoute}
               />
             )}
@@ -683,12 +684,15 @@ function ConstructTab({
   reference,
   activeRouteId,
   activeRouteName,
+  previewingPairing,
   onSelectRoute,
 }: {
   detail: ConstructDetail
   reference: ReferenceData
   activeRouteId: string | null
   activeRouteName: string
+  /** Whether the URL names a scaffold or a linker, which the page shows as a preview. */
+  previewingPairing: boolean
   onSelectRoute: (routeId: string) => void
 }) {
   const [copied, setCopied] = useState(false)
@@ -895,7 +899,11 @@ function ConstructTab({
         </CardContent>
       </Card>
 
-      <AnalysisBlocks constructId={detail.id} routeId={activeRouteId} />
+      <AnalysisBlocks
+        constructId={detail.id}
+        routeId={activeRouteId}
+        previewing={previewingPairing}
+      />
     </>
   )
 }
@@ -1122,6 +1130,18 @@ function LinkerTab({
 
         {linker.description && (
           <p className="text-sm text-gray-600 leading-relaxed">{linker.description}</p>
+        )}
+
+        {/* Where this entry sits in the library's own order. A ranked entry always has a reason,
+            and the reason is what makes the position mean anything; the sample table's rows are
+            not ranked, so the block is absent for them rather than showing a bare number. */}
+        {linker.priority_rank !== null && linker.priority_reason && (
+          <div className="pt-3 border-t border-gray-100">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Recommendation · position {linker.priority_rank} of the library
+            </p>
+            <p className="text-xs text-gray-600 leading-relaxed">{linker.priority_reason}</p>
+          </div>
         )}
 
         {linker.unit_composition.length > 0 && (

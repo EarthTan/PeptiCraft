@@ -401,6 +401,18 @@ console.log('\nscaffolds, linkers, analysis')
     'every linker carries its rigidity band',
     linkers.every((l) => typeof l.rigidity === 'string' && l.rigidity.length > 0),
   )
+  // The order this list arrives in is the order the Builder displays and the order its standing
+  // choice is taken from, so a list in query order was a statement nobody had made. It is now
+  // the recommendation, and the position and its reason travel with each entry.
+  check(
+    'the library is served in recommendation order, 1 first with no gaps',
+    linkers.every((l, i) => l.priority_rank === i + 1),
+    linkers.map((l) => l.priority_rank).join(','),
+  )
+  check(
+    'every ranked entry states why it sits where it does',
+    linkers.every((l) => (l.priority_reason ?? '').length > 40),
+  )
 
   const id = (await staticMod.serveStatic('GET', '/api/constructs', new URLSearchParams({ limit: '1' })))
     .items[0].id
@@ -617,6 +629,55 @@ console.log('\nassembly: the one thing the static layer computes')
     'and reports the stored linker rather than calling it unavailable',
     scaffoldOnly?.linker_name === (constructFile.linker?.name ?? null),
     `${scaffoldOnly?.linker_name} vs ${constructFile.linker?.name}`,
+  )
+
+  // The two objects the pages read instead of the names. A construct response carries the
+  // `scaffold` summary and the `linker` view themselves: the heading prints
+  // `scaffold.short_name`, the summary card prints it again and takes the linker's name from
+  // `linker.name`, the eligible-scaffold list highlights the entry whose id matches, and the
+  // linker tab is rendered from `linker` alone. Emitting only the names left every one of them
+  // reading a null, so the page showed `scaffold unassigned` and the stored linker directly
+  // above a fused sequence it had just assembled from the scaffold the reader picked.
+  check(
+    'the assembled detail carries the scaffold summary the pages print',
+    applied.scaffold?.short_name === scaffoldFile.short_name,
+    `${applied.scaffold?.short_name} vs ${scaffoldFile.short_name}`,
+  )
+  check(
+    'and the id the eligible-scaffold list matches on',
+    applied.scaffold?.id === route.example.scaffold_id,
+    applied.scaffold?.id,
+  )
+  check(
+    'the assembled detail carries the linker view, not only its name',
+    applied.linker?.name === linkerFile.name && applied.linker?.length === linkerFile.length,
+    `${applied.linker?.name} / ${applied.linker?.length}`,
+  )
+  check(
+    'the embedded linker says which table it came from',
+    typeof applied.linker?.source_table === 'string' && applied.linker.source_table.length > 0,
+    applied.linker?.source_table,
+  )
+  check(
+    "a scaffold named without a linker embeds the construct's stored linker",
+    scaffoldOnly?.linker?.id === String(constructFile.linker?.id ?? ''),
+    `${scaffoldOnly?.linker?.id} vs ${constructFile.linker?.id}`,
+  )
+
+  // The other direction of the same pairing: a linker named with no scaffold. It changes no
+  // sequence — there is no scaffold to build on — but the response still has to report which
+  // linker the build was pointed at, or the page would fall back to the stored one and name a
+  // linker the reader did not choose.
+  const linkerOnly = await staticMod.applyAssemblyTargets(detail, null, route.example.linker_id)
+  check(
+    'a linker named without a scaffold is still reported',
+    linkerOnly?.linker?.name === linkerFile.name,
+    `${linkerOnly?.linker?.name} vs ${linkerFile.name}`,
+  )
+  check(
+    'and no fused sequence is invented for it',
+    linkerOnly?.full_sequence === null,
+    String(linkerOnly?.full_sequence),
   )
 
   // The Builder's own path, which is the one a reader actually takes.

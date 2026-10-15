@@ -55,6 +55,12 @@ SELECT id,
 
 
 def list_linkers(include_placeholder: bool = False) -> list[dict[str, Any]]:
+    """Both tables, in a deterministic base order.
+
+    Length then name is not the order the Builder displays: the recommendation order is applied
+    in `services.linkers.list_views`, so that it comes out the same on both backends and stays
+    with the other judgements. This order is what entries the service does not rank fall back to.
+    """
     rows = db.query(f"{_LIBRARY_SELECT} ORDER BY length, name")
     if include_placeholder:
         rows = rows + db.query(f"{_LEGACY_SELECT} ORDER BY length, name")

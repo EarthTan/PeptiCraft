@@ -471,13 +471,18 @@ export interface LinkerView {
   unit_composition: LinkerUnit[]
   description: string | null
   reference: string | null
+  /** Position in the library's recommendation order, 1 first; null when the entry is not
+   *  ranked. The list arrives in this order, so the first entry is the standing choice. */
+  priority_rank: number | null
+  /** Why the entry sits where it does — the library's own column when it is populated, the
+   *  service's recommendation table otherwise. */
+  priority_reason: string | null
 }
 
 export interface LinkerDetail extends LinkerView {
   flexible_count: number | null
   rigid_count: number | null
   rigidity_index: number | null
-  priority_reason: string | null
 }
 
 // ── Analysis and chat ───────────────────────────────────────────────────────

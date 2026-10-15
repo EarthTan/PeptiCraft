@@ -363,11 +363,25 @@ async function build(params: URLSearchParams): Promise<unknown | null> {
 
   const recipes = await loadJson<AssemblyRecipes>("assembly.json")
   const routeRecipes = recipes?.routes?.[routeId]
+
+  // Resolved once, not per row. Naming a scaffold or a linker is a decision about the whole
+  // build — every candidate is assembled from the same two parts — and the service reports the
+  // named pair in the same places: the top-level `scaffold` and `linker`, and each row's
+  // `linker_name`. A linker named without a scaffold still reaches the rows, which a build that
+  // only looked at the assembled result would drop.
+  const [scaffoldView, linkerView] = await Promise.all([
+    namedScaffold(scaffoldId),
+    namedLinkerView(linkerId),
+  ])
   const assembled = await Promise.all(
     page.map(async (item) => {
       const id = String((item as { id: string }).id)
       const built = await assemble(id, scaffoldId, linkerId)
-      if (!built) return item
+      if (!built) {
+        return linkerView
+          ? { ...(item as Record<string, unknown>), linker_name: linkerView.name }
+          : item
+      }
       return {
         ...(item as Record<string, unknown>),
         backbone_id: scaffoldId ?? (item as Record<string, unknown>).backbone_id,
@@ -392,10 +406,128 @@ async function build(params: URLSearchParams): Promise<unknown | null> {
     offset,
     scaffold_id: scaffoldId,
     linker_id: linkerId,
+    scaffold: scaffoldView,
+    linker: linkerView,
     binding_note: routeRecipes?.binding_note ?? result.binding_note,
     linker_note: routeRecipes?.linker_note ?? result.linker_note,
     scope_note: routeRecipes?.scope_note ?? result.scope_note,
   }
+}
+
+/**
+ * The two embedded objects the service sends beside the fused sequence.
+ *
+ * A construct response carries more than a sequence and two display names. It carries the
+ * `scaffold` summary and the `linker` view themselves, and the pages read those: the heading
+ * prints `scaffold.short_name`, the summary card prints it again and takes the linker's name
+ * from `linker.name`, the eligible-scaffold list highlights the entry whose id equals
+ * `scaffold.id`, and the linker tab is rendered from `linker` alone. Emitting only the names
+ * and the segments — which is what this module did — left every one of those reading a null,
+ * so a page showed `scaffold unassigned` and the stored linker directly above a fused sequence
+ * that had just been assembled from the scaffold and linker the reader picked.
+ *
+ * Both are projected rather than passed through, so the static shapes match the service's. The
+ * exported scaffold file is the cluster *detail* (it also carries `description`, `sequences`,
+ * `experiments` and the fields the dataset does not have), and the exported linker file is the
+ * linker *detail*; the service embeds the summary and the list view in these positions.
+ */
+
+interface ExportedScaffold {
+  id: string
+  name: string
+  short_name: string
+  category?: string | null
+  applicant?: string
+  patent?: string | null
+  length?: number | null
+  species?: string | null
+  sequence_count?: number
+  application_tags?: string[]
+  route_ids?: string[]
+  material_forms?: string[]
+  max_evidence?: string | null
+  has_sequence?: boolean
+  sequences?: { sequence?: string }[]
+}
+
+interface ExportedLinker {
+  id: string
+  name: string
+  sequence: string
+  length: number
+  rigidity: string
+  source_table: string
+  unit_composition?: unknown[]
+  description?: string | null
+  reference?: string | null
+  priority_rank?: number | null
+  priority_reason?: string | null
+}
+
+function scaffoldSummary(file: ExportedScaffold): Record<string, unknown> {
+  return {
+    id: file.id,
+    name: file.name,
+    short_name: file.short_name,
+    category: file.category ?? null,
+    applicant: file.applicant ?? "",
+    patent: file.patent ?? null,
+    length: file.length ?? null,
+    species: file.species ?? null,
+    sequence_count: file.sequence_count ?? 0,
+    application_tags: file.application_tags ?? [],
+    route_ids: file.route_ids ?? [],
+    material_forms: file.material_forms ?? [],
+    max_evidence: file.max_evidence ?? null,
+    has_sequence: file.has_sequence ?? false,
+  }
+}
+
+function linkerPreview(file: ExportedLinker): Record<string, unknown> {
+  return {
+    id: file.id,
+    name: file.name,
+    sequence: file.sequence,
+    length: file.length,
+    rigidity: file.rigidity,
+    source_table: file.source_table,
+    unit_composition: file.unit_composition ?? [],
+    description: file.description ?? null,
+    reference: file.reference ?? null,
+    priority_rank: file.priority_rank ?? null,
+    priority_reason: file.priority_reason ?? null,
+  }
+}
+
+/**
+ * A named scaffold, as the summary the service embeds. Independent of assembly, because the
+ * build response carries the named scaffold at its top level whether or not a fused sequence
+ * could be emitted from it.
+ */
+async function namedScaffold(scaffoldId: string | null): Promise<Record<string, unknown> | null> {
+  if (!scaffoldId) return null
+  const file = await loadJson<ExportedScaffold>(`scaffolds/${pathSafe(scaffoldId)}.json`)
+  return file ? scaffoldSummary(file) : null
+}
+
+/**
+ * A named linker's exported file.
+ *
+ * The curated library is what the interface offers, and the export writes one file per entry,
+ * so this resolves every id a reader can name through the interface. The six sample rows are
+ * not exported under `linkers/`: an id from that table that arrives by hand resolves to
+ * nothing and the caller keeps what the row already carries, rather than being handed a linker
+ * this deployment cannot describe.
+ */
+async function namedLinkerFile(linkerId: string | null): Promise<ExportedLinker | null> {
+  if (!linkerId) return null
+  return loadJson<ExportedLinker>(`linkers/${pathSafe(linkerId)}.json`)
+}
+
+/** The same file, projected onto the view the service embeds in a response. */
+async function namedLinkerView(linkerId: string | null): Promise<Record<string, unknown> | null> {
+  const file = await namedLinkerFile(linkerId)
+  return file ? linkerPreview(file) : null
 }
 
 /**
@@ -406,21 +538,27 @@ async function build(params: URLSearchParams): Promise<unknown | null> {
  * service itself; the sequences themselves come from the scaffold and linker files. The
  * provenance is unchanged from what the service reports: a pairing named by the reader is a
  * reconstruction, reported as `inferred`, and never as a pipeline result.
+ *
+ * The scaffold, the linker and the peptide are resolved and reported together here, because a
+ * response that named the parts in one place and assembled them in another is what let the
+ * page disagree with itself.
  */
+interface Assembly {
+  sequence: string
+  name: string
+  linkerName: string | null
+  segments: unknown[]
+  scaffold: Record<string, unknown>
+  linker: Record<string, unknown> | null
+}
+
 async function assemble(
   constructId: string,
   scaffoldId: string | null,
   linkerId: string | null,
-): Promise<{ sequence: string; name: string; linkerName: string | null; segments: unknown[] } | null> {
+): Promise<Assembly | null> {
   if (!scaffoldId) return null
-  const [scaffold, linker] = await Promise.all([
-    loadJson<{ sequences?: { sequence?: string }[]; short_name?: string; name?: string }>(
-      `scaffolds/${pathSafe(scaffoldId)}.json`,
-    ),
-    linkerId
-      ? loadJson<{ sequence?: string; name?: string }>(`linkers/${pathSafe(linkerId)}.json`)
-      : Promise.resolve(null),
-  ])
+  const scaffold = await loadJson<ExportedScaffold>(`scaffolds/${pathSafe(scaffoldId)}.json`)
   if (!scaffold?.sequences?.length) return null
 
   // The longest variant is the representative one, which is the same rule the service applies
@@ -431,10 +569,12 @@ async function assemble(
     .sort((a, b) => b.length - a.length)[0]
   if (!backbone) return null
 
-  const construct = await loadJson<{
-    peptide_sequence: string
-    linker?: { name?: string; sequence?: string } | null
-  }>(`constructs/${constructId}.json`)
+  const [construct, chosen] = await Promise.all([
+    loadJson<{ peptide_sequence: string; linker?: ExportedLinker | null }>(
+      `constructs/${constructId}.json`,
+    ),
+    namedLinkerFile(linkerId),
+  ])
   const peptide = construct?.peptide_sequence ?? ""
 
   // Which linker is in the middle. The service's rule, from `assemble_row`: the one the request
@@ -443,8 +583,9 @@ async function assemble(
   // stored linker's residues sit between the scaffold and the peptide, so dropping it emits a
   // fusion several residues shorter than the service's and the same URL shows two different
   // sequences on the two deployments.
-  const chosen = linkerId ? linker : (construct?.linker ?? null)
-  const middle = chosen?.sequence ?? ""
+  const stored = (construct?.linker ?? null) as ExportedLinker | null
+  const linker = chosen ?? stored
+  const middle = linker?.sequence ?? ""
   const sequence = `${backbone}${middle}${peptide}`
 
   // The names, not the identifiers. The service resolves a request-time scaffold to its
@@ -453,12 +594,14 @@ async function assemble(
   // reader on a static deployment would otherwise be shown `fixture-silk-s1` where the
   // development build shows `Fixture S1`.
   const name = scaffold.short_name || scaffold.name || scaffoldId
-  const linkerName = chosen ? chosen.name || linkerId || "" : null
+  const linkerName = linker ? linker.name || linkerId || "" : null
 
   return {
     sequence,
     name,
     linkerName,
+    scaffold: scaffoldSummary(scaffold),
+    linker: linker ? linkerPreview(linker) : null,
     segments: [
       {
         label: `Backbone: ${name}`,
@@ -470,7 +613,7 @@ async function assemble(
       {
         // The service's two states: a linker it resolved, or the stand-in it writes when the
         // sequence could not be resolved at all.
-        label: chosen ? `Linker: ${linkerName}` : "Linker: sequence unavailable",
+        label: linker ? `Linker: ${linkerName}` : "Linker: sequence unavailable",
         sequence: middle,
         color: "linker",
         type: "linker",
@@ -704,26 +847,44 @@ export async function applyAssemblyTargets(
 ): Promise<Record<string, unknown>> {
   if (!scaffoldId && !linkerId) return detail
   const id = String(detail.id)
-  const assembled = await assemble(id, scaffoldId, linkerId)
-  if (!assembled) return detail
+
+  // The scaffold and the linker are resolved independently, which is what the service does. A
+  // request that names only a linker still has that linker reported against the record, and a
+  // request that names only a scaffold keeps the linker the construct's own row records — the
+  // rows are what carry it, and the response has to say which of the two happened.
+  const [assembled, linkerView] = await Promise.all([
+    scaffoldId ? assemble(id, scaffoldId, linkerId) : Promise.resolve(null),
+    namedLinkerView(linkerId),
+  ])
+  if (!assembled && !linkerView) return detail
 
   return {
     ...detail,
-    backbone_id: scaffoldId,
-    // The scaffold's short name, as the service writes it for a request-time scaffold. The id
-    // is already in `backbone_id`; putting it here as well made the page print an identifier
-    // where the development build prints a name.
-    backbone_name: assembled.name,
-    backbone_binding: "inferred",
-    backbone_binding_note:
-      "The scaffold was named at request time rather than read from the stored construct. The " +
-      "fused sequence uses that scaffold's real sequence, so it is a faithful assembly of a " +
-      "real scaffold with a real linker and peptide, but the scaffold-to-construct assignment " +
-      "is a reconstruction and not a pipeline output.",
-    full_sequence: assembled.sequence,
-    assembled_sequence_available: true,
-    segments: assembled.segments,
-    linker_name: assembled.linkerName ?? detail.linker_name,
+    ...(linkerView && !assembled ? { linker: linkerView } : {}),
+    ...(assembled
+      ? {
+          backbone_id: scaffoldId,
+          // The scaffold's short name, as the service writes it for a request-time scaffold. The
+          // id is already in `backbone_id`; putting it here as well made the page print an
+          // identifier where the development build prints a name.
+          backbone_name: assembled.name,
+          backbone_binding: "inferred",
+          backbone_binding_note:
+            "The scaffold was named at request time rather than read from the stored construct. " +
+            "The fused sequence uses that scaffold's real sequence, so it is a faithful assembly " +
+            "of a real scaffold with a real linker and peptide, but the scaffold-to-construct " +
+            "assignment is a reconstruction and not a pipeline output.",
+          full_sequence: assembled.sequence,
+          assembled_sequence_available: true,
+          segments: assembled.segments,
+          // The two objects every surface reads. `linker` here is the one the sequence in
+          // `full_sequence` was actually built with — the named one, or the stored one when the
+          // request named none.
+          scaffold: assembled.scaffold,
+          linker: assembled.linker,
+          linker_name: assembled.linkerName ?? detail.linker_name,
+        }
+      : {}),
   }
 }
 

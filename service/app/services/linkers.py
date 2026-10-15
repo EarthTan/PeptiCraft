@@ -11,6 +11,10 @@ construct service, with the two copies reading different keys.
 docstring already states that contract ("each row records which of the two it came from"),
 and one of its three queries was not selecting the column, so a row that arrived through
 that path could not have been rendered.
+
+The listing order is decided here rather than in SQL, for two reasons recorded at
+`list_views`: the order is a recommendation about assembly and belongs with the other
+judgements in the service, and it has to come out the same on both backends.
 """
 from __future__ import annotations
 
@@ -19,6 +23,7 @@ from typing import Any
 
 from ..models.linker import LinkerDetail, LinkerUnit, LinkerView
 from ..repositories import linkers as repo
+from . import linker_priority as priority
 
 
 def units(raw: Any) -> list[LinkerUnit]:
@@ -51,23 +56,35 @@ def band(value: Any) -> str:
 
 
 def to_view(row: dict[str, Any]) -> LinkerView:
-    """One linker row, from either table, as the shape the API serves."""
+    """One linker row, from either table, as the shape the API serves.
+
+    The recommendation travels with the view. A reason already in the library's own
+    `priority_reason` column wins over the one in `linker_priority.py`, so a curation decision
+    recorded against the row is never overwritten by the table's default reasoning; the table
+    fills the field in only where the column is empty, which in this database is every curated
+    row.
+    """
     rigidity = row.get("rigidity_label")
     if not rigidity:
         flexibility = row.get("flexibility")
         if flexibility is None:
             flexibility = row.get("rigidity")
         rigidity = band(flexibility)
+    sequence = row["sequence"]
+    source_table = row["source_table"]
+    stored_reason = (row.get("priority_reason") or "").strip() or None
     return LinkerView(
         id=row["id"],
         name=row["name"],
-        sequence=row["sequence"],
+        sequence=sequence,
         length=row["length"],
         rigidity=rigidity,
-        source_table=row["source_table"],
+        source_table=source_table,
         unit_composition=units(row.get("unit_composition")),
         description=row.get("description"),
         reference=row.get("reference"),
+        priority_rank=priority.rank_for(sequence, source_table),
+        priority_reason=stored_reason or priority.reason_for(sequence, source_table),
     )
 
 
@@ -78,12 +95,20 @@ def to_detail(row: dict[str, Any]) -> LinkerDetail:
         flexible_count=row.get("flexible_count"),
         rigid_count=row.get("rigid_count"),
         rigidity_index=_as_float(row.get("flexibility")),
-        priority_reason=row.get("priority_reason"),
     )
 
 
 def list_views(include_placeholder: bool = False) -> list[LinkerView]:
-    return [to_view(r) for r in repo.list_linkers(include_placeholder=include_placeholder)]
+    """The library in recommendation order, most suitable first.
+
+    This order is what the Builder displays and what its standing choice is taken from, so it is
+    a statement about the entries whether or not it was meant as one. `linker_priority.py` owns
+    the statement; the repository's own sort stays underneath as the order for entries the table
+    does not cover, and `sorted` is stable so that tail keeps its relative order rather than
+    being reshuffled.
+    """
+    views = [to_view(r) for r in repo.list_linkers(include_placeholder=include_placeholder)]
+    return sorted(views, key=lambda v: (v.priority_rank is None, v.priority_rank or 0))
 
 
 def view_for(linker_id: str | None) -> LinkerView | None:

@@ -1,0 +1,21 @@
+# Cache policy for a deployment that is entirely static files plus one function.
+#
+# The exported data is a snapshot of a pipeline run and does not change until it is re-exported,
+# so it can be cached hard. Hashed build assets can be cached forever, because a new build
+# produces new filenames. Everything else — the HTML shell — must not be cached, or a reader
+# would keep loading a stale page after a deploy.
+#
+# There is no rule for the chat endpoint, and adding one would do nothing: headers declared in
+# this file are not applied to responses from Pages Functions, whatever the route matches. The
+# function sets its own `Cache-Control: no-store`, which is the only place that can.
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/data/*
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN

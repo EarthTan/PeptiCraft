@@ -11,6 +11,11 @@ const navLinks = [
   { href: "/builder", label: "Construct Builder" },
 ]
 
+function isCurrentPage(pathname: string, href: string) {
+  if (pathname === href) return true
+  return href === "/library" && (pathname.startsWith("/library/") || pathname.startsWith("/results/"))
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -28,6 +33,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-surface">
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       {/* Navbar */}
       <header
         className={cn(
@@ -40,24 +48,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-2.5 group">
+            <Link to="/" aria-label="PeptiCraft home" className="flex items-center gap-2.5 group">
               <div className="w-9 h-9 rounded-lg gradient-accent flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
                 <Dna className="w-5 h-5 text-white" />
               </div>
               <span className="text-lg font-bold text-primary-900 tracking-tight">
-                Pepticraft
+                PeptiCraft
               </span>
             </Link>
 
             {/* Desktop Nav */}
-            <nav className="hidden md:flex items-center gap-1">
+            <nav aria-label="Primary navigation" className="hidden md:flex items-center gap-1">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
                   to={link.href}
+                  aria-current={isCurrentPage(location.pathname, link.href) ? "page" : undefined}
                   className={cn(
                     "px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                    location.pathname === link.href
+                    isCurrentPage(location.pathname, link.href)
                       ? "bg-primary-50 text-primary-700"
                       : "text-primary-600 hover:text-primary-800 hover:bg-surface-alt"
                   )}
@@ -78,9 +87,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
             {/* Mobile menu button */}
             <button
+              type="button"
               onClick={() => setMobileOpen(!mobileOpen)}
               className="md:hidden p-2 rounded-lg text-primary-600 hover:bg-surface-alt transition-colors"
-              aria-label="Toggle menu"
+              aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={mobileOpen}
+              aria-controls="mobile-navigation"
             >
               {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -88,31 +100,34 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Mobile Nav */}
-        {mobileOpen && (
-          <div className="md:hidden border-t border-gray-200 bg-white">
-            <div className="px-4 py-3 space-y-1">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  to={link.href}
-                  className={cn(
-                    "block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                    location.pathname === link.href
-                      ? "bg-primary-50 text-primary-700"
-                      : "text-primary-600 hover:bg-surface-alt"
-                  )}
-                >
-                  {link.label}
-                </Link>
-              ))}
-              <Link to="/builder" className="block pt-2">
-                <Button variant="gradient" className="w-full">
-                  Start Building
-                </Button>
+        <nav
+          id="mobile-navigation"
+          aria-label="Mobile navigation"
+          className={cn("md:hidden border-t border-gray-200 bg-white", !mobileOpen && "hidden")}
+        >
+          <div className="px-4 py-3 space-y-1">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                to={link.href}
+                aria-current={isCurrentPage(location.pathname, link.href) ? "page" : undefined}
+                className={cn(
+                  "block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                  isCurrentPage(location.pathname, link.href)
+                    ? "bg-primary-50 text-primary-700"
+                    : "text-primary-600 hover:bg-surface-alt"
+                )}
+              >
+                {link.label}
               </Link>
-            </div>
+            ))}
+            <Link to="/builder" className="block pt-2">
+              <Button variant="gradient" className="w-full">
+                Start Building
+              </Button>
+            </Link>
           </div>
-        )}
+        </nav>
       </header>
 
       {/* Which database answered. Sits below the fixed navbar and inside the page's top
@@ -122,7 +137,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Main Content */}
-      <main>{children}</main>
+      <main id="main-content" tabIndex={-1}>
+        {children}
+      </main>
 
       {/* Footer */}
       <footer className="border-t border-gray-200 bg-surface-alt">
@@ -131,13 +148,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-2">
               <Dna className="w-4 h-4 text-primary-400" />
               <span className="text-sm text-gray-500">
-                DKU iGEM 2026 — Pepticraft: Design Your Multifunctional Proteins for Medical Aesthetics
+                DKU iGEM 2026 · PeptiCraft
               </span>
             </div>
-            <div className="flex items-center gap-4 text-sm text-gray-400">
-              <span>Pipeline 4 · Silk-Fusion Peptide Screening</span>
-              <span className="hidden sm:inline">·</span>
-              <span className="hidden sm:inline">v0.1.0 Preview</span>
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-gray-500">
+              <span>Evidence-aware fusion-protein candidate design</span>
+              <a
+                href="https://2026.igem.wiki/dku/"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-primary-700 underline underline-offset-4 hover:text-primary-900"
+              >
+                Team Wiki
+              </a>
             </div>
           </div>
         </div>

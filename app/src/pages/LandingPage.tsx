@@ -10,7 +10,6 @@ import { Notice } from "@/components/ui/notice"
 import {
   ArrowRight,
   Beaker,
-  Bot,
   ChevronRight,
   Database,
   FlaskConical,
@@ -58,24 +57,23 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24 sm:pt-28 sm:pb-32">
           <div className="max-w-3xl mx-auto text-center">
             <Badge variant="accent" className="mb-6 text-sm px-4 py-1.5">
-              DKU iGEM 2026 · AI &amp; Software
+              DKU iGEM 2026 · PeptiCraft
             </Badge>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-primary-900 leading-tight">
-              Design Your Multifunctional
+              From peptide screening to
               <br />
-              <span className="gradient-accent-text">Proteins for Medical Aesthetics</span>
+              <span className="gradient-accent-text">traceable protein candidates</span>
             </h1>
             <p className="mt-6 text-lg sm:text-xl text-primary-700 leading-relaxed max-w-2xl mx-auto">
-              Powered by a dataset of approximately 20 million peptides, our AI platform helps
-              students, early-career researchers, and independent innovators design
-              multifunctional fusion proteins for medical aesthetics and identify promising
-              candidates for laboratory validation.
+              PeptiCraft brings peptide screening, protein-scaffold evidence, and route-aware
+              ranking into one guided workflow. Inspect why a candidate ranks, how its parts are
+              sourced, and what still needs to be tested.
             </p>
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link to="/builder">
                 <Button variant="gradient" size="lg" className="w-full sm:w-auto">
                   <FlaskConical className="w-5 h-5" />
-                  Start Building
+                  Explore the Builder
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
@@ -86,6 +84,10 @@ export default function LandingPage() {
                 </Button>
               </Link>
             </div>
+            <p className="mt-6 text-xs sm:text-sm text-primary-700/80 max-w-2xl mx-auto">
+              In-silico decision support only: a high score is not experimental evidence of
+              activity, safety, or clinical performance.
+            </p>
           </div>
         </div>
       </section>
@@ -110,6 +112,8 @@ export default function LandingPage() {
 
       <CorePrinciples />
 
+      <EvidenceBoundaries />
+
       <PipelineSection pipeline={data?.pipeline ?? null} loading={loading} error={error} onRetry={reload} />
 
       <FunctionDirections reference={data?.reference ?? null} loading={loading} />
@@ -118,17 +122,17 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto px-4 text-center">
           <Separator className="mb-12" />
           <h2 className="text-3xl sm:text-4xl font-bold text-primary-900 tracking-tight">
-            Start Designing Your <span className="gradient-accent-text">Fusion Protein</span>
+            Start Comparing <span className="gradient-accent-text">Protein Candidates</span>
           </h2>
           <p className="mt-4 text-primary-600 max-w-xl mx-auto">
-            Choose your application route and function directions — the platform handles
-            scaffold matching, scoring, and experiment decisions for you.
+            Choose an application route and function direction, then review the ranked shortlist
+            and its evidence before your team chooses what to test.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to="/builder">
               <Button variant="gradient" size="lg">
                 <FlaskConical className="w-5 h-5" />
-                Launch Construct Builder
+                Build a Candidate
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </Link>
@@ -165,7 +169,7 @@ function HighlightBar({
   )
 
   const highlights = [
-    { label: formatCount(searchSpace), detail: "Peptides screened" },
+    { label: formatCount(searchSpace), detail: "Peptides in the search space" },
     { label: constructs.toLocaleString(), detail: "Constructs scored" },
     { label: String(scaffolds.length), detail: "Scaffolds in the library" },
     { label: String(reference.directions.length), detail: "Function directions" },
@@ -218,13 +222,12 @@ function ThreeModules({
         `immunogenicity gate.`,
     },
     {
-      icon: Bot,
-      title: "AI Agent Decision Support",
+      icon: Shield,
+      title: "Evidence-linked explanations",
       description:
-        "Embedded and sidebar dual-mode AI Agent. Generates safety interpretation, peptide " +
-        "origin, linker rationale, expression strategy, and risk assessment from the " +
-        "construct's own scores and thresholds, so every number in the text is traceable to a " +
-        "field in the response.",
+        "Per-construct explanations connect safety interpretation, peptide provenance, linker " +
+        "choice, and risk notes to the record's scores and thresholds. Chat responses identify " +
+        "their source so readers can distinguish generated assistance from measured evidence.",
     },
   ]
 
@@ -239,8 +242,8 @@ function ThreeModules({
             Three Core Modules
           </h2>
           <p className="mt-3 text-primary-600 max-w-2xl mx-auto">
-            From pre-computed libraries to AI-assisted construct building — one workflow for
-            fusion protein design
+            From pre-computed libraries to evidence-aware construct assembly — one workflow for
+            fusion-protein candidate design
           </p>
         </div>
         <div className="grid md:grid-cols-3 gap-6">
@@ -444,6 +447,75 @@ function CorePrinciples() {
                 </CardDescription>
               </CardContent>
             </Card>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Evidence boundaries
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EvidenceBoundaries() {
+  const boundaries = [
+    {
+      icon: TrendingUp,
+      title: "A ranking is not a probability",
+      description:
+        "Composite scores order candidates within a route. They are not predicted activity, " +
+        "and signals marked ranking-only should not be read as calibrated likelihoods.",
+    },
+    {
+      icon: Shield,
+      title: "Unknown is not a pass",
+      description:
+        "When a safety metric was not assessed, the result says so rather than treating the " +
+        "missing value as safe. Work-in-progress directions remain visibly labelled.",
+    },
+    {
+      icon: Database,
+      title: "Part pairing has provenance",
+      description:
+        "The current construct snapshot does not contain verified scaffold pairings. A " +
+        "scaffold selected in the Builder is reported as an inferred assembly, not as an " +
+        "experimentally validated construct.",
+    },
+  ]
+
+  return (
+    <section className="py-16 sm:py-20 bg-primary-950" aria-labelledby="evidence-boundaries-title">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mb-10">
+          <Badge variant="outline" className="mb-4 border-primary-300 text-primary-100">
+            Read the evidence carefully
+          </Badge>
+          <h2
+            id="evidence-boundaries-title"
+            className="text-3xl sm:text-4xl font-bold tracking-tight text-white"
+          >
+            What a PeptiCraft result can tell you
+          </h2>
+          <p className="mt-3 text-primary-100/80 leading-relaxed">
+            The interface is designed to make uncertainty visible, so a shortlist can guide the
+            next experiment without being mistaken for an experimental result.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-5">
+          {boundaries.map((item) => (
+            <article
+              key={item.title}
+              className="rounded-2xl border border-white/15 bg-white/5 p-6"
+            >
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-4">
+                <item.icon className="w-5 h-5 text-accent-300" aria-hidden="true" />
+              </div>
+              <h3 className="text-lg font-semibold text-white">{item.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-primary-100/80">
+                {item.description}
+              </p>
+            </article>
           ))}
         </div>
       </div>

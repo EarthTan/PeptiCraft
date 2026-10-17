@@ -49,12 +49,48 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 3px solid #0284c7;
+    outline-offset: 3px;
+  }
+
+  #main-content:focus {
+    outline: none;
+  }
+
   ::selection {
     @apply bg-primary-100 text-primary-900;
   }
 }
 
 @layer components {
+  .skip-link {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    z-index: 100;
+    transform: translateY(-180%);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: #ffffff;
+    color: #082f49;
+    font-weight: 600;
+    box-shadow: 0 8px 24px rgb(8 47 73 / 16%);
+    transition: transform 150ms ease;
+  }
+
+  .skip-link:focus {
+    transform: translateY(0);
+  }
+
+  #main-content {
+    scroll-margin-top: 5rem;
+  }
+
   .glass-card {
     @apply bg-white/80 backdrop-blur-lg border border-white/40 shadow-lg;
   }
@@ -70,5 +106,16 @@
   .gradient-accent-text {
     @apply bg-clip-text text-transparent;
     background-image: linear-gradient(135deg, #0ea5e9 0%, #10b981 100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

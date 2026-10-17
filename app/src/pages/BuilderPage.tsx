@@ -220,43 +220,50 @@ export default function BuilderPage() {
 
       <section className="border-b border-gray-200 bg-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center gap-1.5">
+          <nav aria-label="Construct builder progress">
+            <p className="sr-only" aria-live="polite">
+              Step {step} of {STEP_COUNT}: {STEP_LABELS[step - 1]}
+            </p>
+            <ol className="flex">
             {STEP_LABELS.map((label, offset) => {
               const index = offset + 1
               return (
-                <div key={label} className="flex items-center gap-1.5 flex-1">
-                  <button
-                    onClick={() => index < step && setStep(index as Step)}
-                    className={cn(
-                      "flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium transition-all duration-200",
-                      index < step
-                        ? "bg-accent-500 text-white cursor-pointer"
-                        : index === step
-                          ? "bg-primary-500 text-white"
-                          : "bg-surface-muted text-gray-400",
-                    )}
-                  >
-                    {index < step ? <CheckCircle2 className="w-3.5 h-3.5" /> : index}
-                  </button>
+                <li key={label} className="relative flex flex-1 flex-col items-center">
                   {index < STEP_COUNT && (
-                    <div
+                    <span
+                      aria-hidden="true"
                       className={cn(
-                        "flex-1 h-0.5 rounded-full",
+                        "absolute top-3.5 left-1/2 h-0.5 w-full rounded-full",
                         index < step ? "bg-accent-500" : "bg-surface-muted",
                       )}
                     />
                   )}
-                </div>
+                  {index < step ? (
+                    <button
+                      type="button"
+                      onClick={() => setStep(index as Step)}
+                      aria-label={`Go back to ${label}`}
+                      className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium transition-all duration-200 bg-accent-500 text-white cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  ) : (
+                    <span
+                      aria-current={index === step ? "step" : undefined}
+                      className={cn(
+                        "relative z-10 flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium transition-all duration-200",
+                        index === step ? "bg-primary-500 text-white" : "bg-surface-muted text-gray-400",
+                      )}
+                    >
+                      {index}
+                    </span>
+                  )}
+                  <span className="mt-1 text-center text-[11px] text-gray-400">{label}</span>
+                </li>
               )
             })}
-          </div>
-          <div className="flex justify-between mt-1">
-            {STEP_LABELS.map((label) => (
-              <span key={label} className="text-[11px] text-gray-400">
-                {label}
-              </span>
-            ))}
-          </div>
+            </ol>
+          </nav>
         </div>
       </section>
 

@@ -487,6 +487,24 @@ export interface LinkerDetail extends LinkerView {
 
 // ── Analysis and chat ───────────────────────────────────────────────────────
 
+/**
+ * The recommended host-to-purification path for a construct.
+ *
+ * A recommendation derived from the peptide's predicted properties and the bound carrier's
+ * class — never a condition read from the record, which carries none.
+ */
+export interface ExpressionPlan {
+  host: string
+  strain: string
+  vector: string
+  tag: string
+  induction: string
+  temperature_c: number
+  duration_h: string
+  purification: string
+  tier: "standard" | "solubility-rescue" | "tight-control" | "secretion" | string
+}
+
 export interface AnalysisBlock {
   id: string
   type:
@@ -500,6 +518,8 @@ export interface AnalysisBlock {
   icon: string
   content: string
   collapsed: boolean
+  /** Present on `expression_strategy` only, as fields rather than prose. */
+  plan?: ExpressionPlan | null
   /** Field paths the prose derives from, so every number in the text is traceable. */
   citations: string[]
 }

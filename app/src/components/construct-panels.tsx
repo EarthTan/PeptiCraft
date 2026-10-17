@@ -429,6 +429,7 @@ function AnalysisBlockCard({ block }: { block: AnalysisBlock }) {
       </button>
       {open && (
         <div className="px-3 pb-3">
+          {block.plan && <ExpressionPlanGrid plan={block.plan} />}
           <p className="text-xs text-gray-600 leading-relaxed whitespace-pre-line">
             {block.content}
           </p>
@@ -439,6 +440,39 @@ function AnalysisBlockCard({ block }: { block: AnalysisBlock }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The recommended route as a scannable grid.
+ *
+ * The prose beneath it carries the reasoning; this carries the five decisions a reader acts
+ * on. Labelled `Recommended` rather than left unlabelled, because every other value on the
+ * page is a stored measurement and this one is not.
+ */
+function ExpressionPlanGrid({ plan }: { plan: NonNullable<AnalysisBlock["plan"]> }) {
+  const rows: [string, string][] = [
+    ["Host", `${plan.host} · ${plan.strain}`],
+    ["Vector", plan.vector],
+    ["Tag", plan.tag],
+    ["Induction", `${plan.induction}, ${plan.temperature_c} °C, ${plan.duration_h} h`],
+    ["Purification", plan.purification],
+  ]
+
+  return (
+    <div className="mb-3 rounded-md border border-accent-100 bg-accent-50/40 p-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-accent-700 mb-1.5">
+        Recommended route
+      </p>
+      <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-1 text-[11px] leading-snug">
+        {rows.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-gray-400">{label}</dt>
+            <dd className="text-gray-700">{value}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   )
 }

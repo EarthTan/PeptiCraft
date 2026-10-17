@@ -19,6 +19,36 @@ from pydantic import BaseModel, Field, field_validator
 MAX_HISTORY_TURNS = 50
 
 
+class ExpressionPlan(BaseModel):
+    """The recommended host-to-purification path for one construct.
+
+    Not a record, and the distinction is the point. No construct in the dataset carries an
+    expression host, a vector or an induction condition, so this object is derived in
+    `TemplateGenerator._expression_plan` from the peptide's predicted properties, its
+    composition and — when one is bound — the carrier's class and length.
+
+    Carried as structure beside the prose because the four decisions a reader acts on are
+    host, vector, induction and purification. A chip row can be scanned; a paragraph has to be
+    read. The prose on the same block carries the reasoning and the rule that produced each
+    value, so the two cannot disagree.
+    """
+
+    host: str
+    strain: str
+    vector: str
+    tag: str
+    induction: str
+    temperature_c: int
+    duration_h: str
+    purification: str
+    tier: str = Field(
+        default="standard",
+        description="`standard` / `solubility-rescue` / `tight-control` / `secretion`. "
+        "Names which rule in the generator fired, so a reader can tell a default route from "
+        "one chosen to work around a predicted property.",
+    )
+
+
 class AnalysisBlock(BaseModel):
     id: str
     type: str = Field(
@@ -29,6 +59,11 @@ class AnalysisBlock(BaseModel):
     icon: str
     content: str
     collapsed: bool = False
+    plan: ExpressionPlan | None = Field(
+        default=None,
+        description="Populated only by `expression_strategy`. The recommendation as fields, "
+        "so the interface can render it without parsing the prose.",
+    )
     citations: list[str] = Field(
         default_factory=list,
         description="Field paths the prose is derived from, such as "

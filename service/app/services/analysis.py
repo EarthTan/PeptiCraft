@@ -33,7 +33,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Protocol
 
-from ..models.analysis import AnalysisBlock, ChatMessage, ChatResponse
+from ..models.analysis import AnalysisBlock, ChatMessage, ChatResponse, ExpressionPlan
 from ..models.common import BackboneBinding, ScoreSemantics
 from ..models.construct import ConstructDetail
 from . import reference
@@ -113,6 +113,55 @@ def _source_phrase(source: str) -> str:
         "route": "the route's screening profile",
         "project": "a platform-wide constant",
     }.get(source, source)
+
+
+# Side-chain pKa values for the residues that carry a charge near neutral pH. Everything not
+# listed is treated as neutral, which is right for the twenty-proteinogenic set apart from the
+# termini handled below.
+_PKA = {"D": 3.65, "E": 4.25, "C": 8.18, "Y": 10.07, "H": 6.00, "K": 10.53, "R": 12.50}
+_N_TERMINUS_PKA = 9.69
+_C_TERMINUS_PKA = 2.34
+
+
+def _net_charge(seq: str, ph: float = 7.0) -> float:
+    """Net charge in proton units at a given pH, by Henderson-Hasselbalch.
+
+    Not a predictor and not part of the nine-score contract: it is arithmetic on the peptide's
+    own sequence, used only to decide whether a construct belongs to the cationic class that
+    stresses an E. coli envelope. Stated here so the threshold it feeds has a visible basis
+    rather than an assertion.
+    """
+    charge = 0.0
+    for aa in seq:
+        pka = _PKA.get(aa)
+        if pka is None:
+            continue
+        if aa in "KRH":
+            charge += 1.0 / (1.0 + 10 ** (ph - pka))
+        else:
+            charge -= 1.0 / (1.0 + 10 ** (pka - ph))
+    charge += 1.0 / (1.0 + 10 ** (ph - _N_TERMINUS_PKA))
+    charge -= 1.0 / (1.0 + 10 ** (_C_TERMINUS_PKA - ph))
+    return charge
+
+
+def _hydrophobic_fraction(seq: str) -> float:
+    hydrophobic = set("AVILMFWY")
+    return sum(1 for a in seq if a in hydrophobic) / len(seq) if seq else 0.0
+
+
+# The solubility below which the standard induction is expected to lose product to inclusion
+# bodies. It is the platform's own planning cut: SoDoPE returns a 0-1 score and publishes no
+# threshold, so the number is stated here once instead of being implied by a branch.
+SOLUBILITY_STANDARD_CUT = 0.45
+
+# The carrier length beyond which a collagen repeat is recommended into a eukaryotic host. The
+# scaffold library's collagen entries are 225-1071 aa and only the longest crosses this, so the
+# cut separates the one case that needs hydroxylation from the four that do not.
+COLLAGEN_ECOLI_LIMIT = 600
+
+# The net charge at which a peptide is treated as cationic enough to stress the envelope.
+CATIONIC_CHARGE = 3.5
 
 
 # ---------------------------------------------------------------------------
@@ -332,39 +381,241 @@ class TemplateGenerator:
         )
 
     # -- block 4 ------------------------------------------------------------
+    def _expression_plan(self, c: ConstructDetail) -> ExpressionPlan:
+        """Choose a host, vector and induction regime from properties the record holds.
+
+        The dataset carries no expression condition for any construct — `backbone_proteins`
+        has no such column and `scaffold_patients`' experiment table is not read by the
+        service — so a block that only said "nothing is recorded here" left the reader with
+        nothing to act on. What can be derived without inventing data is the standard route
+        for the peptide's own properties, and the one switch that matters for a carrier:
+        repeat-rich collagen above `COLLAGEN_ECOLI_LIMIT` needs a eukaryotic host.
+
+        Every branch is a rule about a field in the same response, and the prose below names
+        the rule. Nothing here claims an experimental outcome: solubility and thermal
+        stability are used to pick between published expression regimes, not to predict a
+        yield.
+        """
+        seq = c.peptide.sequence
+        hydro = _hydrophobic_fraction(seq)
+        charge = _net_charge(seq)
+        cys = seq.count("C")
+        sol = c.scores.solubility
+        scaffold = c.scaffold
+
+        if (
+            scaffold is not None
+            and scaffold.category == "recombinant-collagen"
+            and (scaffold.length or 0) > COLLAGEN_ECOLI_LIMIT
+        ):
+            return ExpressionPlan(
+                host="Pichia pastoris (Komagataella phaffii)",
+                strain="X-33",
+                vector="pPICZα-A",
+                tag="a C-terminal His6 tag, encoded by the vector",
+                induction="1% methanol, replenished every 24 h",
+                temperature_c=28,
+                duration_h="72–96",
+                purification="secreted into the medium — Ni-NTA from clarified supernatant, "
+                "then size exclusion",
+                tier="secretion",
+            )
+
+        # A repeat-rich carrier recombines in a recA+ host, and BL21 is not recA-deficient
+        # while HMS174 is. Only a bound scaffold says the carrier is one of those classes,
+        # which is why the unbound default stays BL21 rather than pre-emptively hardening.
+        repeat_carrier = scaffold is not None and scaffold.category in {
+            "spider-silk",
+            "silkworm-silk",
+            "recombinant-collagen",
+        }
+        if cys >= 2:
+            strain = "SHuffle T7"
+        elif repeat_carrier:
+            strain = "HMS174(DE3)"
+        else:
+            strain = "BL21(DE3)"
+
+        if (sol is not None and sol < SOLUBILITY_STANDARD_CUT) or hydro >= 0.5:
+            return ExpressionPlan(
+                host="Escherichia coli",
+                strain=strain,
+                vector="pET SUMO",
+                tag="an N-terminal His6-SUMO tag, cleaved with Ulp1 after capture",
+                induction="0.2 mM IPTG at OD600 0.6–0.8",
+                temperature_c=16,
+                duration_h="18–20",
+                purification="Ni-NTA capture, Ulp1 cleavage, then size exclusion",
+                tier="solubility-rescue",
+            )
+
+        if charge >= CATIONIC_CHARGE:
+            return ExpressionPlan(
+                host="Escherichia coli",
+                strain=strain,
+                vector="pET-28a(+)",
+                tag="an N-terminal His6 tag",
+                induction="0.4 mM IPTG at OD600 0.4–0.5",
+                temperature_c=22,
+                duration_h="12–16",
+                purification="Ni-NTA, then size exclusion",
+                tier="tight-control",
+            )
+
+        return ExpressionPlan(
+            host="Escherichia coli",
+            strain=strain,
+            vector="pET-28a(+)",
+            tag="an N-terminal His6 tag",
+            induction="0.4 mM IPTG at OD600 0.6–0.8",
+            temperature_c=25,
+            duration_h="6",
+            purification="Ni-NTA, then size exclusion",
+            tier="standard",
+        )
+
     def _expression_strategy(self, c: ConstructDetail) -> AnalysisBlock:
+        seq = c.peptide.sequence
+        plan = self._expression_plan(c)
+        sol = c.scores.solubility
+        hydro = _hydrophobic_fraction(seq)
+        charge = _net_charge(seq)
+        cys = seq.count("C")
+        scaffold = c.scaffold
+
         lines = [
-            "No expression host, vector or induction condition is recorded against this "
-            "construct. The dataset does not carry that field, so nothing is asserted here.",
+            f"Recommended route: {plan.host}, strain {plan.strain}, {plan.vector} with "
+            f"{plan.tag}.",
+            f"Induction: {plan.induction}, {plan.temperature_c} °C, {plan.duration_h} h. "
+            f"Purification: {plan.purification}.",
+            "This is a recommendation rather than a stored condition: the dataset records no "
+            "expression host, vector or induction condition for any construct. It is derived "
+            "from the peptide's predicted properties, its composition, and — where one is "
+            "bound — the scaffold's class.",
         ]
-        if c.scaffold is not None:
-            lines.append(
-                f"The scaffold is {c.scaffold.short_name}, developed by {c.scaffold.applicant}"
-                + (f" (patent {c.scaffold.patent})" if c.scaffold.patent else "")
-                + f", with a highest evidence level of {c.scaffold.max_evidence}."
+
+        if plan.tier == "secretion":
+            described = (
+                f"a recombinant-collagen entry of {scaffold.length} residues"
+                if scaffold.length
+                else "a recombinant-collagen entry of unstated length"
             )
-        elif c.backbone_name:
             lines.append(
-                f"The scaffold recorded against this construct is {c.backbone_name}. It carries "
-                f"a real sequence, which is what the fused assembly uses, but it is not one of "
-                f"the curated scaffold-library entries, so no applicant, patent or evidence "
-                f"level is attached to it."
+                f"The bound scaffold is {scaffold.short_name}, {described}. A repeat at that "
+                f"length needs prolyl hydroxylation to form a stable triple helix, and a "
+                f"bacterial host has no prolyl hydroxylase, so the gene is put into a secreted "
+                f"yeast host instead. The trade-off is time: 72–96 h of methanol induction "
+                f"against a day in E. coli."
             )
-        if c.scores.solubility is not None:
+        elif plan.tier == "solubility-rescue":
+            below_cut = sol is not None and sol < SOLUBILITY_STANDARD_CUT
+            greasy = hydro >= 0.5
+            if below_cut and greasy:
+                opening = (
+                    f"Two properties point the same way. Predicted solubility is {_pct(sol)} "
+                    f"(SoDoPE), under the 0.45 planning cut used here, and {hydro:.0%} of the "
+                    f"peptide's residues are hydrophobic, which is the composition that drives "
+                    f"inclusion-body formation."
+                )
+            elif below_cut:
+                opening = (
+                    f"Predicted solubility is {_pct(sol)} (SoDoPE), under the 0.45 planning cut "
+                    f"used here."
+                )
+            else:
+                opening = (
+                    f"{hydro:.0%} of the peptide's residues are hydrophobic, which is the "
+                    f"composition that drives inclusion-body formation."
+                )
             lines.append(
-                f"Predicted solubility is {_pct(c.scores.solubility)} (SoDoPE). Recombinant "
-                f"yield is the practical constraint that this score stands in for: a low "
-                f"value typically means the construct partitions into inclusion bodies and "
-                f"needs refolding rather than a straightforward soluble purification."
+                opening + " The route therefore adds a His6-SUMO fusion and drops induction to "
+                "16 °C: the fusion partner keeps the peptide from collapsing into inclusion "
+                "bodies, and the lower temperature slows aggregation faster than it slows "
+                "expression. The cost is one cleavage step and a second chromatography run."
+            )
+        elif plan.tier == "tight-control":
+            lines.append(
+                f"The peptide carries a net charge of +{charge:.1f} at pH 7.0, which is the "
+                f"cationic range that stresses an E. coli envelope and selects for plasmid loss. "
+                f"Induction is therefore held to a low cell density at 22 °C: the culture "
+                f"spends less time expressing a product that damages the membrane it is made "
+                f"in. If transformants grow poorly or the plasmid is lost anyway, the same "
+                f"gene in a secreted yeast host is the next step."
             )
         else:
-            lines.append("Solubility was not assessed for this peptide.")
+            if sol is None:
+                lines.append(
+                    "Solubility was not assessed for this peptide, so the route stays at the "
+                    "standard setting rather than adding a fusion partner on no evidence. If a "
+                    "SoDoPE value is later scored below 0.45, the solubility-rescue route "
+                    "replaces this one."
+                )
+            else:
+                lines.append(
+                    f"Predicted solubility is {_pct(sol)} (SoDoPE), at or above the 0.45 "
+                    f"planning cut used here, so no solubility tag is added and the standard "
+                    f"25 °C induction is kept. The peptide is {len(seq)} residues, short enough "
+                    f"that its own folding is not the limiting step; what the yield then depends "
+                    f"on is how the carrier behaves."
+                )
+
+        if cys >= 2:
+            lines.append(
+                f"The peptide has {cys} cysteines, so the host is {plan.strain}: an oxidative "
+                f"cytoplasm lets the disulfide close without a refolding step."
+            )
+        elif cys == 1:
+            lines.append(
+                "One cysteine is present, which cannot form an intrachain disulfide on its "
+                "own and instead cross-links neighbouring molecules on storage. A reducing "
+                "agent is kept in the buffer until the final step."
+            )
 
         if c.scores.thermal_stability is not None:
             lines.append(
                 f"Predicted thermal stability is {_pct(c.scores.thermal_stability)} "
-                f"(TemStaPro), relevant to storage and to any formulation step that involves "
-                f"heating."
+                f"(TemStaPro). It does not enter the host choice; it bears on storage "
+                f"temperature and on any heating step after purification."
+            )
+
+        if scaffold is None:
+            lines.append(
+                "No scaffold is bound to this construct — the stored binding is a placeholder "
+                "— so the carrier sequence and the construct's total length are unknown, and "
+                "the host stays at the E. coli default. Binding a library scaffold moves the "
+                "route to P. pastoris when that scaffold is a recombinant-collagen fragment "
+                "longer than 600 residues, and to a recA-deficient strain when it is a "
+                "repeat-rich silk or collagen."
+            )
+            if not c.assembled_sequence_available:
+                lines.append(
+                    "With no fused sequence on the record, a synthetic gene cannot be ordered "
+                    "until that binding is filled in; the route above describes what to do once "
+                    "it is."
+                )
+        elif scaffold.category in ("spider-silk", "silkworm-silk"):
+            described = (
+                f"a {scaffold.category.replace('-', ' ')} entry of {scaffold.length} residues"
+                if scaffold.length
+                else f"a {scaffold.category.replace('-', ' ')} entry of unstated length"
+            )
+            lines.append(
+                f"The bound scaffold is {scaffold.short_name}, {described}. Its repeats are "
+                f"what put the gene at risk of rearrangement, which is why the strain is "
+                f"recA-deficient rather than the usual BL21."
+            )
+        elif scaffold.category == "recombinant-collagen":
+            described = (
+                f"a recombinant-collagen entry of {scaffold.length} residues"
+                if scaffold.length
+                else "a recombinant-collagen entry of unstated length"
+            )
+            lines.append(
+                f"The bound scaffold is {scaffold.short_name}, {described}. At that length the "
+                f"repeat is short enough to keep in E. coli, and the strain is recA-deficient "
+                f"so it does not rearrange during propagation. A bacterial host cannot "
+                f"hydroxylate the prolines of a triple helix, which is the standing limitation "
+                f"of expressing any collagen fragment this way."
             )
 
         return AnalysisBlock(
@@ -373,11 +624,13 @@ class TemplateGenerator:
             title="Expression and handling",
             icon="flask",
             content="\n".join(lines),
+            plan=plan,
             citations=[
-                "scaffold.short_name",
-                "scaffold.applicant",
+                "peptide.sequence",
                 "scores.solubility",
                 "scores.thermal_stability",
+                "scaffold.category",
+                "scaffold.length",
             ],
         )
 
@@ -491,6 +744,7 @@ class TemplateGenerator:
             "How does the safety gate read under this route?",
             "Which metrics were not assessed?",
             "What is the state of the scaffold binding?",
+            "What expression route is recommended?",
         ]
         if c.semantics == ScoreSemantics.ranking_only:
             out.append("Why is the functional score a ranking signal rather than a probability?")

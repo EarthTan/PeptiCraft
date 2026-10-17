@@ -61,4 +61,6 @@ npm run dev                        # http://127.0.0.1:5173
 
 `docs/PeptiCraft-文档体系/` 保存六份中文文档，合计约 130 KB，面向三类读者：项目负责人，关心的是工作进展而非代码；领域专家，关心的是生物学与每一项数据的含义；以及接下来接手这项工作的人。`service/README.md`、`app/README.md` 与 `resouces/README.md` 各自说明自己的目录。
 
+参赛 Wiki 草稿、页面大纲与网站优化路线图位于 [`docs/igem-wiki/`](docs/igem-wiki/)。其中 [2026 网站与 iGEM 呈现优化计划](docs/igem-wiki/Website-Optimization-Plan-2026.md) 对照官方评审关注点列出当前证据、缺口和提交前行动项。
+
 `iGEM-platform-main/` 下的筛选管线是另一批独立工作，自带文档，不属于本套文档。

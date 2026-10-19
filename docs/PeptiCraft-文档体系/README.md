@@ -1,19 +1,19 @@
-# 项目文档
+# Project Documentation
 
-七份中文文档，合计约 165 KB，从产品形态一路覆盖到上线进度。它们同时面向三类读者：项目负责人，关心的是工作进展而非代码；领域专家，关心的是生物学与每个字段的含义；以及接下来接手的人，需要知道哪些已完成、哪些是临时形态、决策记录在哪里。
+Seven documents in English, about 165 KB in total, covering everything from product form through to release progress. They address three kinds of readers at once: the project lead, who cares about work progress rather than code; domain experts, who care about the biology and the meaning of each field; and whoever takes over next, who needs to know what is complete, what is still in provisional form, and where the decision records are.
 
-| 文档 | 内容 |
+| Document | Content |
 | --- | --- |
-| `PeptiCraft-文档体系/00-总览.md` | 项目定位与状态快照。从这里开始。 |
-| `PeptiCraft-文档体系/01-产品形态与用户体验.md` | 五个页面、走查记录，以及完成度盘点。 |
-| `PeptiCraft-文档体系/02-数据资产与数据形态.md` | 三层数据，以及规定一个值该如何解读的各项约定。 |
-| `PeptiCraft-文档体系/03-生物学逻辑与筛选管线.md` | 四轮管线、每个阈值的来源，以及加权方式。 |
-| `PeptiCraft-文档体系/04-技术架构与开发进度.md` | 架构、接口面、分层进度，以及未决风险。 |
-| `PeptiCraft-文档体系/05-开发交接技术参考.md` | 完整接口表、枚举值、不变量，以及某类改动该落在代码的哪一处。 |
-| `PeptiCraft-文档体系/06-上线进度与后续工作.md` | 静态部署改造的完成情况、上线前剩余的三件事，以及部署形态带来的新边界。 |
+| `PeptiCraft-文档体系/00-总览.md` | Project positioning and status snapshot. Start here. |
+| `PeptiCraft-文档体系/01-产品形态与用户体验.md` | The five pages, walkthrough records, and an inventory of completeness. |
+| `PeptiCraft-文档体系/02-数据资产与数据形态.md` | Three layers of data, and the conventions that govern how a value should be read. |
+| `PeptiCraft-文档体系/03-生物学逻辑与筛选管线.md` | The four-round pipeline, the source of each threshold, and the weighting scheme. |
+| `PeptiCraft-文档体系/04-技术架构与开发进度.md` | Architecture, the API surface, progress by layer, and open risks. |
+| `PeptiCraft-文档体系/05-开发交接技术参考.md` | The complete endpoint table, enum values, invariants, and where in the code a given class of change belongs. |
+| `PeptiCraft-文档体系/06-上线进度与后续工作.md` | The status of the static deployment conversion, the three items remaining before release, and the new boundaries imposed by the deployment form. |
 
-这七份采用编号而不嵌套：读者从 `00` 出发，可以不经中间几份直接读到后面任何一份。术语在首次出现处解释，而不是收进术语表或附录；每份文档按主题组织，而不是按代码结构分节，因此同一主题在一处讲完。
+The seven are numbered rather than nested: starting from `00`, a reader can reach any later document directly without passing through the intervening ones. Terms are explained where they first appear rather than collected into a glossary or an appendix; each document is organized by topic rather than sectioned by code structure, so a single topic is covered in one place.
 
-其中四份与各目录 README 主题相同，但不是它们的重复。README 说明一个目录怎么跑、里面有什么；这些文档承载理由、出处与未完成事项。两者不一致时，以运行中的接口和对数据库的一次 `count(*)` 为准；部署形态相关的部分以《06》为准，它写于形态改变之后。
+Four of the seven share their topics with the READMEs in individual directories, but they are not duplicates of those READMEs. A README explains how a directory runs and what it contains; these documents carry the reasons, the provenance, and the outstanding items. Where the two disagree, the running API and a single `count(*)` against the database are authoritative; the parts concerning the deployment form take *06 Release Progress and Remaining Work* as authoritative, since it was written after the form changed.
 
-更早一代的项目文档在本套文档写成时已退役；`../service/`、`../app/` 与 `../resouces/` 下的 README 是针对同一状态写的。筛选管线在本地以 `../iGEM-platform-main/` 出现，是 [EarthTan/iGEM-platform](https://github.com/EarthTan/iGEM-platform) 的副本，自带文档，不属于本套文档；三个仓库的定位与承继关系见 [`../repositories.md`](../repositories.md)。部署步骤本身记在 [`../../app/DEPLOY.md`](../../app/DEPLOY.md)，那是给执行部署的人看的操作文档，本套文档只说明部署形态的取舍与边界。
+An earlier generation of project documentation was retired when this set was written; the READMEs under `../service/`, `../app/`, and `../resouces/` were written against the same state. The screening pipeline appears locally as `../iGEM-platform-main/`, a copy (mirror) of [EarthTan/iGEM-platform](https://github.com/EarthTan/iGEM-platform); it carries its own documentation and is not part of this set. The positioning and succession of the three repositories are described in [`../repositories.md`](../repositories.md). The deployment steps themselves are recorded in [`../../app/DEPLOY.md`](../../app/DEPLOY.md), an operational document for whoever carries out the deployment; this set explains only the trade-offs and boundaries of the deployment form.

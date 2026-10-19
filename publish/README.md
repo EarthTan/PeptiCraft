@@ -1,10 +1,10 @@
-# 已发布前端
+# Published Front End
 
-由 `app/` 构建并复制到此处的静态单页应用。`assets/` 保存带哈希的前端脚本和样式，`data/` 保存页面所需的数据快照；`server.js` 是零依赖的 Node 静态服务器，并对未知页面路径回落到 `index.html`。
+The static single-page application built from `app/` and copied here. `assets/` holds the hashed frontend scripts and styles, `data/` holds the data snapshot the pages need, and `server.js` is a zero-dependency Node static server that falls back to `index.html` for unknown page paths.
 
-## 生成方式
+## How it is produced
 
-内容出自前端构建，整体复制过来：
+The content comes from the frontend build and is copied over as a whole:
 
 ```bash
 cd ../app
@@ -12,16 +12,16 @@ npm run build
 cp -R dist/. ../publish/
 ```
 
-这里的前端、图标和数据文件都是构建产物。本目录中没有任何内容由手工编辑：在这里做的改动会在下一次包被复制覆盖时丢失，应当改在 `../app/src/` 或 `../app/public/`，然后重新构建。
+The frontend, icons and data files here are all build artefacts. Nothing in this directory is meant to be edited by hand: a change made here is lost the next time the bundle is copied over, so it should be made in `../app/src/` or `../app/public/` and then rebuilt.
 
-## 运行方式
+## How to run
 
 ```bash
 node server.js
 ```
 
-服务器监听 3000 端口，设置了 `PORT` 时以该值为准。它不接受其他配置，也不需要安装依赖。
+The server listens on port 3000, or on the value of `PORT` when that is set. It accepts no other configuration and needs no dependencies installed.
 
-## 状态
+## Status
 
-数据查询由随包提供的静态快照回答。聊天接口由 Cloudflare Pages Function 提供，因此单独运行此 Node 静态服务器时聊天功能不可用。若要启用聊天，需要部署 Pages Function 或提供兼容的后端 API。
+Data queries are answered by the static snapshot shipped with the bundle. The chat endpoint is provided by a Cloudflare Pages Function, so chat is unavailable when this Node static server is run on its own. To enable chat, the Pages Function has to be deployed or a compatible backend API provided.

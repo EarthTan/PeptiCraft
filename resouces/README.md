@@ -1,25 +1,25 @@
-# 整理数据
+# Curated data
 
-需要在版本管理中留存的参考数据，以文件形式保存。它既是管线与参考库的构建材料，也是那项工作整理后的成果。
+Reference data that must be retained under version control, kept as files. It is both the build material for the pipeline and the reference libraries, and the organized outcome of that work.
 
-本目录不是肽库。那 20,248,885 条已打分的肽、496 条构造和分数表都存放在 `igem_peptides` PostgreSQL 实例中，由 `../service/` 从中读取。留在这里的是必须以文件形式存续的部分：带出处、证据与应用标签的序列，以及构建器据以组织的场景／给药矩阵。
+This directory is not the peptide library. The 20,248,885 scored peptides, the 496 constructs, and the score tables all live in the `igem_peptides` PostgreSQL instance, from which `../service/` reads them. What remains here is the part that must persist as files: sequences with their provenance, evidence, and application tags, and the scenario/delivery matrix by which the builder organizes them.
 
-## 骨架序列库
+## Scaffold sequence library
 
-`scaffold_database_2026-09-06/` 是整理后的骨架库：16 条序列覆盖 8 个蛋白——重组人源化 III 型胶原及其 16 次重复构建体（锦波）、三螺旋模拟胶原 III（武汉）、重组 XVII 型胶原片段（创健）、短重组丝素蛋白 SF-4 与 SF-10（羽森）、重组蜘蛛丝 18B（Bolt Threads）、工程蜘蛛丝 eADF4(C16)，以及类人胶原蛋白 FHLC（巨子生物）。
+`scaffold_database_2026-09-06/` is the curated scaffold library: 16 sequences covering 8 proteins—recombinant humanized type III collagen and its 16-repeat construct (Jinbo), triple-helix collagen III mimetic (Wuhan), recombinant type XVII collagen fragments (Trautec), short recombinant silk fibroin proteins SF-4 and SF-10 (Yusong), recombinant spider silk 18B (Bolt Threads), engineered spider silk eADF4(C16), and human-like collagen FHLC (Giant Biogene).
 
-工作簿为每一行保存序列、专利、申请人、构建体、产品用途、潜在应用、应用标签、给药标签、监管状态、实验结果、证据局限、来源链接与完整氨基酸序列，并记录序列的 SHA-256，以便后续修订时核对。旁边放着 16 个 FASTA 文件，每条序列一个，每一个都对照表中声明的长度做过核验。
+The workbook preserves, for each row, the sequence, patent, applicant, construct, product use, potential application, application tag, delivery tag, regulatory status, experimental results, evidence limitations, source link, and full amino acid sequence, and records the sequence's SHA-256 so that later revisions can be checked. Beside it sit 16 FASTA files, one per sequence, each verified against the length declared in the table.
 
-这 16 条记录就是 `../service/scripts/import_scaffold_library.py` 读取并写入 `scaffold_library` 与 `scaffold_library_sequences` 的行。`scaffold_database_2026-09-06/README.md` 保存了去重决策、FASTA 白名单与各簇的标签计数。
+These 16 records are exactly the rows that `../service/scripts/import_scaffold_library.py` reads and writes into `scaffold_library` and `scaffold_library_sequences`. `scaffold_database_2026-09-06/README.md` preserves the deduplication decisions, the FASTA whitelist, and the tag counts for each cluster.
 
-## 专利源数据包
+## Patent source data pack
 
-`patent_sequence_reorganized_2026-08-05/` 保存拼装骨架数据库所用的专利材料：逐个拆分出的 FASTA 文件、一份证据工作簿、一份序列指南、一张实验明细表，以及一个自包含的导入包（`patent_db_handoff/`），该包自带建表脚本、导入脚本与映射文件。
+`patent_sequence_reorganized_2026-08-05/` holds the patent material from which the scaffold database was assembled: individually split FASTA files, an evidence workbook, a sequence guide, an experiment detail table, and a self-contained import package (`patent_db_handoff/`) that carries its own schema script, import script, and mapping file.
 
-每条记录按证据实际能达到的层级评定，采用五级尺度：从无细胞的理化工作（E1），经细胞实验（E2）、动物实验（E3）、人体使用或有对照的临床研究（E4），直到监管审评与上市后数据（E5）。行上的标签是能够核实到的最高层级，不代表更低或更高各层级都做过；专利自身陈述的效应也不作为独立验证。监管状态核实至 2026-08-05，"未核实"不等于不存在。
+Each record is graded by the highest level the evidence actually reaches, on a five-level scale: from cell-free physicochemical work (E1), through cell experiments (E2), animal experiments (E3), human use or controlled clinical studies (E4), to regulatory review and post-market data (E5). The label on a row is the highest level that could be verified, and does not mean that every lower or higher level was performed; effects stated in the patents themselves also do not count as independent validation. Regulatory status was verified through 2026-08-05, and "not verified" does not mean that no such record exists.
 
-`patent_sequence_reorganized_2026-08-05/README.md` 描述了这个包。有一处出入值得记录：该 README 的文件清单里列了一个 `scaffold_patents_sequence_master.tsv`，而该文件并不在目录中——这个包里实际有的是那份工作簿和两个 TSV。
+`patent_sequence_reorganized_2026-08-05/README.md` describes this package. One discrepancy is worth recording: that README's file list includes a `scaffold_patents_sequence_master.tsv`, but no such file is in the directory—what the package actually contains is the workbook and two TSVs.
 
-## 场景与给药矩阵
+## Scenario and delivery matrix
 
-`scaffold_scenario_driven_table.csv` 把每个使用场景与一种给药方式配对，四列 14 行：使用场景、场景子类、给药方式、给药子类。构建器按应用路径收窄骨架时依据的就是这份索引。服务对外提供的五条应用路径来自 `../service/app/services/reference.py`；两者不一致时，以服务为准。
+`scaffold_scenario_driven_table.csv` pairs each use scenario with one delivery method, in four columns and 14 rows: use scenario, scenario subclass, delivery method, delivery subclass. This index is what the builder relies on when narrowing scaffolds by application route. The five application routes that the service exposes come from `../service/app/services/reference.py`; where the two disagree, the service prevails.

@@ -1,117 +1,117 @@
-# PeptiCraft 网站与 iGEM 呈现优化计划
+# PeptiCraft Website and iGEM Presentation Optimization Plan
 
-> 版本日期：2026-10-17。适用对象：PeptiCraft 产品网站、DKU iGEM 2026 Wiki 与 Software deliverable。
+> Version date: 2026-10-17. Applies to: the PeptiCraft product website, the DKU iGEM 2026 Wiki and the Software deliverable.
 
-## 1. 核心定位
+## 1. Core Positioning
 
-**一句话主张：** PeptiCraft 将预计算的功能肽预测、蛋白骨架证据和应用路径相关的筛选规则组织成一条可追溯的候选设计流程，帮助研究者选择下一步值得验证的融合蛋白构造。
+**One-sentence claim:** PeptiCraft organizes precomputed functional-peptide predictions, protein-scaffold evidence and application-route-related screening rules into a traceable candidate design workflow, helping researchers choose the next fusion protein construct worth validating.
 
-网站所有页面应共同守住两条边界：
+All pages of the website should jointly hold two boundaries:
 
-1. 平台输出的是计算候选与排序，不是活性、安全性或临床有效性的实验结论。
-2. 数据缺失、模型偏差、待确认方向和推断的构造关系都要在读者看到结论的位置说明，不能只藏在方法文档里。
+1. What the platform outputs is computational candidates and rankings, not experimental conclusions about activity, safety or clinical efficacy.
+2. Missing data, model bias, unconfirmed directions and inferred construct relationships must all be stated at the place where readers see the conclusion, and must not be hidden only in the methodology documentation.
 
-核心受众依次是评委、未来 iGEM 团队、计算生物学使用者，以及没有蛋白工程背景但需要理解项目的人。首页先讲项目解决什么问题，再展示工作流与证据，最后引导读者试用工具或深入 Wiki。
+The core audiences are, in order, judges, future iGEM teams, computational-biology users, and people without a protein-engineering background who need to understand the project. The home page first explains what problem the project solves, then presents the workflow and the evidence, and finally guides readers to try the tool or to go deeper into the Wiki.
 
-## 2. 网站设计与内容策略
+## 2. Website Design and Content Strategy
 
-### 访客应在 30 秒内看懂
+### What a visitor should understand within 30 seconds
 
-1. **问题：** 功能肽候选很多，预测、安全门控和骨架选择分散，难以形成可解释的实验候选。
-2. **方案：** PeptiCraft 把候选筛选、路线相关的安全与可开发性评估、骨架和连接片段装配放进同一个流程。
-3. **证据：** 每条候选能追到来源、模型分数、阈值、综合分组成与部件来源。
-4. **边界：** 分数需要实验验证；两个功能方向仍为 WIP；当前数据快照没有已验证的骨架配对。
-5. **下一步：** 评委能直接打开构建器、查看一条候选的完整证据，或从 Wiki 找到数据、模型和复现说明。
+1. **Problem:** There are many functional-peptide candidates, and prediction, safety gating and scaffold selection are scattered, making it difficult to form an interpretable experimental candidate.
+2. **Solution:** PeptiCraft puts candidate screening, route-related safety and developability assessment, and scaffold and linker assembly into a single workflow.
+3. **Evidence:** Each candidate can be traced to its sources, model scores, thresholds, composite-score composition and part provenance.
+4. **Boundaries:** Scores require experimental validation; two functional directions are still WIP; the current data snapshot has no verified scaffold pairing.
+5. **Next step:** A judge can open the builder directly, view the complete evidence for one candidate, or find the data, models and reproduction instructions from the Wiki.
 
-### 建议的 Wiki 信息架构
+### Proposed Wiki information architecture
 
-| 页面 | 页面要回答的问题 | 必须出现的内容 |
+| Page | Question the page answers | Content that must appear |
 |---|---|---|
-| Home | 我们解决什么问题，做出了什么？ | 项目主张、系统示意图、最关键结果、证据边界、入口链接 |
-| Project / Description | 为什么选择这个问题？ | 需求来源、用户与利益相关者、项目目标、成功标准 |
-| Engineering | 设计如何根据结果迭代？ | Design-Build-Test 循环、改变过的设计、失败与决策记录 |
-| Software | 工具如何使用、验证和复现？ | 用户场景、数据与模型、架构、输入输出、基准验证、API/格式、安装、许可、限制 |
-| Dry Lab | 候选如何得到？ | 每轮的输入、规则、工具版本、阈值来源、保留/淘汰数量、误差与偏差 |
-| Wet Lab / Results | 哪些主张被实际测量？ | 可复现方法、原始数据、单位、重复数、对照、统计方法、失败结果；没有实验结果时直接说明 |
-| Safety & Ethics | 风险由谁识别、如何减轻？ | 生物安全、模型误用、隐私、AI 辅助内容、真实应用风险与缓解措施 |
-| Human Practices | 外部意见怎样改变了项目？ | 访谈对象和方法、反馈、具体设计变化、未采纳意见及原因 |
-| Contributions / Attributions | 后续团队能带走什么？谁完成了什么？ | 可复用代码/数据/方法、Registry 记录、贡献者与外部资源署名 |
+| Home | What problem does the project solve, and what has been built? | Project claim, system diagram, key results, evidence boundaries, entry links |
+| Project / Description | Why was this problem chosen? | Source of the need, users and stakeholders, project goals, success criteria |
+| Engineering | How did the design iterate based on results? | Design-Build-Test cycle, designs that were changed, records of failures and decisions |
+| Software | How is the tool used, validated and reproduced? | User scenarios, data and models, architecture, inputs and outputs, benchmark validation, API/format, installation, licence, limitations |
+| Dry Lab | How are candidates obtained? | Inputs, rules, tool versions, threshold provenance, retained/eliminated counts, error and bias for each round |
+| Wet Lab / Results | Which claims were actually measured? | Reproducible methods, raw data, units, replicate counts, controls, statistical methods, failed results; state directly when there are no experimental results |
+| Safety & Ethics | Who identifies the risks, and how are they mitigated? | Biosafety, model misuse, privacy, AI-assisted content, real-world application risks and mitigation measures |
+| Human Practices | How did outside input change the project? | Interviewees and methods, feedback, specific design changes, input not adopted and the reasons |
+| Contributions / Attributions | What can later teams take away? Who completed what? | Reusable code/data/methods, Registry records, attribution of contributors and external resources |
 
-Wiki 页面应使用一致的导航、术语、图例和引用格式。图表要在图中写清单位、样本量、数据来源与“预测/实验”类型；每张图在正文里说明读者应得出的结论，而不是只放图。
+Wiki pages should use consistent navigation, terminology, legends and citation formats. Figures should state units, sample size, data source and the "prediction/experiment" type within the figure itself; each figure should be accompanied in the body text by the conclusion readers are meant to draw, rather than being placed without explanation.
 
-## 3. 设计语言与可访问性
+## 3. Design Language and Accessibility
 
-- **视觉方向：** 保留现有蓝绿渐变作为 PeptiCraft 识别色，整体采用清晰的实验记录风格；用留白、网格和有编号的工作流建立层级，不再用营销式“大而全”文案代替证据。
-- **信息层级：** 首页先呈现项目主张和两个主要入口；随后展示工作流、关键方法、证据边界和可复用信息。装饰图不能与数据图争夺注意力。
-- **图表系统：** 对“实测、预测、推断、未评估、WIP”建立固定标签；不可只靠颜色表达。序列分段、风险等级和证据层级同时使用文本与颜色。
-- **可访问性：** 支持键盘导航、清晰的焦点样式、跳过导航、屏幕阅读器进度状态、缩放和窄屏；遵循减少动态效果偏好。正文与背景保持足够对比度，交互目标在触屏上容易点选。
-- **一致性：** 产品名统一为 `PeptiCraft`；统一候选、构造、骨架、连接片段、综合分、预测与实验测量等词的定义。页面标题、favicon、分享摘要和页脚都应使用同一品牌口径。
+- **Visual direction:** Retain the existing blue-green gradient as the PeptiCraft identity colour, and adopt a clear laboratory-record style overall; use whitespace, grids and a numbered workflow to establish hierarchy, and no longer substitute marketing-style "all-encompassing" copy for evidence.
+- **Information hierarchy:** The home page first presents the project claim and the two main entry points; after that it presents the workflow, key methods, evidence boundaries and reusable information. Decorative images must not compete with data figures for attention.
+- **Figure system:** Establish fixed labels for "measured, predicted, inferred, not assessed, WIP"; colour alone must not carry the meaning. Sequence segmentation, risk levels and evidence tiers should use text and colour together.
+- **Accessibility:** Support keyboard navigation, clear focus styles, skip navigation, screen-reader progress status, zoom and narrow screens; respect the reduced-motion preference. Maintain sufficient contrast between body text and background, and make interactive targets easy to tap on touch screens.
+- **Consistency:** The product name is uniformly `PeptiCraft`; unify the definitions of candidate, construct, scaffold, linker, composite score, prediction and experimental measurement. Page titles, favicon, share summaries and the footer should all use the same brand convention.
 
-## 4. 与 iGEM 评审要求的对应
+## 4. Correspondence with iGEM Judging Requirements
 
-### Best Wiki 与 General Project
+### Best Wiki and General Project
 
-| 评审关注 | 网站需要提供的证据 | 当前改进方向 |
+| Judging concern | Evidence the website needs to provide | Current direction for improvement |
 |---|---|---|
-| 项目目标清晰 | 一句话主张、用户需求、成功标准 | 首页从候选设计问题切入，减少泛化宣传 |
-| 数据支持主张 | 每项结果区分预测和实验；展示对照、样本量、单位和方法 | 结果页把原始分数、阈值、排名语义和覆盖范围连在一起 |
-| 易于找到和理解 | 明确的页面层级、跨页链接、图表说明、术语解释 | 让首页承担入口职责；Wiki 的 Software、Dry Lab、Results 互相链接 |
-| 可作为长期记录 | 数据版本、代码版本、可复现步骤、负面结果、后续建议 | 写明导出时间、数据快照和环境要求；保存失败与未完成工作 |
-| 来源与署名准确 | 文献、数据集、模型、代码、图像及外部协助的出处 | 建立图表和素材引用清单；统一参考文献格式 |
-| 工程与 Human Practices | 设计迭代记录、利益相关者意见如何改变项目 | 每条反馈对应设计变更、证据与决定日期 |
+| Clear project goals | One-sentence claim, user needs, success criteria | The home page starts from the candidate-design problem and reduces generalized promotion |
+| Data supports claims | Each result distinguishes prediction from experiment; controls, sample size, units and methods are shown | The results page connects raw scores, thresholds, ranking semantics and coverage |
+| Easy to find and understand | Clear page hierarchy, cross-page links, figure captions, term explanations | The home page takes on the entry role; the Wiki's Software, Dry Lab and Results pages link to one another |
+| Usable as a long-term record | Data version, code version, reproducible steps, negative results, follow-up recommendations | State the export time, data snapshot and environment requirements; preserve failed and unfinished work |
+| Accurate sources and attribution | Provenance of literature, datasets, models, code, images and external assistance | Establish a citation list for figures and materials; unify the reference format |
+| Engineering and Human Practices | Design iteration records, how stakeholder input changed the project | Each piece of feedback corresponds to a design change, evidence and decision date |
 
 ### Best Software
 
-官方 2026 Best Software 关注六项：与合成生物学标准兼容、验证质量、对其他项目的价值、与外部工具集成、易用性、未来团队能否维护扩展。网站和 Software 页面应分别给出可直接核查的证据：
+The official 2026 Best Software criteria cover six items: compatibility with synthetic-biology standards, validation quality, value to other projects, integration with external tools, usability, and whether future teams can maintain and extend it. The website and the Software page should each provide directly checkable evidence:
 
-| 关注点 | 建议证据与下一步 |
+| Concern | Suggested evidence and next step |
 |---|---|
-| 标准兼容 | 说明输入、输出和序列表示；评估 SBOL 3 或其他适合的序列/构造交换格式。若不采用某标准，解释当前数据模型的边界和转换路径。 |
-| 验证 | 给出独立测试集或基准、每方向的适用性、失败案例和覆盖率；与湿实验结果可用时建立预测—测量对照。不能用模型自己的训练数据证明模型有效。 |
-| 对社区有用 | 明确可复用的部件、筛选规则、数据整理方法和适用范围；说明其他团队如何替换方向、模型或输入数据。 |
-| 外部集成 | 发布稳定的数据结构/API 文档，并提供带来源、版本、分数语义的 FASTA/JSON 导出；逐步评估 Registry 或 SBOL 工作流。 |
-| 易用性 | 记录新用户完成“找到候选—看懂判定—复现结果”的任务观察，修复真实遇到的障碍；公布流程而不预写用户反馈结论。 |
-| 可维护 | 提供架构图、安装/运行步骤、环境变量说明、模型和数据版本、已知限制、接口契约与贡献说明。 |
+| Standards compatibility | Explain the inputs, outputs and sequence representation; assess SBOL 3 or other suitable sequence/construct exchange formats. If a standard is not adopted, explain the boundaries of the current data model and the conversion path. |
+| Validation | Provide an independent test set or benchmark, applicability per direction, failure cases and coverage; establish a prediction–measurement correspondence where wet-lab results are available. A model's own training data cannot be used to prove that the model works. |
+| Useful to the community | State the reusable parts, screening rules, data-curation methods and scope of applicability; explain how other teams can substitute directions, models or input data. |
+| External integration | Publish stable data-structure/API documentation and provide FASTA/JSON exports with provenance, version and score semantics; assess Registry or SBOL workflows step by step. |
+| Usability | Record task observations of new users completing "find a candidate—understand the verdict—reproduce the result", and fix the obstacles actually encountered; publish the process rather than pre-writing conclusions about user feedback. |
+| Maintainable | Provide an architecture diagram, installation/run steps, environment-variable documentation, model and data versions, known limitations, API contracts and contribution instructions. |
 
-**资格检查必须立即完成：** iGEM 2026 要求软件使用 OSI 批准的开源许可证，并将源代码放在 iGEM GitLab 的专用仓库；Software & AI Village 的队伍不能参加 Best Software。当前检查的 GitHub 工作区没有 `LICENSE` 文件，且本地材料不足以确认 GitLab 专用仓库和队伍 Village 状态。请团队在提交前核实这三项；许可证属于法律授权，需由团队明确选择，不能由网页文案替代。
+**The eligibility checks must be completed immediately:** iGEM 2026 requires software to use an OSI-approved open-source licence and to place the source code in a dedicated repository on iGEM GitLab; teams from the Software & AI Village cannot compete for Best Software. The GitHub workspace currently checked has no `LICENSE` file, and the local materials are insufficient to confirm the dedicated GitLab repository and the team's Village status. The team should verify these three items before submission; the licence is a legal authorization and must be explicitly chosen by the team, and website copy cannot substitute for it.
 
-## 5. 风险与当前内容边界
+## 5. Risks and Current Content Boundaries
 
-- 数据快照记录于 **2026-10-15**；正式部署前应确认本次评审看到的数据版本与 Wiki 文字一致。
-- 抗炎和抗黑素方向仍标为 WIP。首页、结果和讲稿不可将它们与已签字确认方向并列宣传。
-- 综合分用于排序，不是活性概率；不同功能方向和路径的分数也不应直接横向比较。
-- 当前构造数据的骨架绑定是占位值。用户在构建器中选择真实骨架后得到的是按请求推断的组装，不是已实验验证的融合蛋白。
-- 未评估的安全指标不等于通过；解释安全结论时要同时报告评估覆盖率和空缺。
-- 如果模型聊天被启用，页面需要披露模型供应商/用途、核查方式与隐私边界，并保留“回答由模型生成”的标记。AI 辅助内容由团队成员核验和负责。
-- 当前用户工作区没有可见的根目录许可证。不要在没有团队授权时把任一许可证加进仓库。
+- The data snapshot was recorded on **2026-10-15**; before formal deployment it should be confirmed that the data version seen in this round of judging is consistent with the Wiki text.
+- The anti-inflammatory and anti-melanogenic directions are still marked WIP. The home page, results and presentation script must not promote them alongside directions that have been signed off.
+- The composite score is used for ranking, not as an activity probability; scores from different functional directions and routes should also not be compared directly across the board.
+- The scaffold binding in the current construct data is a placeholder value. What a user obtains after selecting a real scaffold in the builder is an assembly inferred on request, not an experimentally validated fusion protein.
+- An unassessed safety metric is not equivalent to passing; when explaining safety conclusions, the assessment coverage and the gaps should be reported together.
+- If model chat is enabled, the page needs to disclose the model provider/purpose, the verification method and the privacy boundary, and to retain the marker "answers are generated by a model". AI-assisted content is verified by and the responsibility of team members.
+- The current user workspace has no visible root licence. Do not add any licence to the repository without team authorization.
 
-## 6. 执行顺序
+## 6. Execution Order
 
-### 现在至 2026-10-21：提交前
+### From now to 2026-10-21: before submission
 
-1. **10 月 17 日：** 统一项目主张和证据边界；检查首页、构建器和结果页是否把预测、推断、WIP 与实验结果区分开。确认队伍 Village、软件许可和 iGEM GitLab 专用仓库。
-2. **10 月 18 日：** 固定数据与模型版本；整理 Best Software 六项证据、完整安装指南、系统图、API/数据格式说明和文献/素材引用。
-3. **10 月 19 日：** 让没有参与开发的队员按评委路径走查：30 秒理解项目、3 分钟复现一个结果、找到限制与出处；收集问题并修复阻塞点。
-4. **10 月 20 日：** 页面内容冻结；核对 Wiki、软件提交、讲稿和演示中的计数/术语一致；按真实部署方式完成最终构建并确认交付物清单。
-5. **10 月 21 日：** 在 iGEM Deliverables Dashboard 确认 Wiki 与 Software 交付状态、提交成功和链接可访问。官方 2026 页面将 Wiki 与 Software 的截止日期列为 10 月 21 日。
+1. **17 October:** Unify the project claim and the evidence boundaries; check whether the home page, the builder and the results page distinguish prediction, inference, WIP and experimental results. Confirm the team's Village, the software licence and the dedicated iGEM GitLab repository.
+2. **18 October:** Fix the data and model versions; compile the six Best Software evidence items, the complete installation guide, the system diagram, the API/data-format documentation and the literature/material citations.
+3. **19 October:** Have team members who did not take part in development walk through the judge path: understand the project within 30 seconds, reproduce one result within 3 minutes, and locate the limitations and sources; collect problems and fix blocking points.
+4. **20 October:** Freeze the page content; check the consistency of counts and terminology across the Wiki, the software submission, the presentation script and the demonstration; complete the final build according to the real deployment method and confirm the deliverables list.
+5. **21 October:** Confirm on the iGEM Deliverables Dashboard the delivery status of the Wiki and Software, that submission succeeded, and that links are accessible. The official 2026 page lists 21 October as the deadline for the Wiki and Software.
 
-### Jamboree 前后：补强长期价值
+### Before and after the Jamboree: strengthening long-term value
 
-- 将模型结果与可获得的湿实验测量建立逐条对应关系，公开负结果、校准过程和适用边界。
-- 提供版本化数据导出、可复用的 API/标准格式和可复现的演示样例。
-- 根据用户任务观察持续改进筛选、候选比较和结果解释；将反馈及其带来的改动写入 Engineering 与 Human Practices。
-- 让未来团队可以从一份新数据集开始复现主要流程，而不是只能查看当前快照。
+- Establish an item-by-item correspondence between model results and available wet-lab measurements, and publish negative results, the calibration process and the boundaries of applicability.
+- Provide versioned data exports, reusable API/standard formats and reproducible demonstration samples.
+- Continuously improve screening, candidate comparison and result interpretation based on user task observations; write the feedback and the changes it prompted into Engineering and Human Practices.
+- Enable future teams to reproduce the main workflow starting from a new dataset, rather than only being able to view the current snapshot.
 
-## 7. 本轮已落地的产品网站调整
+## 7. Product Website Adjustments Implemented in This Round
 
-- 首页首屏改为说明 PeptiCraft 如何把肽筛选转成可追溯候选，并明确预测结果不是实验或临床验证。
-- 新增“如何解读结果”板块，说明排序语义、未评估安全门和当前骨架配对的推断性质。
-- 导航和构建器步骤增加当前状态、跳过导航、焦点可见及减少动态效果支持。
-- 增加未知路径的回退页；更新站点标题、搜索摘要、品牌 favicon 和 iGEM Wiki 入口。
+- The first screen of the home page was changed to explain how PeptiCraft turns peptide screening into traceable candidates, and to make explicit that prediction results are not experimental or clinical validation.
+- A "how to interpret results" section was added, explaining ranking semantics, unassessed safety gates and the inferred nature of the current scaffold pairing.
+- Navigation and builder steps gained current-status indicators, skip navigation, visible focus and reduced-motion support.
+- A fallback page for unknown routes was added; the site title, search summary, brand favicon and iGEM Wiki entry point were updated.
 
-## 参考：iGEM 2026 官方页面
+## Reference: official iGEM 2026 pages
 
-- [Special Awards：Best Wiki、Best Software 的问题与资格条件](https://competition.igem.org/judging/special-prizes)
-- [Project Awards：General Project 评审问题](https://competition.igem.org/judging/awards/project)
-- [Deliverables：2026 交付物与时间线](https://competition.igem.org/deliverables/)
-- [Rules & Policies：归属、AI、传播与安全政策入口](https://competition.igem.org/about/rules-and-policies)
+- [Special Awards: questions and eligibility conditions for Best Wiki and Best Software](https://competition.igem.org/judging/special-prizes)
+- [Project Awards: General Project judging questions](https://competition.igem.org/judging/awards/project)
+- [Deliverables: 2026 deliverables and timeline](https://competition.igem.org/deliverables/)
+- [Rules & Policies: entry point for the attribution, AI, communication and safety policies](https://competition.igem.org/about/rules-and-policies)

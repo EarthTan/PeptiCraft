@@ -1,102 +1,102 @@
-# PeptiCraft — 前端
+# PeptiCraft — Front End
 
-PeptiCraft 是一套用于设计重组融合蛋白的网页平台。一条构造由三段拼成：一段功能肽、一段充当支架的骨架蛋白，以及连接两者的一段连接片段。平台对外提供一份预先算好的筛选成果库，以及一个带引导的构建器，按应用路径各自的标准给新组合打分。
+PeptiCraft is a web platform for designing recombinant fusion proteins. A construct is assembled from three segments: a functional peptide, a scaffold protein that serves as the scaffold, and a linker joining the two. The platform exposes a precomputed screening results library and a guided builder that scores new combinations against the standard for each application route.
 
-本目录只放前端。它渲染的一切都来自 `../service/` 中的后端服务，后者读取 `igem_peptides` PostgreSQL 实例。本项目由昆山杜克大学 iGEM 2026 团队开发。
+This directory holds the frontend only. Everything it renders comes from the backend service in `../service/`, which reads the `igem_peptides` PostgreSQL instance. The project is developed by the Duke Kunshan University iGEM 2026 team.
 
-## 运行
+## Running
 
-前端默认读一份已经导出的静态数据，因此单独就能跑起来，不需要同时启动后端或数据库：
+By default the frontend reads an already-exported static data set, so it runs on its own without starting the backend or the database at the same time:
 
 ```bash
 npm install
 npm run dev
 ```
 
-开发服务器监听 `http://127.0.0.1:5173`，页面上的每一个值都来自 `public/data/` 下的导出文件。这份导出由 `../service/scripts/export_static.py` 从数据库生成，已随仓库入库，clone 之后不必先做导出即可运行；数据变化后要重新导出才会在页面上体现：
+The development server listens on `http://127.0.0.1:5173`, and every value on a page comes from the export files under `public/data/`. The export is generated from the database by `../service/scripts/export_static.py` and is committed with the repository, so a clone runs without an export first; after the data changes it has to be re-exported before the change shows on a page:
 
 ```bash
 cd ../service && python scripts/export_static.py --out ../app/public/data
 ```
 
-当前工作区里那份来自真实数据库：496 条构造、团队整理的 8 个蛋白簇骨架库、15 条连接片段。`manifest.json` 里的 `source_backend` 记着它从哪来——为 `postgres` 时页面顶部不出现任何提示，为 `sqlite` 时提示条会说明这是样例数据。导出会整体替换 `public/data/` 而不是并入其中，所以上一份留下的文件不会被继续提供。
+The copy in the current working tree comes from the real database: 496 constructs, the team's curated scaffold library of 8 protein clusters, and 15 linkers. `source_backend` in `manifest.json` records where it came from — when it is `postgres` no banner appears at the top of a page, and when it is `sqlite` a banner states that this is sample data. An export replaces `public/data/` as a whole rather than merging into it, so files left by the previous export are no longer served.
 
-仓库里带着的这份是导出当时的快照，不随后续改库自动更新；要看数据库此刻的状态，改用下面的连后端模式。
+The copy shipped in the repository is the snapshot taken when it was exported and does not update automatically after later database changes; to see the database's current state, use the backend-connected mode below.
 
-需要看数据库此刻的状态时，改用连后端的模式。先在 `../service/` 中启动服务：
+To see the database's current state, switch to the backend-connected mode. First start the service in `../service/`:
 
 ```bash
 python -m uvicorn app.main:app --port 8000
 ```
 
-然后在本目录：
+Then in this directory:
 
 ```bash
 npm run dev:api
 ```
 
-该模式下 `/api` 被转发给后端，前端只请求相对路径，开发时无需任何 CORS 配置。转发目标默认是 `http://127.0.0.1:8000`，可用 `VITE_API_PROXY_TARGET` 覆盖。
+In this mode `/api` is forwarded to the backend, the frontend requests relative paths only, and no CORS configuration is needed during development. The forwarding target defaults to `http://127.0.0.1:8000` and can be overridden with `VITE_API_PROXY_TARGET`.
 
 ```bash
-npm run build     # 类型检查并产出生产包到 dist/
-npm run preview   # 本地提供已构建的包
+npm run build     # type-check and emit the production bundle to dist/
+npm run preview   # serve the built bundle locally
 npm run lint      # oxlint
 ```
 
-后端运行时不自动重载。改动后端代码后需要手动重启。
+The backend does not auto-reload while running. After changing backend code it has to be restarted manually.
 
-两种模式覆盖的接口范围不同。问答是唯一由 POST 承载的接口，静态数据不提供，因此在 `npm run dev` 下它取不到答案，只在部署环境里由 Pages Function 接管。
+The two modes cover different endpoint sets. Chat is the only endpoint carried by POST and the static data does not provide it, so under `npm run dev` it cannot get an answer and is handled only in the deployed environment, by a Pages Function.
 
-## 路由
+## Routes
 
-| 路径 | 页面 |
+| Path | Page |
 |---|---|
-| `/` | 首页：平台定位、方向计数、应用路径、管线轮次 |
-| `/library` | 库浏览器：肽与构造、骨架、连接片段 |
-| `/builder` | 构造构建器：五步引导流程 |
-| `/results/:id` | 单条构造的结果页 |
-| `/library/scaffold/:id` | 骨架详情 |
+| `/` | Home page: platform positioning, direction counts, application routes, pipeline rounds |
+| `/library` | Library browser: peptides and constructs, scaffolds, linkers |
+| `/builder` | Construct builder: five-step guided flow |
+| `/results/:id` | Result page for a single construct |
+| `/library/scaffold/:id` | Scaffold detail |
 
-## 源码结构
+## Source layout
 
 ```
 src/
-  api/          client.ts（请求、错误归一化）、index.ts（接口绑定）、
-                types.ts（后端响应模型的镜像）
-  components/   布局与手工搭建的 UI 基础件；construct-panels.tsx 保存库页与结果页
-                共用的三个面板
-  lib/          useAsync.ts（数据加载，带防止过期响应的票据守卫）、
-                display.ts、score.ts、derive.ts、sequence.ts
-  pages/        每个路由一个模块
+  api/          client.ts (requests, error normalisation), index.ts (endpoint bindings),
+                types.ts (mirror of the backend response model)
+  components/   layout and hand-built UI primitives; construct-panels.tsx holds the three
+                panels shared by the library page and the results page
+  lib/          useAsync.ts (data loading, with a ticket guard against stale responses),
+                display.ts, score.ts, derive.ts, sequence.ts
+  pages/        one module per route
 ```
 
-没有状态管理库。每个页面持有自己的数据，需要跨页面传递的就放进路由参数。
+There is no state-management library. Each page holds its own data, and anything that has to cross a page boundary goes into the route parameters.
 
-有两条规则贯穿前端，改动时需要注意：
+Two rules run through the frontend and have to be respected when changing it:
 
-**不做静态数据。** 没有 `src/data/`，也没有 `src/types/`。渲染的每一个值都来自某个接口。`api/types.ts` 中的字段名有意保留后端的 snake_case 拼写，使 OpenAPI 与 TypeScript 的比对成为机械对照，而不是一次翻译。
+**No static data.** There is no `src/data/` and no `src/types/`. Every rendered value comes from an endpoint. Field names in `api/types.ts` deliberately keep the backend's snake_case spelling, so that comparing OpenAPI with TypeScript is a mechanical check rather than a translation.
 
-**不做阈值判断。** 综合分、安全裁决与按路径取值的免疫原性阈值都由后端算出并随响应返回。前端不把分数与阈值作比较，也不给任何东西加权。阈值因此只存在于一处；此前的做法曾导致同一套安全阈值被写在好几个地方，其中一份与路径定义不一致。
+**No threshold logic.** The composite score, the safety verdict and the per-route immunogenicity threshold are all computed by the backend and returned with the response. The frontend does not compare a score with a threshold and does not weight anything. Thresholds therefore exist in one place only; an earlier approach had the same set of safety thresholds written in several places, one of which disagreed with the route definition.
 
-## 技术栈
+## Technology stack
 
-React 19 配 TypeScript，构建在 Vite 8 之上。样式用 Tailwind CSS v4，采用 CSS 优先的 `@theme` 配置，组件层是在 Radix UI 基础件之上手工搭建的，而非使用生成的组件库。路由用 `react-router-dom` v7，图标用 Lucide，检查用 Oxlint。界面通篇英文。
+React 19 with TypeScript, built on Vite 8. Styling uses Tailwind CSS v4 with CSS-first `@theme` configuration; the component layer is built by hand on Radix UI primitives rather than using a generated component library. Routing uses `react-router-dom` v7, icons use Lucide, and linting uses Oxlint. The interface is in English throughout.
 
-## 状态
+## Status
 
-五个页面都在读取数据库中的数据——在静态部署里读的是它的导出快照。库页、构建器、结果页与骨架页上的每一个值都能追溯到某张表的某个字段。
+All five pages read data from the database — in the static deployment, from its exported snapshot. Every value on the library page, the builder, the results page and the scaffold page traces to a field in some table.
 
-构建器走五步——路径、功能、骨架、连接片段、结果。最后一步调用 `/api/build`，由服务端排序候选并装配每一条的融合序列，而不是在浏览器里做。
+The builder runs five steps — route, function, scaffold, linker, results. The last step calls `/api/build`, and the server ranks the candidates and assembles each fusion sequence rather than the browser doing it.
 
-有四处仍是临时形态，它们在界面上是可见的，而非被隐藏：
+Four things are still temporary and are visible in the interface rather than hidden:
 
-- 两个装配目标都不收窄候选集。构造存档里已经记着一条骨架和一段连接片段（那条骨架是占位行，见下一条），两步都是在存档之上做覆盖；这两项选择改变的是每条候选被装配成的序列，以及旁边报告的融合长度。
-- 连接片段库不按路径收窄。五条路径拿到的是同一批条目，因为 `linker_library` 尚无路径维度。
-- 融合序列不完整输出。496 条构造的存档绑定仍指向同一条占位骨架，因此骨架段一律被标为不可用，只画出连接片段与功能肽两段——这两段是真实的。显式指定一条真骨架会重新装配序列，并把绑定标为推断。
-- 库浏览器有筛选，但没有搜索框、没有排序控件，"显示更多"是增大每页条数，而不是分页。
+- Neither assembly target narrows the candidate set. A construct archive already records one scaffold and one linker (that scaffold is the placeholder row, see the next item), and both steps override the archive; the two selections change the sequence each candidate is assembled into, and the fusion length reported beside it.
+- The linker library does not narrow by route. All five routes receive the same entries, because `linker_library` has no route dimension yet.
+- The fusion sequence is not emitted in full. The archived bindings of the 496 constructs still point at the same placeholder scaffold, so the scaffold segment is always marked unavailable and only the linker and functional-peptide segments are drawn — those two are real. Explicitly specifying a real scaffold reassembles the sequence and marks the binding as inferred.
+- The library browser has filters but no search box and no sort control, and "show more" increases the page size rather than paginating.
 
-未知路径现有明确的回退页。`src/App.css` 仍未被引用，后续整理样式时可以移除或接回全局样式体系。
+Unknown paths now have an explicit fallback page. `src/App.css` is still unreferenced and can be removed or wired back into the global style system when the styling is tidied up.
 
-## 文档
+## Documentation
 
-项目文档位于 `../docs/PeptiCraft-文档体系/`，以中文撰写。内容覆盖产品形态与用户体验、数据资产、生物学与筛选管线、架构与开发进度，以及一份开发交接技术参考。
+The project documentation is in `../docs/PeptiCraft-文档体系/` and is written in English. It covers product form and user experience, data assets, biology and the screening pipeline, architecture and development progress, and a development handoff technical reference.

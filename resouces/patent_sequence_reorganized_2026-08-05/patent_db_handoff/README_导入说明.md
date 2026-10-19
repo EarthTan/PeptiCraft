@@ -1,103 +1,103 @@
-# 重组结构蛋白专利数据包 — 数据库导入交接说明
+# Recombinant Structural Protein Patent Data Pack — Database Import Handoff Instructions
 
-> 本包用于把 `patent_sequence_reorganized_2026-08-05/` 的专利序列数据导入关系型数据库。
-> 目标库：**PostgreSQL**（其他库的适配见文末）。
+> This package is used to import the patent sequence data in `patent_sequence_reorganized_2026-08-05/` into a relational database.
+> Target database: **PostgreSQL** (adaptation to other databases is covered at the end of this document).
 
 ---
 
-## 一、包内容清单
+## 1. Package contents
 
 ```
 patent_db_handoff/
-├── README_导入说明.md                 ← 本文件
-├── patent_db_schema.sql              ← 建表 DDL（含 DROP TABLE IF EXISTS，可重跑）
-├── group_record_mapping.csv          ← 27 条记录 ↔ 11 个实验组的映射（含无 FASTA 行的合成主键）
-├── import_patent_db.py               ← 一键导入脚本（读 TSV + FASTA，落库）
-└── source_data/                      ← 原始数据包（原样复制，不要改动）
+├── README_导入说明.md                 ← this file
+├── patent_db_schema.sql              ← table-creation DDL (includes DROP TABLE IF EXISTS; re-runnable)
+├── group_record_mapping.csv          ← mapping of the 27 records ↔ 11 experiment groups (includes synthetic primary keys for rows without FASTA)
+├── import_patent_db.py               ← one-step import script (reads TSV + FASTA, writes to the database)
+└── source_data/                      ← original data package (copied as-is; do not modify)
     ├── README.md
-    ├── scaffold_patents_sequence_guide.tsv        ← 主表（27 行）
-    ├── scaffold_patents_experiment_details.tsv    ← 实验明细表（12 行）
-    ├── scaffold_patents_evidence_workbook.xlsx    ← 人工阅读版（与 TSV 同源）
-    └── fasta_downloads/                           ← 16 个蛋白质 FASTA 文件
+    ├── scaffold_patents_sequence_guide.tsv        ← master table (27 rows)
+    ├── scaffold_patents_experiment_details.tsv    ← experiment detail table (12 rows)
+    ├── scaffold_patents_evidence_workbook.xlsx    ← human-readable edition (same source as the TSVs)
+    └── fasta_downloads/                           ← 16 protein FASTA files
 ```
 
 ---
 
-## 二、前置依赖
+## 2. Prerequisites
 
-1. 一个空的（或可接受被清空的）PostgreSQL 数据库。
-2. Python 3.8+，安装驱动：
+1. An empty PostgreSQL database (or one that may accept being wiped).
+2. Python 3.8+, with the driver installed:
    ```bash
-   pip install psycopg2-binary      # 或 pip install psycopg（psycopg3）
+   pip install psycopg2-binary      # or install psycopg (psycopg3)
    ```
 
 ---
 
-## 三、导入步骤（一条命令）
+## 3. Import steps (a single command)
 
 ```bash
 python import_patent_db.py \
-    --db "postgresql://用户名:密码@主机:5432/数据库名" \
+    --db "postgresql://user:password@host:5432/dbname" \
     --apply-schema
 ```
 
-- 不带 `--apply-schema` 时，脚本**只导数据**，假定表已存在（可先手动跑 `patent_db_schema.sql`）。
-- 带 `--apply-schema` 时，脚本**先建表再导数据**（会 DROP 已存在的同名表，注意备份）。
-- 也可通过环境变量传连接串：`export DATABASE_URL="postgresql://..."`，然后直接 `python import_patent_db.py --apply-schema`。
-- 所有路径参数都有默认值，指向本包相对位置，所以在本包根目录直接运行即可。
+- Without `--apply-schema`, the script **only imports data**, assuming the tables already exist (run `patent_db_schema.sql` manually first if desired).
+- With `--apply-schema`, the script **creates the tables and then imports the data** (it DROPs existing tables of the same name; back up first).
+- The connection string can also be passed through an environment variable: `export DATABASE_URL="postgresql://..."`, followed directly by `python import_patent_db.py --apply-schema`.
+- All path parameters have defaults pointing at locations relative to this package, so the script can be run directly from the package root.
 
-脚本结束会打印**校验结果**，请确认与下方“预期”一致再交付。
+When the script finishes it prints a **verification result**; confirm that it matches the "expected" values below before handing over.
 
 ---
 
-## 四、数据库设计（建几张表？）
+## 4. Database design (how many tables?)
 
-**结论：两张核心表 + 一张可选的 groups 维度表。**
+**Conclusion: two core tables plus one optional `groups` dimension table.**
 
-| 表 | 行数 | 粒度 | 说明 |
+| Table | Rows | Grain | Description |
 |---|---|---|---|
-| `patent_records` | 27 | 1 行 = 1 个序列记录 或 1 个无序列的专利/产品记录 | 主信息；含 `aa_sequence` 文本列 |
-| `experiments` | 12 | 1 行 = 1 个 (实验组, 证据等级) 条目 | 实验明细；同一组可有多行(E1/E2/E4) |
-| `groups`（可选） | 11 | 1 行 = 1 个实验组 | 维度表，作为 `patent_records` 与 `experiments` 的连接枢纽 |
+| `patent_records` | 27 | 1 row = 1 sequence record or 1 patent/product record without a sequence | Master information; includes the `aa_sequence` text column. |
+| `experiments` | 12 | 1 row = 1 (experiment group, evidence grade) entry | Experiment detail; the same group may have multiple rows (E1/E2/E4). |
+| `groups` (optional) | 11 | 1 row = 1 experiment group | Dimension table, serving as the join hub between `patent_records` and `experiments`. |
 
-**为什么拆两张而不是一张？** 两份 TSV 粒度不同：一个实验组（如 “Jinbo HC8/HC16 and 16-repeat constructs”）对应 **5 条序列记录 + 2 条实验行**。合并成一张表要么重复序列信息、要么丢掉 E1/E2/E3/E4 逐层实验细节。拆表是规范做法。
+**Why split into two tables rather than one?** The two TSVs have different grains: one experiment group (such as "Jinbo HC8/HC16 and 16-repeat constructs") corresponds to **5 sequence records + 2 experiment rows**. Merging them into a single table would either duplicate sequence information or lose the level-by-level E1/E2/E3/E4 experiment detail. Splitting the tables is the standard approach.
 
-两表通过 `group_key`（短 slug，如 `jinbo_constructs`、`eadf4_c16`）关联。
-
----
-
-## 五、必须知道的 4 个坑（已在新脚本/映射里处理，了解即可）
-
-1. **11 条无 FASTA 记录的 `Sequence record ID` 是空的** → 它们没有天然主键。脚本对这 11 行按 `(申请人, 专利族)` 在 `group_record_mapping.csv` 里取**合成主键**（如 `BLOOMAGE_CN114805551A`），并分配 `group_key`。匹配做了归一化（去逗号、压缩空格、转小写）以容错。
-2. **Yusong 的 2 条记录（有 FASTA，E2）不在 12 个实验组中** → 其 `group_key` 置 `NULL`（映射表里标记为 `unmapped`），不参与组关联。
-3. **2 个实验组没有对应序列记录**：`jinbo_devices`（已上市医疗器械）、`trautec_kefuyan`（成品 Kefuyan）。它们只出现在 `experiments` / `groups` 表，用于组名→组键映射。
-4. **`FHLC_SEQ_ID_NO_1.fasta` 的 FASTA 头部带管道符元数据**（`>FHLC_SEQ_ID_NO_1|protein=...|length=...`），前缀 `FHLC_SEQ_ID_NO_1` 正确，脚本按 `>` 后第一段取 ID，无需特殊处理。
+The two tables are linked through `group_key` (a short slug such as `jinbo_constructs` or `eadf4_c16`).
 
 ---
 
-## 六、导入后预期校验结果
+## 5. Four pitfalls to know about (already handled in the new script/mapping; for awareness only)
+
+1. **The `Sequence record ID` of the 11 records without FASTA is empty** → they have no natural primary key. For these 11 rows the script takes a **synthetic primary key** from `group_record_mapping.csv` by `(applicant, patent_family)` (for example `BLOOMAGE_CN114805551A`), and assigns a `group_key`. Matching is normalized (commas removed, spaces collapsed, lower-cased) to tolerate variation.
+2. **Yusong's 2 records (with FASTA, E2) are not among the 12 experiment groups** → their `group_key` is set to `NULL` (marked `unmapped` in the mapping table), and they take no part in group association.
+3. **2 experiment groups have no corresponding sequence records**: `jinbo_devices` (a marketed medical device) and `trautec_kefuyan` (the finished product Kefuyan). They appear only in the `experiments` / `groups` tables, for the group-name-to-group-key mapping.
+4. **The FASTA header of `FHLC_SEQ_ID_NO_1.fasta` carries pipe-separated metadata** (`>FHLC_SEQ_ID_NO_1|protein=...|length=...`); the prefix `FHLC_SEQ_ID_NO_1` is correct, and the script takes the ID as the first segment after `>`, so no special handling is required.
+
+---
+
+## 6. Expected verification results after import
 
 ```
-patent_records 总行数 : 27  (期望 27)
-  其中含 aa_sequence  : 16  (期望 16，即 16 个有 FASTA 的记录)
-  其中 group_key 为 NULL: 2  (期望 2，即 Yusong)
-experiments 总行数    : 12  (期望 12)
-groups 总行数         : 11  (期望 11)
-外键悬空(records.group_key 无对应 groups): 0  (期望 0)
+patent_records total rows          : 27  (expected 27)
+  of which contain aa_sequence    : 16  (expected 16, i.e. the 16 records with FASTA)
+  of which group_key is NULL      : 2  (expected 2, i.e. Yusong)
+experiments total rows             : 12  (expected 12)
+groups total rows                  : 11  (expected 11)
+dangling foreign keys (records.group_key with no matching groups): 0  (expected 0)
 ```
 
 ---
 
-## 七、适配其他数据库（非 PostgreSQL）
+## 7. Adapting to other databases (non-PostgreSQL)
 
-- **MySQL**：把 `patent_db_schema.sql` 里的 `BIGSERIAL` 改为 `BIGINT AUTO_INCREMENT`，`TEXT` 保持，`GENERATED ALWAYS AS IDENTITY` 删除；脚本里 `%s` 占位符对 MySQL 同样适用（psycopg 换成 `pymysql` 时占位符一致）。
-- **SQLite**：`INTEGER PRIMARY KEY AUTOINCREMENT`；`%s` 占位符一致；`CHECK` 约束 SQLite 默认忽略（不影响导入）。`import_patent_db.py` 当前仅接 PostgreSQL 驱动，换库需改 `get_conn` 的 import。
+- **MySQL**: change `BIGSERIAL` in `patent_db_schema.sql` to `BIGINT AUTO_INCREMENT`, keep `TEXT`, and remove `GENERATED ALWAYS AS IDENTITY`; the `%s` placeholders in the script apply equally to MySQL (the placeholders are the same when psycopg is replaced by `pymysql`).
+- **SQLite**: `INTEGER PRIMARY KEY AUTOINCREMENT`; the `%s` placeholders are the same; `CHECK` constraints are ignored by default in SQLite (which does not affect the import). `import_patent_db.py` currently connects only to the PostgreSQL driver, so switching databases requires changing the import in `get_conn`.
 
 ---
 
-## 八、故障排查
+## 8. Troubleshooting
 
-- `缺少 PostgreSQL 驱动` → 见第二节安装 psycopg2-binary。
-- `实验组名未在映射表找到 group_key` → 检查 `source_data/scaffold_patents_experiment_details.tsv` 的 “Patent / product group” 是否与 `group_record_mapping.csv` 的 `group_name` 完全一致（应已对齐）。
-- `无 FASTA 记录未能在映射表精确匹配` → 说明某条无序列记录的申请人/专利族与映射表不符，按提示的 (applicant, patent) 在 CSV 里补一行即可。
-- 想重跑：直接再执行一次带 `--apply-schema` 的命令（会先 DROP 再建）。
+- `缺少 PostgreSQL 驱动` → see section 2 for installing psycopg2-binary.
+- `实验组名未在映射表找到 group_key` → check whether "Patent / product group" in `source_data/scaffold_patents_experiment_details.tsv` exactly matches `group_name` in `group_record_mapping.csv` (it should already be aligned).
+- `无 FASTA 记录未能在映射表精确匹配` → this indicates that the applicant/patent family of a record without a sequence does not match the mapping table; add a row to the CSV using the (applicant, patent) pair shown in the message.
+- To re-run: simply execute the command with `--apply-schema` once more (it DROPs the tables and creates them again first).

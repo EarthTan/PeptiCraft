@@ -1,43 +1,43 @@
-# 蛋白支架专利与序列数据库
+# Protein Scaffold Patent and Sequence Database
 
-本目录是从既有五份数据表及 FASTA 文件中整理出的去重版本。数据库只包含指定的 16 条序列，共计8种蛋白。
+This directory is the deduplicated version curated from five existing data tables and FASTA files. The database contains only the specified 16 sequences, covering 8 proteins in total.
 
-1.	锦波生物-重组人源化III型胶原
-2.	锦波生物-30-aa COL3A1功能区×16的重组人源化III型胶原；
-3.	武汉胶原蛋白-TRHCIII-1 225 aa 三螺旋样重组人胶原III；
-4.	江苏创健医疗-重组人XVII型胶原片段170801/170802；
-5. 	上海羽松-短重组丝素蛋白SF-4/SF-10；
-6. 	Bolt Threads, Inc.-重组蜘蛛丝蛋白18B；
-7. 	AMSilk / Evolved By Nature相关主体-eADF4(C16)工程蜘蛛丝蛋白；
-8. 	陕西巨子生物-类人胶原蛋白 FHLC 1071 aa）
+1.	Jinbo — recombinant humanized type III collagen
+2.	Jinbo — recombinant humanized type III collagen with 16 repeats of the 30-aa COL3A1 functional domain;
+3.	Wuhan — TRHCIII-1, a 225 aa triple-helix-like recombinant human collagen III;
+4.	Trautec — recombinant human type XVII collagen fragments 170801/170802;
+5. 	Yusong — short recombinant silk fibroin proteins SF-4/SF-10;
+6. 	Bolt Threads, Inc. — recombinant spider silk protein 18B;
+7. 	AMSilk / Evolved By Nature-related entities — eADF4(C16) engineered spider silk protein;
+8. 	Giant Biogene — human-like collagen FHLC, 1071 aa)
 
-每条构建体在主表中占一行。
+Each construct occupies one row in the master table.
 
 
-## 文件结构
+## File structure
 
-- `scaffold_sequence_database.xlsx`&`scaffold_sequence_database.tsv`：合并后的主工作簿。
-- `fasta/`：16 个白名单 FASTA 文件。
+- `scaffold_sequence_database.xlsx`&`scaffold_sequence_database.tsv`: the merged master workbook.
+- `fasta/`: 16 whitelisted FASTA files.
 
-工作簿包含以下工作表：
+The workbook contains the following sheets:
 
-- `主数据库`：序列、专利、申请人、构建体、产品用途、潜在应用、场景标签、递送标签、监管状态、实验结果、证据限制、来源 URL 和完整氨基酸序列。
-- `实验证据`：与入选序列有关的实验组及结果位置；不含 Bellafill 和 BOTOX 比较项。
-- `标签字典`：V3 使用场景和递送标签的定义。
-- `证据分级`：E1–E5 及判级规则。
-- `来源与去重`：五份来源文件的使用与去重决策。
+- `主数据库`: sequence, patent, applicant, construct, product use, potential application, scenario tag, delivery tag, regulatory status, experimental results, evidence limitations, source URL, and full amino acid sequence.
+- `实验证据`: the experiment groups related to the selected sequences and the locations of their results; excludes the Bellafill and BOTOX comparison items.
+- `标签字典`: definitions of the V3 use-scenario and delivery tags.
+- `证据分级`: E1–E5 and the grading rules.
+- `来源与去重`: use of the five source files and the deduplication decisions.
 
-## 主要改进
-- 原来的场景、子类、递送方式及递送子类标签已全部删除。
-- 改成四个可筛选的应用列：涂敷成膜、Mask patch、Wound dressing、Injectable filler。
-- 标签字典也已缩减为这四项。
-当前标记数量：
-- 涂敷成膜：2 条
-- Mask patch：3 条
-- Wound dressing：4 条
-- Injectable filler：1 条
-重复单元、纯化标签版本及缺少应用证据的构建体保持空白，没有继承母体蛋白的标签。
-## FASTA 白名单
+## Main improvements
+- The former scenario, subclass, delivery method, and delivery subclass tags have all been removed.
+- They are replaced by four filterable application columns: film-forming coating, Mask patch, Wound dressing, Injectable filler.
+- The tag dictionary has also been reduced to these four items.
+Current tag counts:
+- Film-forming coating: 2 entries
+- Mask patch: 3 entries
+- Wound dressing: 4 entries
+- Injectable filler: 1 entry
+Repeat units, purified-tag versions, and constructs lacking application evidence are left blank and do not inherit the tags of the parent protein.
+## FASTA whitelist
 
 1. `JINBO_HC8_CN103122027B_257aa.fasta`
 2. `JINBO_HC16_CN103122027B_501aa.fasta`
@@ -56,26 +56,26 @@
 15. `eADF4_C16_560aa.fasta`
 16. `FHLC_SEQ_ID_NO_1.fasta`
 
-所有序列均已用 FASTA 实际残基数与表中长度进行核对，16 条均一致。主表同时保存完整氨基酸序列和序列 SHA-256，便于后续版本校验。
+All sequences have been checked by comparing the actual residue count in the FASTA with the length in the table, and all 16 agree. The master table also stores the full amino acid sequence and the sequence SHA-256, to facilitate later version verification.
 
-## 合并与去重原则
+## Merge and deduplication principles
 
-- 以 `scaffold_application_tags_v3.xlsx` 的 `Scaffold V3` 为最新中文主数据。
-- `scaffold_patents+sequence+delivery+scenario_v3.tsv` 与上述 V3 主表逐单元格一致，因此不重复导入。
-- 从 `scaffold_patents_evidence_workbook.xlsx` 保留实验明细和证据分级。其 `序列主表` 是旧副本，不覆盖 V3。
-- `scaffold_patents_sequence_guide.tsv` 的中英文重复字段不保留；其中唯一的 `Potential application` 信息已翻译为中文并合入主表的 `潜在应用（中文整合）`。
-- `scaffold_patents_experiment_details.tsv` 是英文实验副本，而且引号与制表符结构损坏，未直接导入；对应信息由证据工作簿中的中文实验表提供。
-- 未取得可靠 FASTA、混合物、比较项及未列入白名单的记录均未进入新数据库。
+- `Scaffold V3` in `scaffold_application_tags_v3.xlsx` is taken as the latest Chinese master data.
+- `scaffold_patents+sequence+delivery+scenario_v3.tsv` matches the V3 master table cell by cell, so it was not imported again.
+- The experiment details and evidence grading are retained from `scaffold_patents_evidence_workbook.xlsx`. Its `序列主表` is an old copy and does not overwrite V3.
+- The duplicated Chinese and English fields of `scaffold_patents_sequence_guide.tsv` are not retained; the only `Potential application` information in it has been translated into Chinese and merged into the master table's `潜在应用（中文整合）`.
+- `scaffold_patents_experiment_details.tsv` is an English copy of the experiments, and its quotation and tab structure is corrupted, so it was not imported directly; the corresponding information is provided by the Chinese experiment table in the evidence workbook.
+- Records without a reliable FASTA, mixtures, comparison items, and records not on the whitelist did not enter the new database.
 
-## PDB/CIF 说明
+## PDB/CIF note
 
-本目录没有 PDB 或 CIF 文件，因此主数据库不设置 `PDB/CIF accession` 一栏，也不把结构条目视为本地可用文件。
+This directory contains no PDB or CIF files, so the master database has no `PDB/CIF accession` column, and structure entries are not treated as locally available files.
 
-历史来源曾记录 6A0A 和 6A0C，它们是与锦波构建体相关的约 30 aa 功能区三聚体结构，不是 HC8、HC16 或 480–501 aa 完整构建体的原子模型。实验说明中若出现这些编号，仅表示来源文献或数据库定位信息。
+Historical sources recorded 6A0A and 6A0C, which are trimeric structures of approximately 30 aa functional domains related to the Jinbo constructs, not atomic models of the complete HC8, HC16, or 480–501 aa constructs. Where these identifiers appear in the experiment notes, they indicate only a location in the source literature or database.
 
-## 使用限制
+## Usage limitations
 
-- 监管信息的原始核查日为 2026-08-05；“未核实到”不等于不存在。
-- 专利序列与商业产品或具体批次的对应关系，如未公开确认，仍按原始资料保留限定语。
-- E1–E5 表示可核实的最高证据层级，不代表已完成其下或其上的全部实验。
-- 标签字典中的英文标签是受控词表名称，不是与中文主表并列的翻译副本。
+- The original verification date for regulatory information is 2026-08-05; "not verified" does not mean that it does not exist.
+- Where the correspondence between a patent sequence and a commercial product or specific lot has not been publicly confirmed, the qualifiers of the original material are retained.
+- E1–E5 indicates the highest evidence level that can be verified, and does not mean that all experiments below or above it have been completed.
+- The English labels in the tag dictionary are controlled-vocabulary names, not a translated copy standing alongside the Chinese master table.

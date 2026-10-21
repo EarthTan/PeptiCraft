@@ -15,7 +15,13 @@
 /data/*
   Cache-Control: public, max-age=3600, must-revalidate
 
+# The team wiki at https://2026.igem.wiki/dku shows the platform inside a frame on its
+# homepage, so the site has to be embeddable by that origin. X-Frame-Options: SAMEORIGIN
+# would refuse every cross-origin frame, which is why the embedded workspace on the wiki
+# homepage stayed blank. The frame-ancestors directive below is the modern equivalent: it
+# names the origins that may frame this site and keeps every other site out.
+
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  X-Frame-Options: SAMEORIGIN
+  Content-Security-Policy: frame-ancestors 'self' https://2026.igem.wiki http://127.0.0.1:8080

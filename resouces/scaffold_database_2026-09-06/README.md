@@ -1,5 +1,7 @@
 # Protein Scaffold Patent and Sequence Database
 
+> Chinese version: [中文版](README.cn.md)
+
 This directory is the deduplicated version curated from five existing data tables and FASTA files. The database contains only the specified 16 sequences, covering 8 proteins in total.
 
 1.	Jinbo — recombinant humanized type III collagen
@@ -12,7 +14,6 @@ This directory is the deduplicated version curated from five existing data table
 8. 	Giant Biogene — human-like collagen FHLC, 1071 aa)
 
 Each construct occupies one row in the master table.
-
 
 ## File structure
 

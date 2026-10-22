@@ -1,5 +1,7 @@
 # PeptiCraft Backend Service
 
+> Chinese version: [中文版](README.cn.md)
+
 A read-only FastAPI service layered on the `igem_peptides` PostgreSQL database. The frontend communicates only with it: every value rendered by the interface is delivered through one of the 19 endpoints under `/api`, and no score, threshold, or safety verdict is computed in the browser.
 
 ## Running

@@ -24,7 +24,7 @@
     --db             数据库连接串；也可用环境变量 DATABASE_URL
     其余路径默认指向本包内的相对位置，可直接 `python import_patent_db.py --apply-schema` 一键运行。
 
-导入逻辑要点（详见 README_导入说明.md）:
+导入逻辑要点（详见 README-Import-Guide.md）:
     1. patent_records 27 行：16 行有 FASTA（record_id 取自 TSV，aa_sequence 从 FASTA 读取）；
        11 行无 FASTA（record_id 为空，按 (申请人, 专利族) 在映射表里取合成键）。
     2. experiments 12 行：用“实验组名 → group_key”映射（来自映射表）。

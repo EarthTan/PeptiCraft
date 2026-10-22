@@ -1,5 +1,7 @@
 # PeptiCraft Documentation Set Overview
 
+> Chinese version: [中文版](00-Overview.cn.md)
+
 This document is the entry point to the whole documentation set. It sets out what the project does, which materials this set is composed of, what question each of them answers, for whom each is written, and the true state of the project as of October 2026.
 
 ## What the project does

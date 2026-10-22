@@ -1,5 +1,7 @@
 # 05 Development Handoff Technical Reference
 
+> Chinese version: [中文版](05-Development-Handoff-Reference.cn.md)
+
 This volume is intended for developers and AI agents who take over the work later; its content is handoff information precise down to files, fields and values. It assumes that the reader will modify code, and therefore does not restate the design rationale — that rationale is in volumes 01 to 04.
 
 ## 1. Repository Layout
@@ -14,7 +16,7 @@ The repository root `iGEM-website/` contains six business directories, whose res
 
 **`iGEM-platform-main/`** is the existing data pipeline, not a service still to be built. It contains the four-piece set of `select / scoring / assemble / run` for four directions, table-creation scripts, an operations panel, and exported result files. What this repository keeps is the pipeline code and the table-creation scripts; **the prediction models themselves are not in this repository** — they are in another codebase and are called by the pipeline in the form of local HTTP services, each service occupying a fixed port.
 
-**`docs/`** is the documentation directory, in which `docs/PeptiCraft-文档体系/` is this documentation set. Three earlier materials sit in the same directory; their division of labour with this documentation set is explained in volume 00.
+**`docs/`** is the documentation directory, in which `docs/PeptiCraft-Documentation/` is this documentation set. Three earlier materials sit in the same directory; their division of labour with this documentation set is explained in volume 00.
 
 **`publish/`** is the directory of static artefacts used for formal release.
 

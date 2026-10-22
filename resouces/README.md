@@ -1,5 +1,7 @@
 # Curated data
 
+> Chinese version: [中文版](README.cn.md)
+
 Reference data that must be retained under version control, kept as files. It is both the build material for the pipeline and the reference libraries, and the organized outcome of that work.
 
 This directory is not the peptide library. The 20,248,885 scored peptides, the 496 constructs, and the score tables all live in the `igem_peptides` PostgreSQL instance, from which `../service/` reads them. What remains here is the part that must persist as files: sequences with their provenance, evidence, and application tags, and the scenario/delivery matrix by which the builder organizes them.

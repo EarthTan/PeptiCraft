@@ -1,5 +1,7 @@
 # Repository Overview
 
+> Chinese version: [中文版](repositories.cn.md)
+
 The project has had four repositories so far. Three of them each correspond to a development stage; they are not replacements for one another but the same design approach realised at three levels: first get one screening chain running, then abstract that chain into a reusable platform, and finally turn the platform into a website that can be used externally. The fourth is a parallel documentation repository, with no ordering relative to the three stages; it holds the evaluation conclusions for the prediction tools on which the pipeline stage depends, and the pipeline construction plan derived from those conclusions.
 
 The official addresses of the four repositories are as follows, and the text of each section takes this list as authoritative. The local paths serve only as reference locations on the current machine and may change through migration.
@@ -39,4 +41,4 @@ There is one easily confused point in the naming. The root-directory `DryLab-lit
 
 Among the three development stages, each later repository takes the output of the earlier one as input. The website reads only the result libraries written to the database in the pipeline stage and reruns no predictor; the pipeline's screening criteria — the hard veto on safety, each metric used only once, weights determined by the data — carry over directly from the rules fixed in the first stage; and the candidate peptides and fusion constructs of the first stage are one of the inputs to the pipeline stage. The documentation repository is not in an input-output relationship with these three stages; it holds the common basis of all three strands of work: which tools the pipeline selects, and what role each tool can play in the pipeline — these judgments all come from the tool evaluation; and the ready and under-investigation states the platform reports for the four functional directions rest on the same tool evaluation.
 
-The four repositories each keep their own documentation. The website documentation set (`PeptiCraft-文档体系/`) describes only the website stage; the pipeline stage's documentation comes with the pipeline repository; project positioning, tool evaluation, and the pipeline plan are stored only in the documentation repository, and are not duplicated in the website and pipeline repositories.
+The four repositories each keep their own documentation. The website documentation set (`PeptiCraft-Documentation/`) describes only the website stage; the pipeline stage's documentation comes with the pipeline repository; project positioning, tool evaluation, and the pipeline plan are stored only in the documentation repository, and are not duplicated in the website and pipeline repositories.

@@ -1,5 +1,7 @@
 # 01 Product Form and User Experience
 
+> Chinese version: [中文版](01-Product-Form-and-User-Experience.cn.md)
+
 ## 1. Who the product serves and what it solves
 
 PeptiCraft addresses a specific gap. For people who want to make "protein materials with biological function", the point of blockage has never been a lack of inspiration, but rather three separate obstacles.

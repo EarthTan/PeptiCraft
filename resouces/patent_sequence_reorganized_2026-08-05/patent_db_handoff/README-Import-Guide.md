@@ -2,6 +2,7 @@
 
 > This package is used to import the patent sequence data in `patent_sequence_reorganized_2026-08-05/` into a relational database.
 > Target database: **PostgreSQL** (adaptation to other databases is covered at the end of this document).
+> Chinese version: [中文版](README-Import-Guide.cn.md)
 
 ---
 
@@ -9,7 +10,7 @@
 
 ```
 patent_db_handoff/
-├── README_导入说明.md                 ← this file
+├── README-Import-Guide.md              ← this file
 ├── patent_db_schema.sql              ← table-creation DDL (includes DROP TABLE IF EXISTS; re-runnable)
 ├── group_record_mapping.csv          ← mapping of the 27 records ↔ 11 experiment groups (includes synthetic primary keys for rows without FASTA)
 ├── import_patent_db.py               ← one-step import script (reads TSV + FASTA, writes to the database)

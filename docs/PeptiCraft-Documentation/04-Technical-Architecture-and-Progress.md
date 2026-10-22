@@ -1,5 +1,7 @@
 # 04 Technical Architecture and Development Progress
 
+> Chinese version: [中文版](04-Technical-Architecture-and-Progress.cn.md)
+
 ## 1. Architecture Overview
 
 The entire system consists of three parts plus one database, and data flows in one direction only. It should be stated first that this overview describes the **development form**: the formal deployment no longer contains a resident service process or runtime database access; the relationship between the two, and the details of the deployment form itself, are recorded in *06 Release Progress and Remaining Work*, and the rest of this section's description of the service and the database holds equally for the development and export stages.

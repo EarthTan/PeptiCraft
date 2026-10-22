@@ -1,5 +1,7 @@
 # 06 Release Progress and Remaining Work
 
+> Chinese version: [中文版](06-Release-Progress-and-Next-Work.cn.md)
+
 This document records the completion status of the project's conversion from "a dynamic service depending on a remote database" to "static deployment plus edge function", and the work remaining between the current state and formal release. It is written for readers who need to judge "whether it can go live now, what is still missing, and who will supply what is missing"; it does not repeat the product design and technical detail already contained in the other five documents, touching on them only where a judgement needs them.
 
 ## 1. What This Round Did

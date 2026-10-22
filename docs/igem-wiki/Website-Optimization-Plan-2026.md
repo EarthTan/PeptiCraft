@@ -1,6 +1,7 @@
 # PeptiCraft Website and iGEM Presentation Optimization Plan
 
 > Version date: 2026-10-17. Applies to: the PeptiCraft product website, the DKU iGEM 2026 Wiki and the Software deliverable.
+> Chinese version: [中文版](Website-Optimization-Plan-2026.cn.md)
 
 ## 1. Core Positioning
 

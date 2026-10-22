@@ -1,5 +1,7 @@
 # PeptiCraft
 
+> Chinese version: [中文版](README.cn.md)
+
 PeptiCraft is a web platform for designing recombinant fusion proteins. A construct is assembled end to end from three segments: a functional peptide, a structural protein that serves as the scaffold (the scaffold protein), and a linker that joins the two. The platform pairs a precomputed screening results library with a guided builder, and evaluates each candidate against the standard that corresponds to the construct's intended delivery method.
 
 The project is developed by the Duke Kunshan University iGEM 2026 team. This repository is the whole platform: the backend service, the web frontend, the curated data both depend on, the project documentation, and the built frontend used for deployment.
@@ -49,7 +51,7 @@ The **construct library** holds 496 constructs across four design directions: 17
 
 The **reference library** holds 8 scaffold protein clusters totalling 16 sequences, and 15 curated linkers.
 
-One property of the data is worth stating here. All 496 constructs point at the same placeholder scaffold row, and that row contains no sequence, so no complete end-to-end fusion sequence can be assembled from the stored data alone. The service reports this honestly rather than inventing segments: when no scaffold is specified it emits the linker and functional-peptide segments and marks the scaffold segment unavailable, and it labels every binding as placeholder, verified or inferred according to the sequence's provenance. The options for closing this gap are recorded in `docs/PeptiCraft-文档体系/04-技术架构与开发进度.md`.
+One property of the data is worth stating here. All 496 constructs point at the same placeholder scaffold row, and that row contains no sequence, so no complete end-to-end fusion sequence can be assembled from the stored data alone. The service reports this honestly rather than inventing segments: when no scaffold is specified it emits the linker and functional-peptide segments and marks the scaffold segment unavailable, and it labels every binding as placeholder, verified or inferred according to the sequence's provenance. The options for closing this gap are recorded in `docs/PeptiCraft-Documentation/04-Technical-Architecture-and-Progress.md`.
 
 ## Status
 
@@ -59,7 +61,7 @@ The platform runs end to end on local machines and has never been deployed to a 
 
 ## Documentation
 
-`docs/PeptiCraft-文档体系/` holds six documents in English, about 130 KB in total, written for three kinds of reader: the project lead, who cares about progress rather than code; the domain expert, who cares about the biology and the meaning of each piece of data; and the person who takes the work over next. `service/README.md`, `app/README.md` and `resouces/README.md` each describe their own directory.
+`docs/PeptiCraft-Documentation/` holds six documents in English, about 130 KB in total, written for three kinds of reader: the project lead, who cares about progress rather than code; the domain expert, who cares about the biology and the meaning of each piece of data; and the person who takes the work over next. `service/README.md`, `app/README.md` and `resouces/README.md` each describe their own directory.
 
 The competition wiki drafts, the page outline and the website optimization roadmap are in [`docs/igem-wiki/`](docs/igem-wiki/). Among them, the [2026 website and iGEM presentation optimization plan](docs/igem-wiki/Website-Optimization-Plan-2026.md) lists the current evidence, gaps and pre-submission actions against the points the official judging focuses on.
 

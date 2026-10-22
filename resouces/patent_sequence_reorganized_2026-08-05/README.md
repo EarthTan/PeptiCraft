@@ -1,5 +1,7 @@
 # Recombinant Structural Protein Patent Data Pack
 
+> Chinese version: [中文版](README.cn.md)
+
 This folder summarizes sequence, product, regulatory-status, and experimental-evidence information for patents involving recombinant collagen, silk, elastin, and related structural proteins.
 
 ## File Structure

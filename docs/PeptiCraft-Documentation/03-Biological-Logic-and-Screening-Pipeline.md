@@ -1,5 +1,7 @@
 # 03 Biological Logic and Screening Pipeline
 
+> Chinese version: [中文版](03-Biological-Logic-and-Screening-Pipeline.cn.md)
+
 ## 1. Design Object: Three-Segment Assembly
 
 A usable recombinant fusion protein is made of three segments, each of which carries a different biological function; without any one of them the entire chain does not hold.

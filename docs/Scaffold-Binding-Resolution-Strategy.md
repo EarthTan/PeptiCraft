@@ -1,5 +1,7 @@
 # Scaffold Binding Resolution Strategy
 
+> Chinese version: [中文版](Scaffold-Binding-Resolution-Strategy.cn.md)
+
 The 496 precomputed constructs in the database point to the same scaffold row, while the genuinely usable scaffolds are held in another table, and there is no correspondence between the two. This document explains how the placeholder state arose, which half the scaffold material provided by the team filled in, the changes already in place together with how they were verified, and the three items that still require a team decision.
 
 ## How the placeholder state arose

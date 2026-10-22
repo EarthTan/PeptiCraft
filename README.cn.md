@@ -1,0 +1,68 @@
+# PeptiCraft
+
+> English version: [英文版](README.md) — 2026-10-18 的中文原版存档，英文版可能已更新。
+
+PeptiCraft 是一套用于设计重组融合蛋白的网页平台。一条构造由三段首尾相接组成：一段功能肽、一段充当支架的结构蛋白（骨架蛋白），以及连接两者的一段连接片段。平台把一份预先算好的筛选成果库与一个带引导的构建器配合使用，并按构造预期给药方式所对应的标准评估每一条候选。
+
+本项目由昆山杜克大学 iGEM 2026 团队开发。本仓库就是整个平台：后端服务、网页前端、两者所依赖的整理数据、项目文档，以及用于部署的已构建前端。
+
+## 目录结构
+
+| 路径 | 内容 |
+| --- | --- |
+| `app/` | 前端。基于 Vite 8 的 React 19 与 TypeScript；五个页面；英文界面。 |
+| `service/` | 后端。架在 `igem_peptides` PostgreSQL 数据库之上的 FastAPI，`/api` 下 19 个接口。 |
+| `resouces/` | 以文件形式保存的整理参考数据：骨架序列表、专利源数据包，以及场景／给药矩阵。 |
+| `docs/` | 项目文档体系，中文。 |
+| `publish/` | 已构建的前端，外加一个零依赖的静态服务器。 |
+
+有两个目录被有意排除在版本管理之外。筛选管线 `iGEM-platform-main/` 排除的原因，一是体积——它的结果归档达数百兆——二是它自带一套文档；它是 [EarthTan/iGEM-platform](https://github.com/EarthTan/iGEM-platform) 的 `main` 分支在本地的副本，只保留管线运行所需的内容，代码与文档以上游地址为准。`service/.env` 排除的原因是它保存数据库密码；`service/.env.example` 是模板，列出了全部配置项。
+
+本项目另有另两个仓库：[EarthTan/iGEM-silk](https://github.com/EarthTan/iGEM-silk)（第一阶段的筛选链路）与 [EarthTan/iGEM-platform](https://github.com/EarthTan/iGEM-platform)（第二阶段的管线与数据）。三者的定位与承继关系见 [`docs/repositories.md`](docs/repositories.md)。
+
+## 本地运行
+
+后端读取的 PostgreSQL 实例位于另一台工作站，因此先启动后端：
+
+```bash
+cd service
+pip install -r requirements.txt
+cp .env.example .env               # 然后填入 IGEM_PG_PASSWORD
+python -m uvicorn app.main:app --port 8000
+```
+
+前端在第二个终端中运行，并把 `/api` 转发到 8000 端口：
+
+```bash
+cd app
+npm install
+npm run dev                        # http://127.0.0.1:5173
+```
+
+后端没有自动重载，改动之后需要手动重启。远程数据库并非始终可达；在默认的 `IGEM_DB_BACKEND=auto` 下，连不上的实例由一份随仓库打包的 SQLite 夹具替代，其中是四条手工构造，`/api/health` 会说明实际应答的是哪一个数据源。配置项列在 `service/.env.example`，说明见 `service/README.md`。
+
+## 数据
+
+分三层，来源各不相同。
+
+**肽库**保存 20,248,885 条长度为 1 至 30 个残基的肽，来自十个数据源。它背后是 `peptide_enrichment`，约 3.77 亿行，每条肽每个工具一行。
+
+**构造库**保存 496 条构造，分布在四个设计方向上：抗氧化 170 条、抗菌 65 条、抗炎 154 条、抗黑素 107 条。每条带九项分数——一项功能分、四项安全分、三项成药性分，以及一项由成药性分派生的综合分。抗氧化与抗菌两个方向已签字确认，另外两个方向仍在进行中，界面照此标注。所有分数都预先算好并存入库中，服务只读取，从不重跑预测器。
+
+**参考库**保存 8 个骨架蛋白簇、共 16 条序列，以及 15 条整理过的连接片段。
+
+有一条数据性质值得在此说明。496 条构造全部指向同一行占位骨架，该行不含序列，因此单凭已存数据拼不出首尾完整的融合序列。服务如实报告这一点，而不编造片段：未指定骨架时输出连接片段与功能肽两段，并把骨架段标为不可用；同时按序列来源把每条绑定标为占位、已核实或推断。补齐这一缺口的可选做法记录在 `docs/PeptiCraft-Documentation/04-Technical-Architecture-and-Progress.md`。
+
+## 状态
+
+两部分都在对着真实数据库运行，界面显示的每一个值都能追溯到某张表的某个字段。仍属临时形态的行为——占位骨架绑定、空的肽次级属性表、连接片段库缺少路径维度，以及构建器中那两步只改变拼出的序列而不收窄候选集——列在 `app/README.md` 与项目文档中。
+
+平台已在本地机器上端到端跑通，从未部署到公开主机。部署方式是在 `app/` 中执行 `npm run build`，把 `app/dist/` 复制进 `publish/`，再从那里启动服务器。
+
+## 文档
+
+`docs/PeptiCraft-Documentation/` 保存六份英文文档，合计约 130 KB，面向三类读者：项目负责人，关心的是工作进展而非代码；领域专家，关心的是生物学与每一项数据的含义；以及接下来接手这项工作的人。`service/README.md`、`app/README.md` 与 `resouces/README.md` 各自说明自己的目录。
+
+参赛 Wiki 草稿、页面大纲与网站优化路线图位于 [`docs/igem-wiki/`](docs/igem-wiki/)。其中 [2026 网站与 iGEM 呈现优化计划](docs/igem-wiki/Website-Optimization-Plan-2026.md) 对照官方评审关注点列出当前证据、缺口和提交前行动项。
+
+`iGEM-platform-main/` 下的筛选管线是另一批独立工作，自带文档，不属于本套文档。

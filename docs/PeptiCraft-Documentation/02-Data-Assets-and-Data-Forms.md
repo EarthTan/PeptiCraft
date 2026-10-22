@@ -1,5 +1,7 @@
 # 02 Data Assets and Data Shape
 
+> Chinese version: [中文版](02-Data-Assets-and-Data-Forms.cn.md)
+
 ## 1. Overall layout of the data
 
 The project's data is not a single table but a three-layer structure; the three layers differ completely in granularity and purpose, and discussing them together loses meaning.

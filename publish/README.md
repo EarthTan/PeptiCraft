@@ -1,5 +1,7 @@
 # Published Front End
 
+> Chinese version: [中文版](README.cn.md)
+
 The static single-page application built from `app/` and copied here. `assets/` holds the hashed frontend scripts and styles, `data/` holds the data snapshot the pages need, and `server.js` is a zero-dependency Node static server that falls back to `index.html` for unknown page paths.
 
 ## How it is produced

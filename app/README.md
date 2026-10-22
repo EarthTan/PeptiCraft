@@ -1,5 +1,7 @@
 # PeptiCraft — Front End
 
+> Chinese version: [中文版](README.cn.md)
+
 PeptiCraft is a web platform for designing recombinant fusion proteins. A construct is assembled from three segments: a functional peptide, a scaffold protein that serves as the scaffold, and a linker joining the two. The platform exposes a precomputed screening results library and a guided builder that scores new combinations against the standard for each application route.
 
 This directory holds the frontend only. Everything it renders comes from the backend service in `../service/`, which reads the `igem_peptides` PostgreSQL instance. The project is developed by the Duke Kunshan University iGEM 2026 team.
@@ -99,4 +101,4 @@ Unknown paths now have an explicit fallback page. `src/App.css` is still unrefer
 
 ## Documentation
 
-The project documentation is in `../docs/PeptiCraft-文档体系/` and is written in English. It covers product form and user experience, data assets, biology and the screening pipeline, architecture and development progress, and a development handoff technical reference.
+The project documentation is in `../docs/PeptiCraft-Documentation/` and is written in English. It covers product form and user experience, data assets, biology and the screening pipeline, architecture and development progress, and a development handoff technical reference.

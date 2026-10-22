@@ -59,6 +59,17 @@ CREATE TABLE IF NOT EXISTS scaffold_library (
     patent_source_url       TEXT,
     regulatory_evidence_url TEXT,
 
+    -- 表达体系推荐。源表第 31–35 列，逐「序列记录」给出：推荐宿主、专利记载的载体、
+    -- 推荐载体、推荐依据与适用范围、来源 URL。簇这一行存的是**代表序列**（簇内最长，
+    -- 也是拼装时实际使用的那条）的一套值，并在 expression_sequence_id 里记明出自哪条；
+    -- 其余变体各有一套值，落在 scaffold_library_sequences 的同名列上。
+    expression_system            TEXT,
+    expression_vector_recorded   TEXT,
+    expression_vector_recommended TEXT,
+    expression_rationale         TEXT,
+    expression_source_url        TEXT,
+    expression_sequence_id       TEXT,
+
     source_table            TEXT NOT NULL DEFAULT 'scaffold_sequence_database.tsv',
     source_version          DATE NOT NULL,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -102,6 +113,14 @@ CREATE TABLE IF NOT EXISTS scaffold_library_sequences (
     patent_source_url       TEXT,
     regulatory_evidence_url TEXT,
     confidence_limitations  TEXT,
+
+    -- 表达体系推荐，源表逐序列一式五列，措辞原样保留（多为中文，含限定语，
+    -- 例如「宿主 DE3 状态需确认」「无明确推荐」）。见 20 号表头的说明。
+    expression_system            TEXT,
+    expression_vector_recorded   TEXT,
+    expression_vector_recommended TEXT,
+    expression_rationale         TEXT,
+    expression_source_url        TEXT,
 
     source_version          DATE NOT NULL,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),

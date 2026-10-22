@@ -2,9 +2,16 @@
 """Import the curated scaffold table into `scaffold_library` / `scaffold_library_sequences`.
 
 Source: resouces/scaffold_database_2026-09-06/scaffold_sequence_database.tsv — 16 sequence
-rows covering 8 protein clusters, 30 columns, written in Chinese because it is the primary
+rows covering 8 protein clusters, 35 columns, written in Chinese because it is the primary
 research record. (`resouces/` is where the reference material lives; the directory was named
 `data/` until it was renamed, and the spelling of the new name is not a typo.)
+
+Columns 31-35 are the expression-system recommendation, one set per sequence record: the host,
+the vector the patent or paper actually records, the vector the source recommends, the basis
+for that recommendation, and its URL. They are stored verbatim on the sequence row and, for the
+cluster row, copied from the representative sequence — the longest one, which is the sequence
+assembly actually uses. `expression_sequence_id` on the cluster row names which record that
+copy came from, so the two grains never have to be guessed at.
 
 Two layers go into the two tables:
 
@@ -59,7 +66,7 @@ TSV_PATH = (
     REPO_ROOT / "resouces" / "scaffold_database_2026-09-06" / "scaffold_sequence_database.tsv"
 )
 SOURCE_VERSION = "2026-09-06"  # snapshot date of the scaffold dataset
-EXPECTED_HEADER_LEN = 30
+EXPECTED_HEADER_LEN = 35
 EXPECTED_SEQUENCE_ROWS = 16
 EXPECTED_CLUSTER_ROWS = 8
 
@@ -89,6 +96,23 @@ C_FASTA_PATH = 26
 C_PATENT_URL = 27
 C_REGULATORY_URL = 28
 C_CONFIDENCE_LIMITATIONS = 29
+# Expression-system recommendation, columns 31-35 of the sheet (1-based), all populated for
+# all sixteen records. Read verbatim: the wording carries its own scope limits.
+C_EXPRESSION_SYSTEM = 30
+C_EXPRESSION_VECTOR_RECORDED = 31
+C_EXPRESSION_VECTOR_RECOMMENDED = 32
+C_EXPRESSION_RATIONALE = 33
+C_EXPRESSION_SOURCE_URL = 34
+
+# The five column names as the sheet spells them, used only to verify the header still lines
+# up with the positions above. A silently shifted column would put a vector in the host field.
+EXPRESSION_HEADER = {
+    C_EXPRESSION_SYSTEM: "推荐表达系统（依据来源）",
+    C_EXPRESSION_VECTOR_RECORDED: "来源记载的表达载体/质粒",
+    C_EXPRESSION_VECTOR_RECOMMENDED: "推荐表达载体/质粒",
+    C_EXPRESSION_RATIONALE: "推荐依据与适用范围",
+    C_EXPRESSION_SOURCE_URL: "表达系统/载体来源URL",
+}
 
 # The tag columns the source table carries, in column order, each paired with the route id it
 # maps to. This is the only place the tag vocabulary is translated; `app/services/reference.py`
@@ -423,6 +447,12 @@ def read_source() -> tuple[OrderedDict, list[list[str]]]:
     for pos, tag, _route in TAG_COLUMNS:
         if header[pos] != tag:
             raise RuntimeError(f"column {pos} is {header[pos]!r}, expected tag {tag!r}")
+    for pos, name in EXPRESSION_HEADER.items():
+        if header[pos] != name:
+            raise RuntimeError(
+                f"column {pos} is {header[pos]!r}, expected {name!r}; the expression "
+                f"recommendation columns moved and the reader needs revisiting"
+            )
     if len(data) != EXPECTED_SEQUENCE_ROWS:
         raise RuntimeError(f"expected {EXPECTED_SEQUENCE_ROWS} sequence rows, found {len(data)}")
 
@@ -473,8 +503,16 @@ def build_rows(clusters):
             members.append((r, seq))
 
         # Representative = the longest member, so the cluster row stores the sequence that
-        # spans every functional element the shorter variants each cover only in part.
+        # spans every functional element the shorter variants each cover only in part. It is
+        # also the sequence assembly uses, which is why the cluster-level expression
+        # recommendation is the representative's rather than a second editorial judgement.
         rep_row, rep_seq = max(members, key=lambda m: len(m[1]))
+
+        if not rep_row[C_EXPRESSION_SYSTEM].strip():
+            raise RuntimeError(
+                f"cluster {label} carries no expression system on its representative sequence; "
+                f"the sheet is expected to fill all five expression columns for every record"
+            )
 
         library_rows.append({
             "id": meta["id"],
@@ -500,6 +538,14 @@ def build_rows(clusters):
             "description": meta["blurb"],
             "patent_source_url": (rep_row[C_PATENT_URL].strip() or None),
             "regulatory_evidence_url": (rep_row[C_REGULATORY_URL].strip() or None),
+            "expression_system": rep_row[C_EXPRESSION_SYSTEM].strip() or None,
+            "expression_vector_recorded": rep_row[C_EXPRESSION_VECTOR_RECORDED].strip() or None,
+            "expression_vector_recommended": (
+                rep_row[C_EXPRESSION_VECTOR_RECOMMENDED].strip() or None
+            ),
+            "expression_rationale": rep_row[C_EXPRESSION_RATIONALE].strip() or None,
+            "expression_source_url": rep_row[C_EXPRESSION_SOURCE_URL].strip() or None,
+            "expression_sequence_id": rep_row[C_SEQ_ID].strip() or None,
             "source_version": SOURCE_VERSION,
         })
 
@@ -525,6 +571,13 @@ def build_rows(clusters):
                 "patent_source_url": r[C_PATENT_URL].strip() or None,
                 "regulatory_evidence_url": r[C_REGULATORY_URL].strip() or None,
                 "confidence_limitations": r[C_CONFIDENCE_LIMITATIONS].strip() or None,
+                "expression_system": r[C_EXPRESSION_SYSTEM].strip() or None,
+                "expression_vector_recorded": r[C_EXPRESSION_VECTOR_RECORDED].strip() or None,
+                "expression_vector_recommended": (
+                    r[C_EXPRESSION_VECTOR_RECOMMENDED].strip() or None
+                ),
+                "expression_rationale": r[C_EXPRESSION_RATIONALE].strip() or None,
+                "expression_source_url": r[C_EXPRESSION_SOURCE_URL].strip() or None,
                 "source_version": SOURCE_VERSION,
             })
 
@@ -537,6 +590,8 @@ INSERT INTO scaffold_library (
     length_aa, aa_sequence, sequence_count, application_tags, route_ids, material_forms,
     max_evidence, product_use, potential_uses, evidence_limits, registrations,
     registration_note, description, patent_source_url, regulatory_evidence_url,
+    expression_system, expression_vector_recorded, expression_vector_recommended,
+    expression_rationale, expression_source_url, expression_sequence_id,
     source_version, updated_at
 ) VALUES (
     %(id)s, %(name)s, %(short_name)s, %(category)s, %(construct_cn)s, %(applicant)s,
@@ -544,7 +599,9 @@ INSERT INTO scaffold_library (
     %(application_tags)s, %(route_ids)s, %(material_forms)s, %(max_evidence)s,
     %(product_use)s, %(potential_uses)s, %(evidence_limits)s, %(registrations)s,
     %(registration_note)s, %(description)s, %(patent_source_url)s,
-    %(regulatory_evidence_url)s, %(source_version)s, now()
+    %(regulatory_evidence_url)s, %(expression_system)s, %(expression_vector_recorded)s,
+    %(expression_vector_recommended)s, %(expression_rationale)s, %(expression_source_url)s,
+    %(expression_sequence_id)s, %(source_version)s, now()
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -569,6 +626,12 @@ ON CONFLICT (id) DO UPDATE SET
     description = EXCLUDED.description,
     patent_source_url = EXCLUDED.patent_source_url,
     regulatory_evidence_url = EXCLUDED.regulatory_evidence_url,
+    expression_system = EXCLUDED.expression_system,
+    expression_vector_recorded = EXCLUDED.expression_vector_recorded,
+    expression_vector_recommended = EXCLUDED.expression_vector_recommended,
+    expression_rationale = EXCLUDED.expression_rationale,
+    expression_source_url = EXCLUDED.expression_source_url,
+    expression_sequence_id = EXCLUDED.expression_sequence_id,
     source_version = EXCLUDED.source_version,
     updated_at = now()
 """
@@ -579,14 +642,18 @@ INSERT INTO scaffold_library_sequences (
     product_use, potential_uses, regulatory_status, safety_testing_summary, evidence_level,
     experiment_group, experiment_level, specific_experiments, principal_result,
     result_location, evidence_limitations, patent_source_url, regulatory_evidence_url,
-    confidence_limitations, source_version, updated_at
+    confidence_limitations, expression_system, expression_vector_recorded,
+    expression_vector_recommended, expression_rationale, expression_source_url,
+    source_version, updated_at
 ) VALUES (
     %(sequence_id)s, %(scaffold_id)s, %(fasta_filename)s, %(length_aa)s, %(aa_sequence)s,
     %(sha256)s, %(product_use)s, %(potential_uses)s, %(regulatory_status)s,
     %(safety_testing_summary)s, %(evidence_level)s, %(experiment_group)s,
     %(experiment_level)s, %(specific_experiments)s, %(principal_result)s,
     %(result_location)s, %(evidence_limitations)s, %(patent_source_url)s,
-    %(regulatory_evidence_url)s, %(confidence_limitations)s, %(source_version)s, now()
+    %(regulatory_evidence_url)s, %(confidence_limitations)s, %(expression_system)s,
+    %(expression_vector_recorded)s, %(expression_vector_recommended)s,
+    %(expression_rationale)s, %(expression_source_url)s, %(source_version)s, now()
 )
 ON CONFLICT (sequence_id) DO UPDATE SET
     scaffold_id = EXCLUDED.scaffold_id,
@@ -608,6 +675,11 @@ ON CONFLICT (sequence_id) DO UPDATE SET
     patent_source_url = EXCLUDED.patent_source_url,
     regulatory_evidence_url = EXCLUDED.regulatory_evidence_url,
     confidence_limitations = EXCLUDED.confidence_limitations,
+    expression_system = EXCLUDED.expression_system,
+    expression_vector_recorded = EXCLUDED.expression_vector_recorded,
+    expression_vector_recommended = EXCLUDED.expression_vector_recommended,
+    expression_rationale = EXCLUDED.expression_rationale,
+    expression_source_url = EXCLUDED.expression_source_url,
     source_version = EXCLUDED.source_version,
     updated_at = now()
 """

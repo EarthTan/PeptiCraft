@@ -22,7 +22,7 @@ from ..models.linker import LinkerView
 from ..models.scaffold import ScaffoldSummary
 from ..repositories import constructs as constructs_repo
 from ..repositories import enrichment, scaffolds as scaffolds_repo
-from . import assembly, linkers as linker_service, reference, scoring
+from . import assembly, linkers as linker_service, reference, scaffolds as scaffolds_service, scoring
 
 log = logging.getLogger("pepticraft.constructs")
 
@@ -195,22 +195,13 @@ def compute(row: dict[str, Any],
 # ---------------------------------------------------------------------------
 
 def scaffold_summary(scaffold: dict[str, Any]) -> ScaffoldSummary:
-    return ScaffoldSummary(
-        id=scaffold["id"],
-        name=scaffold["name"],
-        short_name=scaffold["short_name"],
-        category=scaffold.get("category"),
-        applicant=scaffold["applicant"],
-        patent=scaffold.get("patent_family"),
-        length=scaffold.get("length_aa"),
-        species=scaffold.get("species"),
-        sequence_count=scaffold.get("sequence_count") or 0,
-        application_tags=list(scaffold.get("application_tags") or []),
-        route_ids=list(scaffold.get("route_ids") or []),
-        material_forms=list(scaffold.get("material_forms") or []),
-        max_evidence=scaffold.get("max_evidence"),
-        has_sequence=bool(scaffold.get("aa_sequence")),
-    )
+    """The scaffold summary a construct response embeds.
+
+    Delegates to the scaffold service rather than restating the field list: the summary now
+    carries the expression recommendation, and a second copy of the mapping is how the two
+    surfaces would end up disagreeing about which variant that recommendation describes.
+    """
+    return scaffolds_service.to_summary(scaffold)
 
 
 def scaffold_candidates(row: dict[str, Any]) -> list[ScaffoldSummary]:

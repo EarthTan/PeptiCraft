@@ -393,6 +393,23 @@ export interface ReferenceData {
 
 // ── Scaffolds ───────────────────────────────────────────────────────────────
 
+/**
+ * The expression system the scaffold sheet records for one patent sequence.
+ *
+ * Values are verbatim from the sheet, Chinese included, because the wording carries its own
+ * scope: `无明确推荐` is a conclusion, and against it `E. coli BL21(DE3)` is a route the source
+ * actually supports. On a cluster summary the values describe `sequence_id`, the representative
+ * variant — the longest sequence, and the one an assembly uses.
+ */
+export interface ScaffoldExpression {
+  system: string | null
+  vector_recorded: string | null
+  vector_recommended: string | null
+  rationale: string | null
+  source_url: string | null
+  sequence_id: string | null
+}
+
 export interface ScaffoldSequence {
   sequence_id: string
   fasta_filename: string | null
@@ -402,6 +419,7 @@ export interface ScaffoldSequence {
   product_use: string | null
   regulatory_status: string | null
   evidence_level: EvidenceLevel | null
+  expression: ScaffoldExpression | null
 }
 
 export interface ScaffoldExperiment {
@@ -427,6 +445,9 @@ export interface ScaffoldSummary {
   route_ids: string[]
   material_forms: MaterialForm[]
   max_evidence: EvidenceLevel | null
+  /** Expression recommendation for the representative variant, which is the one an assembly
+   *  on this scaffold uses. Absent for a scaffold the source sheet does not cover. */
+  expression: ScaffoldExpression | null
   has_sequence: boolean
 }
 
@@ -449,7 +470,6 @@ export interface ScaffoldDetail extends ScaffoldSummary {
   reference: string | null
   characteristics: string[] | null
   properties: { label: string; value: string }[] | null
-  expression_notes: string | null
   unavailable_fields: string[]
 }
 
@@ -537,20 +557,42 @@ export interface ChatAction {
   variant: string
 }
 
+export interface ChatEvidence {
+  id: string
+  label: string
+  text: string
+  kind: "record" | "source" | "limitation"
+  field?: string | null
+  url?: string | null
+}
+
 export interface ChatMessage {
   id: string
   role: "user" | "assistant"
   content: string
   timestamp: string
   actions: ChatAction[]
+  provider?: "llm" | "template" | null
+  evidence?: ChatEvidence[]
+  /** Identifies the construct, route, scaffold and linker this turn describes. */
+  context_key?: string | null
+}
+
+export interface ChatStatus {
+  llm_configured: boolean
+  model: string | null
 }
 
 export interface ChatResponse {
-  provider: string
+  provider: "llm" | "template"
   construct_id: string
   message: ChatMessage
   suggested_questions: string[]
+  /** Server configuration, independent of whether this particular answer used the model. */
   llm_configured: boolean
+  context_key: string
+  fallback_reason: "not_configured" | "model_unavailable" | "invalid_output" | null
+  model: string | null
 }
 
 // ── Health ──────────────────────────────────────────────────────────────────

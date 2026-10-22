@@ -134,13 +134,18 @@ never reaches the browser: the Function reads it, and nothing else can.
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
-| `LLM_BASE_URL` | for chat | OpenAI-compatible endpoint. A bare host is expanded to `/v1/chat/completions`; a host ending in `/v1`, or a full endpoint, is used as given. |
+| `LLM_BASE_URL` | for chat | OpenAI-compatible API base or full chat endpoint. A bare host uses `/v1/chat/completions`; a base with a path (for example `/api/v4` or `/compatible-mode/v1`) gets `/chat/completions` appended; a full `/chat/completions` endpoint stays unchanged. |
 | `LLM_API_KEY` | for chat | The provider's key. |
 | `LLM_MODEL` | for chat | The model id, e.g. `qwen-plus`. |
 
-Without them the site is fully functional and the chat answers from the construct's record
-instead, with the interface labelling it as such. That is a supported deployment, not a broken
-one — a reader is never told a template answer is a model's.
+Without them the data pages remain available, but AI conversation is disabled. Readers can
+explicitly select **View records**; this is not a generated answer and does not enter the AI
+conversation. With a model configured, it writes an answer to the actual question and recent
+history, using validated references to record facts and sources. Model errors are shown as
+errors instead of being silently replaced with record paragraphs.
+`GET /api/chat/status` reports configuration without exposing the endpoint or key.
+`llm_configured` means the settings exist, not that a live provider call has succeeded.
+See [AI chat verification](../docs/AI-Chat-Verification.md) for the evidence contract and checks.
 
 The presence of those three variables is the only switch. The service has `ANALYSIS_PROVIDER`,
 but a Pages Function has no equivalent and does not read the export's `analysis_provider`
@@ -148,10 +153,17 @@ either, so a deployment that wants the model off has to remove the key rather th
 There is nothing to re-export: the function reads the variable, not the snapshot.
 
 The chat endpoint takes a question from anyone who can reach the site and spends the key on it.
-One request is bounded — the question at 2,000 characters, the history at the last six turns of
-at most 4,000 characters each, the reply at 700 tokens — but the number of requests is not, and
+One request is bounded — the JSON body at 32 KiB, the question at 2,000 characters, the history
+at the last six turns of at most 4,000 characters each, the model reply at 1,800 tokens by default and
+the rendered answer at 4,000 characters — but the number of requests is not, and
 neither is the identity of whoever sends them. A rate-limiting rule on `/api/constructs/*/chat`
 in the Cloudflare dashboard is the control for that, and it is not configured here.
+
+`MiniMax-M3.1-Flash` uses a separate 8,192-token reasoning-and-answer budget, medium
+reasoning effort, split reasoning output and a 60-second model timeout. This model requires
+thinking, so the default short output budget may otherwise be exhausted before it returns an
+answer. Other models retain the 20-second timeout. See the provider's
+[OpenAI compatibility documentation](https://platform.minimax.cn/docs/api-reference/text-openai-api).
 
 ## What the deployment does not do
 

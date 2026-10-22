@@ -6,16 +6,22 @@ from typing import Any
 from ..models.scaffold import (
     ScaffoldDetail,
     ScaffoldExperiment,
+    ScaffoldExpression,
     ScaffoldSequence,
     ScaffoldSummary,
 )
 from ..repositories import scaffolds as repo
 
-# Fields the frontend's BackboneProtein type declares and its pages render, but which the
+# Fields the frontend's BackboneProtein type declared and its pages rendered, but which the
 # source dataset does not carry at all. Naming them explicitly lets the UI omit those blocks
 # deliberately instead of drawing an empty card — which is what the audit found happening
 # when `lab`, `characteristics`, `properties` and `expressionNotes` were declared, rendered,
 # and never populated for any of the eight clusters.
+#
+# `expression_notes` used to be on this list. It is gone because the sheet now carries the
+# real thing in columns 31-35 — a host, a recorded vector, a recommended vector and a basis —
+# and reporting a structured recommendation while also declaring expression notes unavailable
+# would read as a contradiction.
 UNAVAILABLE_FIELDS = (
     "lab",
     "common_name",
@@ -23,8 +29,29 @@ UNAVAILABLE_FIELDS = (
     "reference",
     "characteristics",
     "properties",
-    "expression_notes",
 )
+
+
+def expression_from_row(
+    row: dict[str, Any], sequence_id: str | None = None
+) -> ScaffoldExpression | None:
+    """The five expression columns of one row as a block, or None when the row has none.
+
+    A row with no host is treated as having no recommendation at all rather than a block of
+    empty half-fields: the fixture's two scaffolds are like that, and an expression card whose
+    every line reads `—` would suggest the source had considered and declined, which it did
+    not. Every one of the sixteen curated records is populated.
+    """
+    if not (row.get("expression_system") or "").strip():
+        return None
+    return ScaffoldExpression(
+        system=row.get("expression_system"),
+        vector_recorded=row.get("expression_vector_recorded"),
+        vector_recommended=row.get("expression_vector_recommended"),
+        rationale=row.get("expression_rationale"),
+        source_url=row.get("expression_source_url"),
+        sequence_id=sequence_id,
+    )
 
 
 def to_summary(row: dict[str, Any]) -> ScaffoldSummary:
@@ -42,6 +69,7 @@ def to_summary(row: dict[str, Any]) -> ScaffoldSummary:
         route_ids=list(row.get("route_ids") or []),
         material_forms=list(row.get("material_forms") or []),
         max_evidence=row.get("max_evidence"),
+        expression=expression_from_row(row, row.get("expression_sequence_id")),
         has_sequence=bool(row.get("aa_sequence")),
     )
 
@@ -69,6 +97,7 @@ def to_detail(row: dict[str, Any], sequences: list[dict[str, Any]],
                 product_use=s.get("product_use"),
                 regulatory_status=s.get("regulatory_status"),
                 evidence_level=s.get("evidence_level"),
+                expression=expression_from_row(s, s["sequence_id"]),
             )
             for s in sequences
         ],

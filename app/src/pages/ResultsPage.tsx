@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { Link, useParams, useSearchParams } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,7 @@ import { ListSkeleton } from "@/components/ui/loading-state"
 import { Notice } from "@/components/ui/notice"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AnalysisBlocks, SafetyGateList, ToolScoreGrid } from "@/components/construct-panels"
+import { ExpressionBlock } from "@/components/scaffold-expression"
 import {
   ArrowLeft,
   Bot,
@@ -17,6 +18,7 @@ import {
   Check,
   Dna,
   ExternalLink,
+  FlaskConical,
   Layers,
   Link2,
   Loader2,
@@ -28,16 +30,20 @@ import {
 import {
   fetchConstruct,
   fetchConstructScaffolds,
+  fetchChatStatus,
   fetchReference,
   sendChat,
 } from "@/api"
 import type {
   ChatMessage as ApiChatMessage,
+  ChatResponse,
+  ChatStatus,
   ConstructDetail,
   LinkerView,
   ReferenceData,
   ScaffoldSummary,
 } from "@/api/types"
+import { ApiError } from "@/api/client"
 import { formLabel, materialFormLabels } from "@/lib/derive"
 import { formatScore, verdictSkin } from "@/lib/score"
 import { analyseSequence } from "@/lib/sequence"
@@ -57,6 +63,22 @@ import { cn } from "@/lib/utils"
  */
 
 type ResultTab = "peptide" | "construct" | "scaffold" | "linker"
+
+type ConversationMessage = ApiChatMessage & {
+  answer?: Pick<ChatResponse, "provider" | "fallback_reason" | "model">
+}
+
+/**
+ * The Markdown renderer and its parser are the largest part of the bundle, and they are needed
+ * only once a model answer exists. Loading it on that first answer keeps the page itself small;
+ * until the chunk arrives the answer is still readable as the plain text it used to be.
+ */
+const ChatMarkdown = lazy(async () => {
+  const module = await import("@/components/chat-markdown")
+  return { default: module.ChatMarkdown }
+})
+
+const EMPTY_MESSAGES: ConversationMessage[] = []
 
 const TAB_LABELS: Record<
   ResultTab,
@@ -91,13 +113,26 @@ export default function ResultsPage() {
   const routeId = searchParams.get("route_id")
   const scaffoldId = searchParams.get("scaffold_id")
   const linkerId = searchParams.get("linker_id")
+  const contextKey = JSON.stringify([id ?? "", routeId ?? "", scaffoldId ?? "", linkerId ?? ""])
 
   const [activeTab, setActiveTab] = useState<ResultTab>("construct")
   const [chatOpen, setChatOpen] = useState(false)
-  const [bottomChatOpen, setBottomChatOpen] = useState(false)
-  const [messages, setMessages] = useState<ApiChatMessage[]>([])
-  const [input, setInput] = useState("")
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [conversation, setConversation] = useState({
+    contextKey,
+    messages: [] as ConversationMessage[],
+    input: "",
+    pending: false,
+  })
+  if (conversation.contextKey !== contextKey) {
+    setConversation({ contextKey, messages: [], input: "", pending: false })
+  }
+  const messages = conversation.contextKey === contextKey ? conversation.messages : EMPTY_MESSAGES
+  const input = conversation.contextKey === contextKey ? conversation.input : ""
+  const pendingRequestRef = useRef<{ contextKey: string } | null>(null)
+  const sidebarMessagesRef = useRef<HTMLDivElement>(null)
+  const sidebarFollowRef = useRef(true)
+  const sidebarWasOpenRef = useRef(false)
+  const sidebarLastMessageRef = useRef<string | null>(null)
 
   const load = useCallback(async () => {
     if (!id) throw new Error("No construct identifier in the route.")
@@ -106,23 +141,99 @@ export default function ResultsPage() {
       fetchConstruct(id, { route_id: routeId, scaffold_id: scaffoldId, linker_id: linkerId }),
       fetchConstructScaffolds(id),
     ])
-    return { reference, detail, candidates }
-  }, [id, routeId, scaffoldId, linkerId])
+    return { contextKey, reference, detail, candidates }
+  }, [id, routeId, scaffoldId, linkerId, contextKey])
 
-  const { data, loading, error, reload } = useAsync(load, [id, routeId, scaffoldId, linkerId])
+  const { data, loading, refreshing, error, reload } = useAsync(load, [id, routeId, scaffoldId, linkerId])
+  const aiStatus = useAsync(fetchChatStatus, [])
+  const aiReady = aiStatus.data?.llm_configured === true && !aiStatus.error
 
   const chat = useAsyncAction(
-    (constructId: string, message: string, route: string | null, history: ApiChatMessage[]) =>
-      sendChat(constructId, { message, route_id: route, history }),
+    async (constructId: string, message: string, history: ApiChatMessage[]) => {
+      const response = await sendChat(constructId, {
+        message,
+        mode: "ai",
+        route_id: routeId,
+        scaffold_id: scaffoldId,
+        linker_id: linkerId,
+        history,
+      })
+      if (response.context_key !== contextKey) {
+        throw new ApiError(
+          "invalid_response",
+          "The answer does not match the current selection. Please ask again.",
+        )
+      }
+      if (response.provider !== "llm") {
+        throw new ApiError(
+          "server",
+          "AI did not return a response. Check the model connection and try again. You can view the records separately.",
+        )
+      }
+      return response
+    },
   )
+  const records = useAsyncAction(async (constructId: string) => {
+    const response = await sendChat(constructId, {
+      message: "Show the records and sources for the current selection.",
+      mode: "record",
+      route_id: routeId,
+      scaffold_id: scaffoldId,
+      linker_id: linkerId,
+    })
+    if (response.context_key !== contextKey) {
+      throw new ApiError("invalid_response", "The records do not match the current selection. Please try again.")
+    }
+    return response
+  })
+  const resetChat = chat.reset
+  const resetRecords = records.reset
+  const lastAnswer = chat.data?.context_key === contextKey ? chat.data : null
+  const recordResponse = records.data?.context_key === contextKey ? records.data : null
+  const chatPending = conversation.contextKey === contextKey && conversation.pending
+  const chatError = conversation.contextKey === contextKey ? chat.error : null
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    // Resetting invalidates callbacks from the previous selection. The state adjustment
+    // above already isolated the transcript before this effect runs.
+    pendingRequestRef.current = null
+    resetChat()
+    resetRecords()
+  }, [contextKey, resetChat, resetRecords])
+
+  const setInput = (value: string) => {
+    setConversation((current) => ({
+      contextKey,
+      messages: current.contextKey === contextKey ? current.messages : [],
+      input: value,
+      pending: current.contextKey === contextKey && current.pending,
+    }))
+  }
+
+  useEffect(() => {
+    const opening = chatOpen && !sidebarWasOpenRef.current
+    sidebarWasOpenRef.current = chatOpen
+    const lastMessage = messages.at(-1)
+    const outgoing = lastMessage?.role === "user" && lastMessage.id !== sidebarLastMessageRef.current
+    sidebarLastMessageRef.current = lastMessage?.id ?? null
+    const container = sidebarMessagesRef.current
+    if (!chatOpen || !container) return
+    if (opening || sidebarFollowRef.current || outgoing) {
+      container.scrollTop = container.scrollHeight
+      sidebarFollowRef.current = true
+    }
+  }, [chatOpen, messages, chatPending, chatError])
 
   const handleSend = async () => {
     const text = input.trim()
-    if (!text || !id) return
+    if (
+      !text || !id || !aiReady || refreshing || data?.contextKey !== contextKey ||
+      pendingRequestRef.current?.contextKey === contextKey
+    ) return
+
+    // The ref blocks two Enter/click events in the same render, before pending state updates.
+    const ticket = { contextKey }
+    pendingRequestRef.current = ticket
 
     const outgoing: ApiChatMessage = {
       id: `u-${Date.now()}`,
@@ -130,19 +241,53 @@ export default function ResultsPage() {
       content: text,
       timestamp: new Date().toISOString(),
       actions: [],
+      context_key: contextKey,
     }
     // The turns before this one travel as history; this question travels as the question. It
     // is shown in the transcript immediately — that is what the reader just typed — but it is
     // not also sent as history, or the model would read it twice and tend to answer the first
     // copy, the one with no fact block under it.
-    setMessages([...messages, outgoing])
-    setInput("")
+    setConversation({ contextKey, messages: [...messages, outgoing], input: "", pending: true })
 
-    const response = await chat.run(id, text, routeId, messages)
-    if (response) setMessages((current) => [...current, response.message])
+    const history = messages.slice(-6).map((message): ApiChatMessage => ({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      timestamp: message.timestamp,
+      actions: [],
+      context_key: message.context_key,
+    }))
+    try {
+      const response = await chat.run(id, text, history)
+      if (!response) return
+      setConversation((current) => current.contextKey === contextKey ? {
+        ...current,
+        messages: [...current.messages, {
+          ...response.message,
+          provider: response.provider,
+          answer: {
+            provider: response.provider,
+            fallback_reason: response.fallback_reason,
+            model: response.model,
+          },
+        }],
+      } : current)
+    } finally {
+      if (pendingRequestRef.current === ticket) {
+        pendingRequestRef.current = null
+        setConversation((current) => current.contextKey === contextKey
+          ? { ...current, pending: false }
+          : current)
+      }
+    }
   }
 
-  if (loading) {
+  const handleViewRecords = () => {
+    if (!id || refreshing || data?.contextKey !== contextKey || records.pending) return
+    void records.run(id)
+  }
+
+  if (loading || (!error && data?.contextKey !== contextKey)) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-6">
         <Skeleton className="h-24 w-full" />
@@ -311,15 +456,24 @@ export default function ResultsPage() {
             )}
 
             <ChatBar
-              open={bottomChatOpen}
+              key={contextKey}
               messages={messages}
               input={input}
-              pending={chat.pending}
-              error={chat.error?.message ?? null}
+              pending={chatPending}
+              disabled={refreshing || !aiReady || chatOpen}
+              error={chatError?.message ?? null}
+              status={aiStatus.data}
+              statusLoading={aiStatus.loading || aiStatus.refreshing}
+              statusError={Boolean(aiStatus.error)}
+              onCheckStatus={aiStatus.reload}
+              recordResponse={recordResponse}
+              recordsPending={records.pending}
+              recordsError={records.error?.message ?? null}
+              onViewRecords={handleViewRecords}
               onInput={setInput}
-              onOpen={() => setBottomChatOpen(true)}
+              onExpand={() => setChatOpen(true)}
               onSend={handleSend}
-              placeholder={`Ask about ${detail.name} — scoring, gates, expression strategy…`}
+              placeholder={chatOpen ? "Continue in the side panel…" : aiReady ? `Ask AI about ${detail.name}…` : "Connect AI to start a conversation"}
             />
           </div>
 
@@ -332,7 +486,7 @@ export default function ResultsPage() {
                 onClick={() => setChatOpen(true)}
               >
                 <Bot className="w-5 h-5" />
-                Open AI Sidebar
+                Open AI conversation
                 <MessageSquare className="w-4 h-4" />
               </Button>
             )}
@@ -398,23 +552,22 @@ export default function ResultsPage() {
       </div>
 
       {chatOpen && (
-        <div className="fixed inset-y-0 right-0 z-30 w-full sm:w-96 lg:w-[420px] bg-white border-l border-gray-200 shadow-2xl flex flex-col">
+        <div className="fixed inset-y-0 right-0 z-[60] w-full sm:w-96 lg:w-[420px] bg-white border-l border-gray-200 shadow-2xl flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg gradient-accent flex items-center justify-center">
                 <Bot className="w-4 h-4 text-white" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-primary-900">PeptiCraft Agent</h3>
+                <h3 className="text-sm font-semibold text-primary-900">PeptiCraft AI</h3>
                 <p className="text-xs text-gray-400">
-                  {chat.data?.llm_configured === false || chat.data === null
-                    ? "Template answers from this construct's record"
-                    : "Experiment decision support"}
+                  Conversation with records and sources
                 </p>
               </div>
             </div>
             <button
               onClick={() => setChatOpen(false)}
+              aria-label="Close AI sidebar"
               className="p-1.5 rounded-lg hover:bg-surface-alt transition-colors text-gray-400 hover:text-gray-600 cursor-pointer"
             >
               <X className="w-4 h-4" />
@@ -428,32 +581,57 @@ export default function ResultsPage() {
               <span>Composite {formatScore(detail.scores.composite)}</span>
               <span>·</span>
               <span>{activeRouteName}</span>
+              <span>·</span>
+              <span>{detail.scaffold?.short_name ?? "Scaffold unassigned"}</span>
+              <span>·</span>
+              <span>{detail.linker?.name ?? "No linker"}</span>
             </div>
+            <ChatAvailability
+              status={aiStatus.data}
+              loading={aiStatus.loading || aiStatus.refreshing}
+              error={Boolean(aiStatus.error)}
+              onCheck={aiStatus.reload}
+            />
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <RecordReference
+              key={contextKey}
+              response={recordResponse}
+              pending={records.pending}
+              disabled={refreshing}
+              error={records.error?.message ?? null}
+              onView={handleViewRecords}
+            />
+          </div>
+          <div
+            ref={sidebarMessagesRef}
+            role="log"
+            aria-label="Side panel conversation"
+            onScroll={(event) => {
+              const container = event.currentTarget
+              sidebarFollowRef.current = container.scrollHeight - container.scrollTop - container.clientHeight < 48
+            }}
+            className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4"
+          >
             {messages.length === 0 && (
               <div className="text-xs text-gray-400 leading-relaxed">
-                {chat.data?.llm_configured
-                  ? "Answers are written by a language model from this construct's record. Every " +
-                    "figure it quotes is a field shown on this page; it is asked not to produce a " +
-                    "number the record does not carry. The record itself does not change — the " +
-                    "immunogenicity gate and the composite move with the route, so the same " +
-                    "question can have a different correct answer under another one."
-                  : "Answers are derived from this construct's own record, so the same question " +
-                    "under the same route describes the same numbers every time. The " +
-                    "immunogenicity gate and the composite move with the route, so the same " +
-                    "question can have a different correct answer under another one."}
+                {aiReady
+                  ? "Ask AI a question or follow up on a previous answer. It can explain this selection, compare tradeoffs and discuss next steps using the available evidence."
+                  : "An AI model connection is required for conversation. View records to inspect the current selection and its sources."}
+                <p className="mt-3">
+                  Changing the construct, route, scaffold or linker starts a new conversation.
+                </p>
               </div>
             )}
             {messages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
-            {chat.pending && <ThinkingBubble />}
-            {chat.error && <ErrorState error={chat.error} compact />}
-            {chat.data && chat.data.suggested_questions.length > 0 && (
+            {chatPending && <ThinkingBubble />}
+            {chatError && <ErrorState error={chatError} compact />}
+            {lastAnswer && lastAnswer.suggested_questions.length > 0 && (
               <div className="space-y-1.5">
-                {chat.data.suggested_questions.map((question) => (
+                {lastAnswer.suggested_questions.map((question) => (
                   <button
                     key={question}
                     onClick={() => setInput(question)}
@@ -464,7 +642,6 @@ export default function ResultsPage() {
                 ))}
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
 
           <div className="px-4 py-3 border-t border-gray-200">
@@ -472,16 +649,25 @@ export default function ResultsPage() {
               <input
                 type="text"
                 value={input}
+                disabled={!aiReady || refreshing}
                 onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => event.key === "Enter" && handleSend()}
-                placeholder="Ask about this construct…"
-                className="flex-1 h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.nativeEvent.isComposing && !chatPending) {
+                    event.preventDefault()
+                    void handleSend()
+                  }
+                }}
+                maxLength={2000}
+                aria-label="Question about this construct"
+                placeholder={aiReady ? "Ask AI about this construct…" : "AI connection required"}
+                className="flex-1 min-w-0 h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all disabled:bg-gray-100 disabled:text-gray-400"
               />
               <Button
                 variant="gradient"
                 size="icon"
                 onClick={handleSend}
-                disabled={!input.trim() || chat.pending}
+                disabled={!input.trim() || chatPending || refreshing || !aiReady}
+                aria-label="Send to AI"
               >
                 <Send className="w-4 h-4" />
               </Button>
@@ -492,7 +678,7 @@ export default function ResultsPage() {
 
       {chatOpen && (
         <div
-          className="fixed inset-0 bg-black/20 z-20 sm:hidden"
+          className="fixed inset-0 bg-black/20 z-[55] sm:hidden"
           onClick={() => setChatOpen(false)}
         />
       )}
@@ -823,6 +1009,31 @@ function ConstructTab({
 
       <Card>
         <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FlaskConical className="w-5 h-5 text-primary-500" />
+            Expression system
+          </CardTitle>
+          <CardDescription>
+            What the scaffold sheet records for building this construct: the host, the vector the
+            source itself names, and the basis for that choice. A property of the scaffold, not a
+            prediction from the peptide.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {detail.scaffold?.expression ? (
+            <ExpressionBlock expression={detail.scaffold.expression} />
+          ) : (
+            <p className="text-sm text-gray-500">
+              {detail.scaffold
+                ? `No expression recommendation is recorded for ${detail.scaffold.short_name}.`
+                : "This construct has no scaffold, so there is no expression recommendation to state."}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Composite by application route</CardTitle>
           <CardDescription>
             The same construct under each route's weighting profile. Immunogenicity is a property
@@ -1001,6 +1212,33 @@ function ScaffoldTab({
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FlaskConical className="w-5 h-5 text-primary-500" />
+            Expression system
+          </CardTitle>
+          <CardDescription>
+            The host and vector the patent record states for this scaffold. The recommendation
+            belongs to the sequence the assembly uses, so a scaffold swapped above changes it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {detail.scaffold?.expression ? (
+            <ExpressionBlock expression={detail.scaffold.expression} />
+          ) : (
+            <p className="text-sm text-gray-500">
+              The scaffold sheet states no expression system for this scaffold.
+            </p>
+          )}
+          <p className="text-[11px] text-gray-400 leading-relaxed mt-3 pt-3 border-t border-gray-100">
+            The vector recorded in the source and the vector recommended are separate fields on
+            purpose: a patent can name a vector it does not propose to reuse, and
+            &ldquo;无明确推荐&rdquo; is the source's conclusion rather than a gap in the data.
+          </p>
         </CardContent>
       </Card>
 
@@ -1199,83 +1437,232 @@ function LinkerTab({
 // ════════════════════════════════════════════════════════════════════════════
 
 function ChatBar({
-  open,
   messages,
   input,
   pending,
+  disabled,
   error,
+  status,
+  statusLoading,
+  statusError,
+  onCheckStatus,
+  recordResponse,
+  recordsPending,
+  recordsError,
+  onViewRecords,
   onInput,
-  onOpen,
+  onExpand,
   onSend,
   placeholder,
 }: {
-  open: boolean
-  messages: ApiChatMessage[]
+  messages: ConversationMessage[]
   input: string
   pending: boolean
+  disabled: boolean
   error: string | null
+  status: ChatStatus | null
+  statusLoading: boolean
+  statusError: boolean
+  onCheckStatus: () => void
+  recordResponse: ChatResponse | null
+  recordsPending: boolean
+  recordsError: string | null
+  onViewRecords: () => void
   onInput: (value: string) => void
-  onOpen: () => void
+  onExpand: () => void
   onSend: () => void
   placeholder: string
 }) {
+  const transcriptRef = useRef<HTMLDivElement>(null)
+  const followRef = useRef(true)
+  const lastMessageRef = useRef<string | null>(null)
+  useEffect(() => {
+    const lastMessage = messages.at(-1)
+    const outgoing = lastMessage?.role === "user" && lastMessage.id !== lastMessageRef.current
+    lastMessageRef.current = lastMessage?.id ?? null
+    const container = transcriptRef.current
+    if (container && (followRef.current || outgoing)) {
+      container.scrollTop = container.scrollHeight
+      followRef.current = true
+    }
+  }, [messages, pending, error])
+
   return (
-    <div className="border border-accent-200 bg-gradient-to-r from-accent-50 to-white rounded-xl p-4">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg gradient-accent flex items-center justify-center flex-shrink-0">
-          <Bot className="w-4 h-4 text-white" />
+    <section aria-label="AI conversation" className="border border-accent-200 bg-accent-50/50 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 pt-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg gradient-accent flex items-center justify-center">
+            <Bot className="w-4 h-4 text-white" />
+          </div>
+          <h3 className="text-sm font-semibold text-primary-900">AI conversation</h3>
         </div>
-        <div className="flex-1">
+        <Button variant="ghost" size="sm" onClick={onExpand}>
+          <MessageSquare className="w-3.5 h-3.5" />
+          Open side panel
+        </Button>
+      </div>
+      <div className="px-4 pb-3 space-y-3">
+        <ChatAvailability status={status} loading={statusLoading} error={statusError} onCheck={onCheckStatus} />
+        <RecordReference
+          response={recordResponse}
+          pending={recordsPending}
+          disabled={pending}
+          error={recordsError}
+          onView={onViewRecords}
+          compact
+        />
+      </div>
+
+      <div
+        ref={transcriptRef}
+        role="log"
+        aria-label="Conversation history"
+        onScroll={(event) => {
+          const container = event.currentTarget
+          followRef.current = container.scrollHeight - container.scrollTop - container.clientHeight < 48
+        }}
+        className="min-h-40 max-h-[28rem] overflow-y-auto border-y border-accent-100 bg-white px-4 py-4 space-y-3"
+      >
+        {messages.length === 0 && (
+          <p className="text-sm text-gray-400 py-8 text-center">
+            Ask about this selection, its evidence or what to check next.
+          </p>
+        )}
+        {messages.map((message) => <MessageBubble key={message.id} message={message} compact />)}
+        {pending && <ThinkingBubble compact />}
+        {error && <p className="text-xs text-red-600" role="alert">{error}</p>}
+      </div>
+
+      <div className="flex items-center gap-2 p-4 bg-white">
+        <div className="flex-1 min-w-0">
           <input
             type="text"
             value={input}
+            disabled={disabled}
             onChange={(event) => onInput(event.target.value)}
-            onFocus={onOpen}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                onOpen()
+              if (event.key === "Enter" && !event.nativeEvent.isComposing && !pending && !disabled) {
+                event.preventDefault()
                 onSend()
               }
             }}
             placeholder={placeholder}
-            className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-400 focus:border-transparent transition-all"
+            maxLength={2000}
+            aria-label="Question about this construct"
+            className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-400 focus:border-transparent transition-all disabled:bg-gray-100 disabled:text-gray-400"
           />
         </div>
         <Button
           variant="gradient"
           size="icon"
-          onClick={() => {
-            onOpen()
-            onSend()
-          }}
-          disabled={!input.trim() || pending}
+          onClick={onSend}
+          disabled={!input.trim() || pending || disabled}
+          aria-label="Send to AI"
         >
           {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </Button>
       </div>
+    </section>
+  )
+}
 
-      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
-
-      {open && messages.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-gray-100 max-h-80 overflow-y-auto space-y-3">
-          {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} compact />
-          ))}
-          {pending && <ThinkingBubble compact />}
-        </div>
+function ChatAvailability({ status, loading, error, onCheck }: {
+  status: ChatStatus | null
+  loading: boolean
+  error: boolean
+  onCheck: () => void
+}) {
+  const configured = status?.llm_configured === true && !error
+  return (
+    <div className="text-[11px] leading-relaxed mt-2" role="status">
+      <p className={configured ? "text-accent-700" : "text-amber-700"}>
+        {loading
+          ? "Checking AI availability…"
+          : error
+            ? "AI availability could not be checked. Conversation is unavailable."
+            : configured
+              ? `AI configured${status.model ? ` · ${status.model}` : ""}. Send a message to start a conversation.`
+              : "No AI model is configured. Add a model connection to enable conversation."}
+      </p>
+      {!configured && !loading && (
+        <p className="text-gray-500 mt-1">
+          Configure the model on the server, then{" "}
+          <button onClick={onCheck} className="text-primary-700 underline cursor-pointer">refresh AI status</button>.
+        </p>
       )}
     </div>
   )
+}
+
+function RecordReference({ response, pending, disabled, error, onView, compact }: {
+  response: ChatResponse | null
+  pending: boolean
+  disabled: boolean
+  error: string | null
+  onView: () => void
+  compact?: boolean
+}) {
+  return (
+    <details
+      className="group rounded-lg border border-gray-200 bg-white"
+      onToggle={(event) => {
+        if (event.currentTarget.open && !response && !pending && !disabled) onView()
+      }}
+    >
+      <summary className="flex items-center gap-2 p-3 text-xs cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <BarChart3 className="w-3.5 h-3.5 text-primary-600 flex-shrink-0" />
+        <span className="font-semibold text-primary-800">Record reference</span>
+        <span className="text-gray-400 hidden sm:inline">Stored facts · no AI generation</span>
+        <ChevronRight className="w-3.5 h-3.5 ml-auto text-gray-400 transition-transform group-open:rotate-90" />
+      </summary>
+      <div className="border-t border-gray-100 p-3 space-y-3 max-h-64 overflow-y-auto">
+        {pending && <p className="text-xs text-gray-500" role="status">Loading records…</p>}
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        {response && (
+          <MessageBubble message={{ ...response.message, provider: "template" }} compact={compact} />
+        )}
+        {!pending && (
+          <Button variant="outline" size="sm" disabled={disabled} onClick={onView}>
+            {response ? "Refresh records" : "Load records"}
+          </Button>
+        )}
+      </div>
+    </details>
+  )
+}
+
+/** Source links come from data, so they cannot introduce script or local-file URLs. */
+function safeSourceUrl(value: string | null | undefined): string | null {
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null
+  } catch {
+    return null
+  }
 }
 
 function MessageBubble({
   message,
   compact,
 }: {
-  message: ApiChatMessage
+  message: ConversationMessage
   compact?: boolean
 }) {
   const isUser = message.role === "user"
+  const provider = message.answer?.provider ?? message.provider
+  const evidence = message.evidence ?? []
+  const sources = evidence.filter((item) => item.kind === "source")
+  const records = evidence.filter((item) => item.kind === "record")
+  const limitations = evidence.filter((item) => item.kind === "limitation")
+  const fallback = message.answer?.fallback_reason
+  const answerLabel = provider === "llm"
+    ? "AI response"
+    : fallback === "model_unavailable"
+      ? "Model unavailable · record-based answer"
+      : fallback === "invalid_output"
+        ? "Model answer could not be verified · record-based answer"
+        : provider === "template" ? "Record reference · no AI generation" : "Answer"
   return (
     <div className={cn("flex gap-2", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
@@ -1285,19 +1672,102 @@ function MessageBubble({
             compact ? "w-6 h-6" : "w-7 h-7 mt-1",
           )}
         >
-          <Bot className={compact ? "w-3 h-3 text-white" : "w-3.5 h-3.5 text-white"} />
+          {provider === "template"
+            ? <BarChart3 className={compact ? "w-3 h-3 text-white" : "w-3.5 h-3.5 text-white"} />
+            : <Bot className={compact ? "w-3 h-3 text-white" : "w-3.5 h-3.5 text-white"} />}
         </div>
       )}
       <div
         className={cn(
-          "max-w-[85%] rounded-xl px-3 py-2 leading-relaxed whitespace-pre-line",
+          "min-w-0 max-w-[85%] rounded-xl px-3 py-2 leading-relaxed",
           compact ? "text-xs" : "text-sm",
           isUser
             ? "bg-primary-500 text-white rounded-br-sm"
             : "bg-surface-alt text-primary-800 rounded-bl-sm",
         )}
       >
-        {message.content}
+        {!isUser && (
+          <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] leading-relaxed">
+            <span className={cn("font-semibold", fallback && fallback !== "not_configured" ? "text-amber-700" : "text-primary-600")}>
+              {answerLabel}
+            </span>
+            {provider === "llm" && message.answer?.model && (
+              <span className="text-gray-500 break-all">{message.answer.model}</span>
+            )}
+          </div>
+        )}
+        {isUser || provider !== "llm"
+          ? <p className="whitespace-pre-line break-words">{message.content}</p>
+          : (
+            <Suspense fallback={<p className="whitespace-pre-line break-words">{message.content}</p>}>
+              <ChatMarkdown content={message.content} />
+            </Suspense>
+          )}
+        {!isUser && sources.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Sources">
+            {sources.map((source) => {
+              const url = safeSourceUrl(source.url)
+              return url ? (
+                <a
+                  key={source.id}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex max-w-full items-center gap-1 rounded-md border border-primary-200 bg-white px-2 py-1 text-[11px] text-primary-700 hover:border-primary-400 hover:underline"
+                  title={source.text}
+                >
+                  <span className="break-words">{source.label}</span>
+                  <ExternalLink className="w-3 h-3 shrink-0" />
+                </a>
+              ) : (
+                <span key={source.id} className="text-[11px] text-gray-600">{source.label}</span>
+              )
+            })}
+          </div>
+        )}
+        {!isUser && records.length > 0 && (
+          <details className="mt-3 border-t border-gray-200 pt-2 text-[11px]">
+            <summary className="cursor-pointer font-medium text-primary-600">
+              Record evidence ({records.length})
+            </summary>
+            <ul className="mt-2 space-y-2">
+              {records.map((item) => (
+                <li key={item.id}>
+                  <span className="font-medium">{item.label}</span>
+                  <p className="mt-0.5 text-gray-600 whitespace-pre-line break-words">{item.text}</p>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+        {!isUser && limitations.length > 0 && (
+          <details className="mt-2 border-t border-gray-200 pt-2 text-[11px]">
+            <summary className="cursor-pointer font-medium text-amber-700">
+              Limitations ({limitations.length})
+            </summary>
+            <ul className="mt-2 space-y-2 text-gray-600">
+              {limitations.map((item) => {
+                const url = safeSourceUrl(item.url)
+                return (
+                  <li key={item.id} className="whitespace-pre-line break-words">
+                    {item.text}
+                    {url && (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${item.label} source`}
+                        className="mt-1 flex w-fit items-center gap-1 text-primary-700 hover:underline"
+                      >
+                        Source <ExternalLink className="w-3 h-3 shrink-0" />
+                      </a>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </details>
+        )}
       </div>
     </div>
   )

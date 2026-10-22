@@ -230,6 +230,78 @@ function ensureRouteTables(): Promise<void> {
   return routeTablesPromise
 }
 
+interface ExportedSafetyGate {
+  key: string
+  threshold: number
+  threshold_source: string
+  note?: string | null
+  value: number | null
+  passed: boolean | null
+  is_veto_gate: boolean
+}
+
+interface ExportedSafety {
+  route_id: string
+  verdict: string
+  immunogenicity_threshold: number
+  gates: ExportedSafetyGate[]
+  unassessed: string[]
+  vetoed_by: string[]
+}
+
+interface ExportedRouteContext {
+  composite: number | null
+  safety: ExportedSafety
+}
+
+class StaticDataUnavailable extends Error {}
+
+/** Validate the service-authored result; the browser never recalculates its safety decision. */
+function validRouteContext(value: unknown, routeId: string): value is ExportedRouteContext {
+  if (!value || typeof value !== "object") return false
+  const context = value as ExportedRouteContext
+  const safety = context.safety
+  return Object.hasOwn(context, "composite") &&
+    (context.composite === null || (typeof context.composite === "number" && Number.isFinite(context.composite))) &&
+    Boolean(safety && safety.route_id === routeId &&
+      ["clear", "borderline", "vetoed", "indeterminate"].includes(safety.verdict) &&
+      Number.isFinite(safety.immunogenicity_threshold) &&
+      Array.isArray(safety.gates) && Array.isArray(safety.unassessed) && Array.isArray(safety.vetoed_by) &&
+      ["toxicity", "hemolysis", "immunogenicity"].every((key) => safety.gates.some((gate) =>
+        gate?.key === key && gate.is_veto_gate === true && Number.isFinite(gate.threshold) &&
+        (gate.value === null || (typeof gate.value === "number" && Number.isFinite(gate.value))) &&
+        (gate.passed === null || typeof gate.passed === "boolean"),
+      )))
+}
+
+function applyExportedRoute(detail: Record<string, unknown>, routeId: string): Record<string, unknown> {
+  const contexts = detail.route_contexts as Record<string, unknown> | undefined
+  const context = contexts?.[routeId]
+  if (!validRouteContext(context, routeId)) {
+    const stored = detail.safety as { route_id?: string } | undefined
+    // Legacy snapshots are useful for their own default route, but cannot supply another
+    // route's thresholds or gate table. A composite/verdict-only substitution is insufficient.
+    if (!Object.hasOwn(detail, "route_contexts") && stored?.route_id === routeId) return detail
+    throw new StaticDataUnavailable(`The exported safety context for ${routeId} is missing or incomplete.`)
+  }
+  const scores = (detail.scores ?? {}) as Record<string, unknown>
+  const scoreMeta = (detail.score_meta ?? {}) as Record<string, unknown>
+  const immuneMeta = scoreMeta.immunogenicity as Record<string, unknown> | undefined
+  const immuneGate = context.safety.gates.find((gate) => gate.key === "immunogenicity")!
+  return {
+    ...detail, composite: context.composite,
+    scores: { ...scores, composite: context.composite },
+    safety: context.safety, safety_verdict: context.safety.verdict,
+    score_meta: {
+      ...scoreMeta,
+      ...(immuneMeta ? { immunogenicity: {
+        ...immuneMeta,
+        applied_threshold: { value: immuneGate.threshold, source: immuneGate.threshold_source, note: immuneGate.note ?? null },
+      } } : {}),
+    },
+  }
+}
+
 /**
  * The composite under each route, substituted into a summary row.
  *
@@ -447,6 +519,16 @@ interface ExportedScaffold {
   material_forms?: string[]
   max_evidence?: string | null
   has_sequence?: boolean
+  /** Carried only by a cluster whose source sheet states one; the two fixture scaffolds have
+   *  no expression columns at all and resolve to the same `null` the service reports. */
+  expression?: {
+    system: string | null
+    vector_recorded: string | null
+    vector_recommended: string | null
+    rationale: string | null
+    source_url: string | null
+    sequence_id: string | null
+  } | null
   sequences?: { sequence?: string }[]
 }
 
@@ -479,6 +561,7 @@ function scaffoldSummary(file: ExportedScaffold): Record<string, unknown> {
     route_ids: file.route_ids ?? [],
     material_forms: file.material_forms ?? [],
     max_evidence: file.max_evidence ?? null,
+    expression: file.expression ?? null,
     has_sequence: file.has_sequence ?? false,
   }
 }
@@ -696,30 +779,12 @@ async function handle(request: StaticRequest): Promise<Handled | null> {
       const loaded = await loadJson<Record<string, unknown>>(`constructs/${id}.json`)
       if (!loaded) return { payload: null, keyed: true }
 
-      // The detail's own `composite` and `safety` follow the first declared route. When the
-      // page asks for another, both are replaced from the per-route tables so the numbers on
-      // the page and the route shown beside them cannot disagree.
+      // Use the service's complete per-route result. Substituting only composite/verdict
+      // leaves the nested gate table and its threshold labels on the default route.
       let payload = loaded
       const routeId = one(params, "route_id")
       if (routeId) {
-        await ensureRouteTables()
-        const composite = compositeTable?.[id]?.[routeId]
-        const verdict = verdictTable?.[id]?.[routeId]
-        if (composite !== undefined || verdict !== undefined) {
-          const scores = (loaded.scores ?? {}) as Record<string, unknown>
-          // The two tables are written by different loops — the composite only for a route the
-          // service computed one under, the verdict for every route — so one can name a route
-          // the other does not. Each field falls back on its own: a route with a new verdict and
-          // no new composite keeps the composite it already had, at the top level and inside
-          // `scores`, rather than having the latter overwritten with `undefined`.
-          const shownComposite = composite === undefined ? scores.composite ?? null : composite
-          payload = {
-            ...loaded,
-            composite: shownComposite,
-            safety_verdict: verdict ?? loaded.safety_verdict,
-            scores: { ...scores, composite: shownComposite },
-          }
-        }
+        payload = applyExportedRoute(loaded, routeId)
       }
 
       // A reader who named a scaffold or a linker gets the fused sequence assembled from the
@@ -745,10 +810,23 @@ async function handle(request: StaticRequest): Promise<Handled | null> {
 
     const analysis = /^\/api\/constructs\/(con_\d+)\/analysis$/.exec(path)
     if (analysis) {
-      // One prose export per construct. The safety paragraph is the only block whose wording
-      // moves with the route, and the route-specific verdict and threshold travel separately in
-      // `verdicts.json` and in the detail's own `safety`, so a reader on a non-default route
-      // sees the same six paragraphs with the right verdict already substituted on the page.
+      const routeId = one(params, "route_id")
+      if (routeId) {
+        const byRoute = await loadJson<Record<string, { route_id?: string; blocks?: unknown[] }>>(
+          `constructs/${analysis[1]}/analysis_by_route.json`,
+        )
+        const selected = byRoute?.[routeId]
+        if (selected?.route_id === routeId && Array.isArray(selected.blocks)) return { payload: selected, keyed: true }
+        if (byRoute === null) {
+          const detail = await loadJson<{ safety?: { route_id?: string } }>(`constructs/${analysis[1]}.json`)
+          if (!detail) return { payload: null, keyed: true }
+          if (detail.safety?.route_id === routeId) {
+            const legacy = await loadJson<Record<string, unknown>>(`constructs/${analysis[1]}/analysis.json`)
+            if (legacy) return { payload: { ...legacy, route_id: routeId }, keyed: true }
+          }
+        }
+        throw new StaticDataUnavailable(`The exported analysis for ${routeId} is missing or incomplete.`)
+      }
       return {
         payload: await loadJson(`constructs/${analysis[1]}/analysis.json`),
         keyed: true,
@@ -790,6 +868,7 @@ export interface StaticResult {
   covered: boolean
   /** What it holds. Null on a covered path means the record is not in the export. */
   payload: unknown
+  error?: { kind: "data_unavailable"; detail: string; hint: string }
 }
 
 export async function serveStaticResult(
@@ -807,7 +886,13 @@ export async function serveStaticResult(
     // record simply is not in it; anywhere else an empty result means the export has nothing
     // to say about this call, which is the ordinary fall-through.
     return { covered: handled.keyed === true, payload: null }
-  } catch {
+  } catch (error) {
+    if (error instanceof StaticDataUnavailable) {
+      return {
+        covered: true, payload: null,
+        error: { kind: "data_unavailable", detail: error.message, hint: "Refresh this deployment's static export before using this application route." },
+      }
+    }
     // A malformed or truncated export must not take the page down; the caller falls back to
     // the service, and if there is none the page reports an ordinary fetch failure.
     return { covered: false, payload: null }

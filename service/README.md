@@ -29,7 +29,7 @@ Configuration is read from environment variables or `.env`. `service/.env.exampl
 | `PG_POOL_MIN_SIZE`, `PG_POOL_MAX_SIZE`, `PG_POOL_TIMEOUT_S` | `1`, `8`, `15` | Lower and upper bounds of the connection pool. |
 | `API_HOST`, `API_PORT` | `127.0.0.1`, `8000` | Bind address. |
 | `CORS_ORIGINS` | Vite development server | Allowed origins, comma-separated. |
-| `ANALYSIS_PROVIDER` | `template` | `template` renders deterministic text from stored scores. `llm` is reserved for a model-backed generator and is not yet implemented; `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` belong to it. |
+| `ANALYSIS_PROVIDER` | `template` | Set `llm` with `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` to enable generated conversation. The model writes its own explanation, with validated fact references and evidence IDs. AI requests fail explicitly when the model is not configured or cannot answer; record summaries remain a separate, explicitly requested mode. |
 
 ## Where the data is
 
@@ -97,7 +97,7 @@ All are under `/api`. 18 reads, 1 write.
 | GET | `/api/constructs/{id}/scaffolds` | The scaffolds available for assembling this construct. |
 | GET | `/api/constructs/{id}/peptide` | The functional peptide and its score rows. |
 | GET | `/api/constructs/{id}/analysis` | A generated passage about the construct, for the specified `route_id`. |
-| POST | `/api/constructs/{id}/chat` | The conversational form of the analysis endpoint. The only endpoint that writes. |
+| POST | `/api/constructs/{id}/chat` | Generated conversation in `mode=ai`, or an explicitly requested record summary in `mode=record`, about the selected construct, route, scaffold and linker. AI errors never silently substitute a template answer. |
 | GET | `/api/build` | Ranks candidates for a `direction` and `route_id`, and assembles each into a fusion sequence. `scaffold_id` and `linker_id` are optional, and each changes only the sequence, not the ranking. |
 | GET | `/api/scaffolds` | The scaffold library. Filter parameters: `route_id`, `category`. |
 | GET | `/api/scaffolds/{id}` | A single scaffold cluster. |

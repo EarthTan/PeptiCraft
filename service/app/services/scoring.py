@@ -643,7 +643,10 @@ def evaluate_safety(
         ))
 
     tox_def = reference.TOOLS_BY_KEY["toxicity"]
-    add("toxicity", "Toxicity", tox_def.tool, scores.toxicity, tox_def.threshold, "tool")
+    add(
+        "toxicity", "Toxicity", tox_def.tool, scores.toxicity, tox_def.threshold,
+        tox_def.threshold_source or "tool", note=tox_def.threshold_note,
+    )
 
     hemo_def = reference.TOOLS_BY_KEY["hemolysis"]
     add("hemolysis", "Haemolysis", hemo_def.tool, scores.hemolysis, hemo_def.threshold, "tool")

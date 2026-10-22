@@ -33,9 +33,10 @@ What gets written
     linkers/all.json           both linker tables
     linkers/<id>.json          one linker detail each
     constructs.json            every construct summary, one flat list
-    constructs/<id>.json       one construct detail, with all five routes' composites
+    constructs/<id>.json       one construct detail, plus authoritative route_contexts
     constructs/<id>/scaffolds.json
     constructs/<id>/analysis.json       the six standing prose blocks
+    constructs/<id>/analysis_by_route.json  complete analyses keyed by application route
     composites.json            the composite per construct per route
     verdicts.json              the safety verdict per construct per route
     assembly.json              which parts each route admits, plus one worked example
@@ -274,38 +275,52 @@ class Exporter:
             "items": [s.model_dump(mode="json") for s in summaries],
         })
 
+        # This cache belongs to one export only. The running API still reads live peer data;
+        # repeated constructs in a direction reuse the same route-specific export snapshot.
+        peers_by_context: dict[tuple[str, str], list[dict]] = {}
+
         for row in rows:
             public_id = construct_service.public_id(row["id"])
-            detail = construct_service.build_detail(
-                row,
-                enriched.get(row["peptide_id"], {}),
-                route_id=None,
-            )
-            self.write(f"constructs/{public_id}.json", _dump(detail))
+            details_by_route = {
+                route.id: construct_service.build_detail(
+                    row, enriched.get(row["peptide_id"], {}), route_id=route.id,
+                )
+                for route in reference.ROUTES
+            }
+            default_route_id = reference.ROUTES[0].id
+            exported_detail = _dump(details_by_route[default_route_id])
+            # Export-only metadata: leave the API model unchanged while giving the browser
+            # the exact safety gates, thresholds and composite the API computed per route.
+            exported_detail["route_contexts"] = {
+                route_id: {"composite": detail.composite, "safety": _dump(detail.safety)}
+                for route_id, detail in details_by_route.items()
+            }
+            self.write(f"constructs/{public_id}.json", exported_detail)
             candidates = construct_service.scaffold_candidates(row)
             self.write(
                 f"constructs/{public_id}/scaffolds.json",
                 [_dump(c) for c in candidates],
             )
-            # The analysis prose is written once, under the first declared route. It is the only prose
-            # block whose text moves with the route — the safety paragraph quotes the route's
-            # immunogenicity threshold — and that difference is carried by `verdicts.json` and
-            # the detail's own `safety`, both of which the interface already reads. Exporting
-            # five near-identical copies per construct would add roughly eleven megabytes and
-            # three thousand files to say the same thing five times.
-            provider, blocks = analysis_service.build_response(
-                construct_service.build_detail(
-                    row, enriched.get(row["peptide_id"], {}), route_id=None
+            analyses_by_route: dict[str, Any] = {}
+            for route_id, detail in details_by_route.items():
+                context = (detail.direction, route_id)
+                if context not in peers_by_context:
+                    peers_by_context[context] = analysis_service._direction_peers(
+                        detail.direction, limit=5, route_id=route_id,
+                    )
+                provider, blocks = analysis_service.build_response(
+                    detail, peers=peers_by_context[context],
                 )
-            )
+                analyses_by_route[route_id] = _dump(AnalysisResponse(
+                    construct_id=public_id, provider=provider,
+                    route_id=route_id, blocks=blocks,
+                ))
             self.write(
                 f"constructs/{public_id}/analysis.json",
-                _dump(AnalysisResponse(
-                    construct_id=public_id,
-                    provider=provider,
-                    route_id=None,
-                    blocks=blocks,
-                )),
+                analyses_by_route[default_route_id],
+            )
+            self.write(
+                f"constructs/{public_id}/analysis_by_route.json", analyses_by_route,
             )
 
     def composites_by_route(self) -> None:

@@ -286,7 +286,15 @@ function ScoreCard({
  * generator is a deterministic template and the surface should not present that as model
  * output.
  */
-export function AnalysisBlocks({
+export function AnalysisBlocks(props: {
+  constructId: string
+  routeId: string | null
+  previewing?: boolean
+}) {
+  return <AnalysisBlocksForContext key={JSON.stringify([props.constructId, props.routeId])} {...props} />
+}
+
+function AnalysisBlocksForContext({
   constructId,
   routeId,
   previewing = false,

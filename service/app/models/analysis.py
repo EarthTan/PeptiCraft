@@ -12,6 +12,8 @@ that a reviewer can tell deterministic prose from model output.
 """
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 # How much of a conversation is kept. The interface sends every turn it has, and only the last
@@ -20,17 +22,11 @@ MAX_HISTORY_TURNS = 50
 
 
 class ExpressionPlan(BaseModel):
-    """The recommended host-to-purification path for one construct.
+    """Legacy expression-plan shape retained for existing stored exports.
 
-    Not a record, and the distinction is the point. No construct in the dataset carries an
-    expression host, a vector or an induction condition, so this object is derived in
-    `TemplateGenerator._expression_plan` from the peptide's predicted properties, its
-    composition and — when one is bound — the carrier's class and length.
-
-    Carried as structure beside the prose because the four decisions a reader acts on are
-    host, vector, induction and purification. A chip row can be scanned; a paragraph has to be
-    read. The prose on the same block carries the reasoning and the rule that produced each
-    value, so the two cannot disagree.
+    New analysis blocks leave this null: scaffold evidence does not establish induction or
+    purification conditions for a newly assembled fusion, so unknown parameters are not filled
+    by composition-based rules.
     """
 
     host: str
@@ -85,16 +81,27 @@ class ChatAction(BaseModel):
     variant: str = "default"
 
 
+class ChatEvidence(BaseModel):
+    """A rendered claim and the exact field or source that supports it."""
+
+    id: str
+    label: str
+    text: str
+    kind: Literal["record", "source", "limitation"]
+    field: str | None = None
+    url: str | None = None
+
+
 class ChatMessage(BaseModel):
     id: str
     role: str = Field(description="`user` or `assistant`.")
-    # Bounded because the value is echoed back to a model. A question is capped at 2,000
-    # characters on the request, and an answer at 700 output tokens, which is under this in
-    # either language; the ceiling exists for a client that sends something else, not for the
-    # interface, which cannot reach it.
+    # Both generated answers and any history sent back by a client are bounded.
     content: str = Field(max_length=4000)
     timestamp: str
     actions: list[ChatAction] = Field(default_factory=list)
+    provider: Literal["llm", "template"] | None = None
+    evidence: list[ChatEvidence] = Field(default_factory=list)
+    context_key: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -108,7 +115,10 @@ class ChatRequest(BaseModel):
 
     construct_id: str
     message: str = Field(min_length=1, max_length=2000)
+    mode: Literal["ai", "record"] = "ai"
     route_id: str | None = None
+    scaffold_id: str | None = None
+    linker_id: str | None = None
     history: list[ChatMessage] = Field(default_factory=list)
 
     @field_validator("history", mode="before")
@@ -133,6 +143,9 @@ class ChatResponse(BaseModel):
     suggested_questions: list[str] = Field(default_factory=list)
     llm_configured: bool = Field(
         default=False,
-        description="False while the active generator is the deterministic template. "
-        "The chat surface uses it to avoid presenting template output as model output.",
+        description="Whether the model endpoint, key and model name are configured. "
+        "The per-message provider says whether this particular answer used the model.",
     )
+    context_key: str = ""
+    fallback_reason: Literal["not_configured", "model_unavailable", "invalid_output"] | None = None
+    model: str | None = None

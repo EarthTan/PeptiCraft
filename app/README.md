@@ -43,11 +43,15 @@ In this mode `/api` is forwarded to the backend, the frontend requests relative 
 npm run build     # type-check and emit the production bundle to dist/
 npm run preview   # serve the built bundle locally
 npm run lint      # oxlint
+npm run verify:dev-chat  # static chat and backend proxy HTTP regression checks
+npm run verify:markdown  # chat answer Markdown rendering checks
 ```
 
 The backend does not auto-reload while running. After changing backend code it has to be restarted manually.
 
-The two modes cover different endpoint sets. Chat is the only endpoint carried by POST and the static data does not provide it, so under `npm run dev` it cannot get an answer and is handled only in the deployed environment, by a Pages Function.
+Chat works in both development modes. Under `npm run dev`, Vite runs the same Pages Function used in production and reads its evidence from `public/data/`; no separate backend is needed. AI conversation requires a configured model. **View records** remains available separately, with source references and limitations. Under `npm run dev:api`, chat uses the Python service through the proxy; that service also requires `ANALYSIS_PROVIDER=llm`.
+
+To enable AI conversation during static development, set the server-side variables `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL` in the shell or in an ignored `app/.env.local`, then refresh the connection status on the page. The local handler reads these settings on each request. These variables stay on the server; do not rename them with a `VITE_` prefix. The model writes a response to the question and conversation history, with checked fact references and evidence IDs. Missing configuration and model failures are reported explicitly. **View records** is a separate action and never substitutes for an AI answer. Local requests are limited to 32 KB. `npm run preview` serves the built frontend and does not run the Pages Function.
 
 ## Routes
 
@@ -82,7 +86,7 @@ Two rules run through the frontend and have to be respected when changing it:
 
 ## Technology stack
 
-React 19 with TypeScript, built on Vite 8. Styling uses Tailwind CSS v4 with CSS-first `@theme` configuration; the component layer is built by hand on Radix UI primitives rather than using a generated component library. Routing uses `react-router-dom` v7, icons use Lucide, and linting uses Oxlint. The interface is in English throughout.
+React 19 with TypeScript, built on Vite 8. Styling uses Tailwind CSS v4 with CSS-first `@theme` configuration; the component layer is built by hand on Radix UI primitives rather than using a generated component library. Routing uses `react-router-dom` v7, icons use Lucide, and linting uses Oxlint. Model answers are rendered as Markdown through `react-markdown`, with `remark-gfm` for tables and `remark-breaks` so a line break written by the model stays a line break. The interface is in English throughout.
 
 ## Status
 

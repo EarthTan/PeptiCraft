@@ -35,6 +35,10 @@ import { serveStaticResult, staticAvailable, staticEnabled } from "./static"
 export type ApiErrorKind =
   | "network"
   | "database_unavailable"
+  | "data_unavailable"
+  | "llm_not_configured"
+  | "model_unavailable"
+  | "invalid_model_output"
   | "not_found"
   | "bad_request"
   | "server"
@@ -87,6 +91,10 @@ async function readErrorBody(response: Response): Promise<ErrorBody> {
 }
 
 function classify(status: number, body: ErrorBody): ApiErrorKind {
+  if (body.error === "llm_not_configured") return "llm_not_configured"
+  if (body.error === "model_unavailable") return "model_unavailable"
+  if (body.error === "invalid_model_output") return "invalid_model_output"
+  if (body.error === "data_unavailable") return "data_unavailable"
   if (body.error === "database_unavailable") return "database_unavailable"
   if (status === 404) return "not_found"
   if (status === 400 || status === 422) return "bad_request"
@@ -115,6 +123,11 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const { bare, params } = splitPath(path)
     const served = await serveStaticResult(method, bare, params)
     if (served.covered) {
+      if (served.error) {
+        throw new ApiError(served.error.kind, served.error.detail, {
+          status: 503, detail: served.error.detail, hint: served.error.hint,
+        })
+      }
       if (served.payload === null || served.payload === undefined) {
         throw new ApiError("not_found", "This record is not in the deployment's dataset.", {
           detail: bare,
@@ -187,6 +200,14 @@ export function errorTitle(error: ApiError): string {
       return "Service unreachable"
     case "database_unavailable":
       return "Database unreachable"
+    case "data_unavailable":
+      return "Dataset unavailable"
+    case "llm_not_configured":
+      return "AI model not configured"
+    case "model_unavailable":
+      return "AI model unavailable"
+    case "invalid_model_output":
+      return "AI answer could not be verified"
     case "not_found":
       return "Not found"
     case "bad_request":
@@ -209,6 +230,14 @@ export function errorHint(error: ApiError): string | null {
         "The database runs on the workstation at 100.69.116.8 and is reached over its IP. " +
         "Check that the workstation is up and the tunnel to it is active."
       )
+    case "data_unavailable":
+      return "Refresh the deployment's static export, then retry this application route."
+    case "llm_not_configured":
+      return "Add a model connection on the server, then refresh the connection status. Records can be viewed separately."
+    case "model_unavailable":
+      return "Check the configured model, API credentials and service availability, then retry."
+    case "invalid_model_output":
+      return "The model's answer failed its data or reference checks. Try a more specific question; no record text has been substituted."
     case "not_found":
       return "The identifier does not exist in the database."
     case "bad_request":

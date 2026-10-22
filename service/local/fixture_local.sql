@@ -166,6 +166,12 @@ CREATE TABLE scaffold_library (
     description               TEXT,
     patent_source_url         TEXT,
     regulatory_evidence_url   TEXT,
+    expression_system            TEXT,
+    expression_vector_recorded   TEXT,
+    expression_vector_recommended TEXT,
+    expression_rationale         TEXT,
+    expression_source_url        TEXT,
+    expression_sequence_id       TEXT,
     source_version            TEXT
 );
 
@@ -219,6 +225,11 @@ CREATE TABLE scaffold_library_sequences (
     patent_source_url       TEXT,
     regulatory_evidence_url TEXT,
     confidence_limitations  TEXT,
+    expression_system            TEXT,
+    expression_vector_recorded   TEXT,
+    expression_vector_recommended TEXT,
+    expression_rationale         TEXT,
+    expression_source_url        TEXT,
     source_version          TEXT
 );
 

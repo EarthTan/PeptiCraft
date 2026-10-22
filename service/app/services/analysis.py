@@ -1,39 +1,19 @@
-"""Analysis text generation.
+"""Source-backed record analysis and actual conversational model generation.
 
-The generator is a protocol, not a function, so that a model-backed implementation can be
-added later without the router, the response model or the frontend changing.
-
-`TemplateGenerator` is the implementation registered today. It reads the construct's real
-scores, the route's thresholds and the peptide's own attributes, and composes prose from
-them. Determinism is the point: the same construct under the same route always renders the
-same text, and every number in that text appears as a field in the same response, so a
-reader can check any claim without running a query.
-
-This replaces `app/src/data/chat.ts`, a 453-line module of fixed strings that was never
-referenced by any page and had drifted well past the data — it still advertised a 32-linker
-library, a 1,760 Da figure and "8 rounds of screening" long after the platform carried 15
-linkers, no molecular-weight figure and four rounds.
-
-`provider` travels on every response, and it names the generator that produced *that* answer.
-The distinction matters because a model-backed generator can fail: when it does, the answer
-falls back to the template's, and the response has to say so. That decision is made in
-`chat` — one place, so the label and the text cannot disagree — rather than inside the
-generator, which would leave the label saying `llm` over the template's own prose.
-
-This replaces `app/src/data/chat.ts`, a 453-line module of fixed strings that was never
-referenced by any page and had drifted well past the data — it still advertised a 32-linker
-library, a 1,760 Da figure and "8 rounds of screening" long after the platform carried 15
-linkers, no molecular-weight figure and four rounds.
+Standing analysis blocks and explicit record mode remain deterministic. AI chat requires a
+configured, successful model; failures are surfaced instead of substituted with fixed prose.
 """
 from __future__ import annotations
 
-import inspect
+import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Protocol
+from urllib.parse import urlsplit
 
-from ..models.analysis import AnalysisBlock, ChatMessage, ChatResponse, ExpressionPlan
+from ..models.analysis import AnalysisBlock, ChatEvidence, ChatMessage, ChatResponse
 from ..models.common import BackboneBinding, ScoreSemantics
 from ..models.construct import ConstructDetail
 from . import reference
@@ -51,6 +31,10 @@ class ModelUnavailable(RuntimeError):
     `llm` imports this module, not the other way round — and so the generator protocol and
     its failure mode are stated together.
     """
+
+
+class LlmNotConfigured(ModelUnavailable):
+    """AI mode was requested without a configured model endpoint, key and name."""
 
 
 class AnalysisGenerator(Protocol):
@@ -80,7 +64,7 @@ class AnalysisGenerator(Protocol):
 # ---------------------------------------------------------------------------
 
 def _pct(value: float | None) -> str:
-    return "not assessed" if value is None else f"{value:.3f}"
+    return "not assessed" if value is None else f"{value:.6g}"
 
 
 def _verdict_word(verdict: str) -> str:
@@ -115,55 +99,6 @@ def _source_phrase(source: str) -> str:
     }.get(source, source)
 
 
-# Side-chain pKa values for the residues that carry a charge near neutral pH. Everything not
-# listed is treated as neutral, which is right for the twenty-proteinogenic set apart from the
-# termini handled below.
-_PKA = {"D": 3.65, "E": 4.25, "C": 8.18, "Y": 10.07, "H": 6.00, "K": 10.53, "R": 12.50}
-_N_TERMINUS_PKA = 9.69
-_C_TERMINUS_PKA = 2.34
-
-
-def _net_charge(seq: str, ph: float = 7.0) -> float:
-    """Net charge in proton units at a given pH, by Henderson-Hasselbalch.
-
-    Not a predictor and not part of the nine-score contract: it is arithmetic on the peptide's
-    own sequence, used only to decide whether a construct belongs to the cationic class that
-    stresses an E. coli envelope. Stated here so the threshold it feeds has a visible basis
-    rather than an assertion.
-    """
-    charge = 0.0
-    for aa in seq:
-        pka = _PKA.get(aa)
-        if pka is None:
-            continue
-        if aa in "KRH":
-            charge += 1.0 / (1.0 + 10 ** (ph - pka))
-        else:
-            charge -= 1.0 / (1.0 + 10 ** (pka - ph))
-    charge += 1.0 / (1.0 + 10 ** (ph - _N_TERMINUS_PKA))
-    charge -= 1.0 / (1.0 + 10 ** (_C_TERMINUS_PKA - ph))
-    return charge
-
-
-def _hydrophobic_fraction(seq: str) -> float:
-    hydrophobic = set("AVILMFWY")
-    return sum(1 for a in seq if a in hydrophobic) / len(seq) if seq else 0.0
-
-
-# The solubility below which the standard induction is expected to lose product to inclusion
-# bodies. It is the platform's own planning cut: SoDoPE returns a 0-1 score and publishes no
-# threshold, so the number is stated here once instead of being implied by a branch.
-SOLUBILITY_STANDARD_CUT = 0.45
-
-# The carrier length beyond which a collagen repeat is recommended into a eukaryotic host. The
-# scaffold library's collagen entries are 225-1071 aa and only the longest crosses this, so the
-# cut separates the one case that needs hydroxylation from the four that do not.
-COLLAGEN_ECOLI_LIMIT = 600
-
-# The net charge at which a peptide is treated as cationic enough to stress the envelope.
-CATIONIC_CHARGE = 3.5
-
-
 # ---------------------------------------------------------------------------
 # Template implementation
 # ---------------------------------------------------------------------------
@@ -171,13 +106,15 @@ CATIONIC_CHARGE = 3.5
 class TemplateGenerator:
     name = PROVIDER_TEMPLATE
 
-    def blocks(self, c: ConstructDetail) -> list[AnalysisBlock]:
+    def blocks(
+        self, c: ConstructDetail, *, peers: list[dict] | None = None,
+    ) -> list[AnalysisBlock]:
         return [
             self._safety(c),
             self._peptide_origin(c),
             self._linker_rationale(c),
             self._expression_strategy(c),
-            self._comparison(c),
+            self._comparison(c, peers=peers),
             self._risk(c),
         ]
 
@@ -195,7 +132,8 @@ class TemplateGenerator:
         for g in veto:
             if g.value is None:
                 lines.append(
-                    f"{g.label} has no measured value, so it is reported as not assessed "
+                    f"{g.label} has no predictor value (screening threshold {_pct(g.threshold)}), "
+                    f"so it is reported as not assessed "
                     f"rather than as a pass. The pipeline's rule is that an unassessed metric "
                     f"does not eliminate a candidate."
                 )
@@ -208,7 +146,7 @@ class TemplateGenerator:
                 else:
                     side = "at or below" if g.passed else "above"
                 lines.append(
-                    f"{g.label} ({g.tool}) measures {_pct(g.value)} against a threshold of "
+                    f"{g.label} ({g.tool}) reports {_pct(g.value)} against a threshold of "
                     f"{_pct(g.threshold)} from {_source_phrase(g.threshold_source)}, which is "
                     f"{side} the limit."
                     + (" The value sits within ten percent of the threshold." if g.borderline else "")
@@ -251,110 +189,60 @@ class TemplateGenerator:
     # -- block 2 ------------------------------------------------------------
     def _peptide_origin(self, c: ConstructDetail) -> AnalysisBlock:
         p = c.peptide
-        seq = p.sequence
-        length = len(seq)
-
-        hydrophobic = set("AVILMFWY")
-        charged = set("DEKRH")
-        aromatic = set("FWY")
-        cys = seq.count("C")
-
-        hyd = sum(1 for a in seq if a in hydrophobic)
-        chg = sum(1 for a in seq if a in charged)
-        arom = sum(1 for a in seq if a in aromatic)
-
         lines = [
-            f"The peptide is {length} residues, drawn from {p.source} "
+            f"The peptide is {len(p.sequence)} residues, drawn from {p.source} "
             f"(dataset version {p.source_version}).",
-            f"Composition: {hyd} hydrophobic residues ({hyd / length:.0%}), "
-            f"{chg} charged ({chg / length:.0%}), {arom} aromatic ({arom / length:.0%}).",
+            f"Sequence: {p.sequence}.",
         ]
-
-        if cys:
-            lines.append(
-                f"{cys} cysteine residue{'s' if cys > 1 else ''} present, which allows "
-                f"disulfide formation and can stiffen the peptide against proteolysis."
-            )
-        else:
-            lines.append(
-                "No cysteine residues, so the peptide has no disulfide-mediated structural "
-                "constraint."
-            )
-
-        if c.supplementary.aggregation_a3v is not None:
-            agg = c.supplementary.aggregation_a3v
-            reading = (
-                "below zero, which indicates a low intrinsic aggregation propensity"
-                if agg < 0
-                else "above zero, which indicates some aggregation propensity"
-            )
-            lines.append(
-                f"One-dimensional AGGRESCAN gives {agg:.3f}, {reading}. The scale is a mean "
-                f"per-residue aggregation score, negative for aggregation-averse sequences."
-            )
-
-        # The predictor is named from the score grid's own metadata. This block used to hold a
-        # third hand-written key-to-name table, and it was both incomplete and wrong: the
-        # antibacterial key is `amp-esm`, which the table did not carry, so the sentence read
-        # "The functional score of 0.848 is amp-esm from amp-esm."
-        func_meta = c.score_meta.get(_FUNCTIONAL_SLOT)
-        predictor = func_meta.tool if func_meta else c.functional_score_label
+        if p.source_accession:
+            lines.append(f"Source accession: {p.source_accession}.")
+        meta = c.score_meta.get(_FUNCTIONAL_SLOT)
+        predictor = meta.tool if meta else c.functional_score_label
         lines.append(
             f"The direction's functional score is {_pct(c.functional_score)}, produced by "
             f"{predictor or c.functional_score_key}."
         )
         if c.semantics == ScoreSemantics.ranking_only:
-            lines.append(
-                "That score is a ranking signal, not a probability. It separates "
-                "functional-looking peptides from random fragments rather than measuring "
-                "activity, so it is used for ordering only."
-            )
-
+            lines.append("That score is a ranking signal, not a probability or measured activity.")
         return AnalysisBlock(
-            id="peptide_origin",
-            type="peptide_origin",
-            title="Peptide origin and composition",
-            icon="dna",
-            content="\n".join(lines),
-            citations=[
-                "peptide.sequence",
-                "peptide.source",
-                "peptide.source_version",
-                "supplementary.aggregation_a3v",
-                "functional_score",
-            ],
+            id="peptide_origin", type="peptide_origin", title="Peptide origin and composition",
+            icon="dna", content="\n".join(lines),
+            citations=["peptide.sequence", "peptide.source", "peptide.source_version", "functional_score"],
         )
 
     # -- block 3 ------------------------------------------------------------
     def _linker_rationale(self, c: ConstructDetail) -> AnalysisBlock:
-        lines = []
+        lines = [
+            f"Scaffold: {c.backbone_name or 'none named'}"
+            + (f" ({c.scaffold.id})" if c.scaffold else "") + "."
+        ]
         if c.linker is None:
             lines.append("No linker is recorded for this construct.")
         else:
             lk = c.linker
             lines.append(
                 f"The linker is {lk.name}, {lk.length} residues long, classified as "
-                f"{lk.rigidity}."
+                f"{lk.rigidity}; sequence: {lk.sequence}."
             )
-            lines.append(
-                "A glycine-serine linker of this kind gives the fused peptide rotational "
-                "freedom and separates it from the scaffold surface, which matters when the "
-                "functional epitope would otherwise be masked by the scaffold. The trade-off "
-                "is that the unstructured segment is more exposed to proteases."
-            )
-            lines.append(
-                "The linker sequence recorded here comes from the sample linker table rather "
-                "than the curated library, and the construct carries no verified linker "
-                "choice: the assembly step that produced it picked the first available row."
-            )
+            if lk.description:
+                lines.append(f"Library description: {lk.description}")
+            if c.linker_note:
+                lines.append(c.linker_note)
+            if lk.source_table == "linkers":
+                lines.append(
+                    "This linker comes from the sample linker table. Its stored assignment "
+                    "is not evidence that this pairing was experimentally validated."
+                )
+            elif lk.reference:
+                lines.append(f"Linker reference: {lk.reference}")
 
         # The three binding states read differently, and saying "named at request time" for a
         # verified stored binding would be a factual error: the scaffold came from the
         # construct's own row.
         if not c.assembled_sequence_available:
             assembly_reading = (
-                "No fused sequence is emitted, because the bound scaffold row holds a marker "
-                "string rather than a real sequence."
+                "No fused sequence is emitted, because a complete scaffold sequence is "
+                "unavailable for this selection."
             )
         elif c.backbone_binding == BackboneBinding.verified:
             assembly_reading = (
@@ -367,9 +255,11 @@ class TemplateGenerator:
             )
 
         lines.append(
-            f"The construct's stored scaffold binding is `{c.backbone_binding}`. "
+            f"The scaffold binding for this response is `{c.backbone_binding.value}`. "
             + assembly_reading
         )
+        if c.full_sequence:
+            lines.append(f"The assembled sequence is {len(c.full_sequence)} residues long.")
 
         return AnalysisBlock(
             id="linker_rationale",
@@ -381,268 +271,66 @@ class TemplateGenerator:
         )
 
     # -- block 4 ------------------------------------------------------------
-    def _expression_plan(self, c: ConstructDetail) -> ExpressionPlan:
-        """Choose a host, vector and induction regime from properties the record holds.
-
-        The dataset carries no expression condition for any construct — `backbone_proteins`
-        has no such column and `scaffold_patients`' experiment table is not read by the
-        service — so a block that only said "nothing is recorded here" left the reader with
-        nothing to act on. What can be derived without inventing data is the standard route
-        for the peptide's own properties, and the one switch that matters for a carrier:
-        repeat-rich collagen above `COLLAGEN_ECOLI_LIMIT` needs a eukaryotic host.
-
-        Every branch is a rule about a field in the same response, and the prose below names
-        the rule. Nothing here claims an experimental outcome: solubility and thermal
-        stability are used to pick between published expression regimes, not to predict a
-        yield.
-        """
-        seq = c.peptide.sequence
-        hydro = _hydrophobic_fraction(seq)
-        charge = _net_charge(seq)
-        cys = seq.count("C")
-        sol = c.scores.solubility
-        scaffold = c.scaffold
-
-        if (
-            scaffold is not None
-            and scaffold.category == "recombinant-collagen"
-            and (scaffold.length or 0) > COLLAGEN_ECOLI_LIMIT
-        ):
-            return ExpressionPlan(
-                host="Pichia pastoris (Komagataella phaffii)",
-                strain="X-33",
-                vector="pPICZα-A",
-                tag="a C-terminal His6 tag, encoded by the vector",
-                induction="1% methanol, replenished every 24 h",
-                temperature_c=28,
-                duration_h="72–96",
-                purification="secreted into the medium — Ni-NTA from clarified supernatant, "
-                "then size exclusion",
-                tier="secretion",
-            )
-
-        # A repeat-rich carrier recombines in a recA+ host, and BL21 is not recA-deficient
-        # while HMS174 is. Only a bound scaffold says the carrier is one of those classes,
-        # which is why the unbound default stays BL21 rather than pre-emptively hardening.
-        repeat_carrier = scaffold is not None and scaffold.category in {
-            "spider-silk",
-            "silkworm-silk",
-            "recombinant-collagen",
-        }
-        if cys >= 2:
-            strain = "SHuffle T7"
-        elif repeat_carrier:
-            strain = "HMS174(DE3)"
-        else:
-            strain = "BL21(DE3)"
-
-        if (sol is not None and sol < SOLUBILITY_STANDARD_CUT) or hydro >= 0.5:
-            return ExpressionPlan(
-                host="Escherichia coli",
-                strain=strain,
-                vector="pET SUMO",
-                tag="an N-terminal His6-SUMO tag, cleaved with Ulp1 after capture",
-                induction="0.2 mM IPTG at OD600 0.6–0.8",
-                temperature_c=16,
-                duration_h="18–20",
-                purification="Ni-NTA capture, Ulp1 cleavage, then size exclusion",
-                tier="solubility-rescue",
-            )
-
-        if charge >= CATIONIC_CHARGE:
-            return ExpressionPlan(
-                host="Escherichia coli",
-                strain=strain,
-                vector="pET-28a(+)",
-                tag="an N-terminal His6 tag",
-                induction="0.4 mM IPTG at OD600 0.4–0.5",
-                temperature_c=22,
-                duration_h="12–16",
-                purification="Ni-NTA, then size exclusion",
-                tier="tight-control",
-            )
-
-        return ExpressionPlan(
-            host="Escherichia coli",
-            strain=strain,
-            vector="pET-28a(+)",
-            tag="an N-terminal His6 tag",
-            induction="0.4 mM IPTG at OD600 0.6–0.8",
-            temperature_c=25,
-            duration_h="6",
-            purification="Ni-NTA, then size exclusion",
-            tier="standard",
-        )
-
     def _expression_strategy(self, c: ConstructDetail) -> AnalysisBlock:
-        seq = c.peptide.sequence
-        plan = self._expression_plan(c)
-        sol = c.scores.solubility
-        hydro = _hydrophobic_fraction(seq)
-        charge = _net_charge(seq)
-        cys = seq.count("C")
-        scaffold = c.scaffold
-
-        lines = [
-            f"Recommended route: {plan.host}, strain {plan.strain}, {plan.vector} with "
-            f"{plan.tag}.",
-            f"Induction: {plan.induction}, {plan.temperature_c} °C, {plan.duration_h} h. "
-            f"Purification: {plan.purification}.",
-            "This is a recommendation rather than a stored condition: the dataset records no "
-            "expression host, vector or induction condition for any construct. It is derived "
-            "from the peptide's predicted properties, its composition, and — where one is "
-            "bound — the scaffold's class.",
-        ]
-
-        if plan.tier == "secretion":
-            described = (
-                f"a recombinant-collagen entry of {scaffold.length} residues"
-                if scaffold.length
-                else "a recombinant-collagen entry of unstated length"
-            )
+        """Report sourced scaffold conditions without extrapolating them to the fusion."""
+        expression = c.scaffold.expression if c.scaffold is not None else None
+        lines: list[str] = []
+        if expression is None or not any((
+            expression.system, expression.vector_recorded, expression.vector_recommended,
+            expression.rationale,
+        )):
             lines.append(
-                f"The bound scaffold is {scaffold.short_name}, {described}. A repeat at that "
-                f"length needs prolyl hydroxylation to form a stable triple helix, and a "
-                f"bacterial host has no prolyl hydroxylase, so the gene is put into a secreted "
-                f"yeast host instead. The trade-off is time: 72–96 h of methanol induction "
-                f"against a day in E. coli."
-            )
-        elif plan.tier == "solubility-rescue":
-            below_cut = sol is not None and sol < SOLUBILITY_STANDARD_CUT
-            greasy = hydro >= 0.5
-            if below_cut and greasy:
-                opening = (
-                    f"Two properties point the same way. Predicted solubility is {_pct(sol)} "
-                    f"(SoDoPE), under the 0.45 planning cut used here, and {hydro:.0%} of the "
-                    f"peptide's residues are hydrophobic, which is the composition that drives "
-                    f"inclusion-body formation."
-                )
-            elif below_cut:
-                opening = (
-                    f"Predicted solubility is {_pct(sol)} (SoDoPE), under the 0.45 planning cut "
-                    f"used here."
-                )
-            else:
-                opening = (
-                    f"{hydro:.0%} of the peptide's residues are hydrophobic, which is the "
-                    f"composition that drives inclusion-body formation."
-                )
-            lines.append(
-                opening + " The route therefore adds a His6-SUMO fusion and drops induction to "
-                "16 °C: the fusion partner keeps the peptide from collapsing into inclusion "
-                "bodies, and the lower temperature slows aggregation faster than it slows "
-                "expression. The cost is one cleavage step and a second chromatography run."
-            )
-        elif plan.tier == "tight-control":
-            lines.append(
-                f"The peptide carries a net charge of +{charge:.1f} at pH 7.0, which is the "
-                f"cationic range that stresses an E. coli envelope and selects for plasmid loss. "
-                f"Induction is therefore held to a low cell density at 22 °C: the culture "
-                f"spends less time expressing a product that damages the membrane it is made "
-                f"in. If transformants grow poorly or the plasmid is lost anyway, the same "
-                f"gene in a secreted yeast host is the next step."
+                "No source-backed expression conditions are recorded for the selected scaffold. "
+                "The current record cannot determine a host, strain, vector, induction "
+                "temperature, duration or purification protocol for this fusion."
             )
         else:
-            if sol is None:
-                lines.append(
-                    "Solubility was not assessed for this peptide, so the route stays at the "
-                    "standard setting rather than adding a fusion partner on no evidence. If a "
-                    "SoDoPE value is later scored below 0.45, the solubility-rescue route "
-                    "replaces this one."
-                )
+            lines.append(
+                f"Expression evidence for scaffold {c.scaffold.short_name}"
+                + (f", sequence record {expression.sequence_id}" if expression.sequence_id else "")
+                + ":"
+            )
+            for label, value in (
+                ("Recorded/recommended host", expression.system),
+                ("Vector recorded in source", expression.vector_recorded),
+                ("Vector recommended in source", expression.vector_recommended),
+                ("Basis and limitations (source wording)", expression.rationale),
+            ):
+                if value:
+                    lines.append(f"{label}: {value}")
+            if expression.source_url:
+                lines.append(f"Source: {expression.source_url}")
             else:
-                lines.append(
-                    f"Predicted solubility is {_pct(sol)} (SoDoPE), at or above the 0.45 "
-                    f"planning cut used here, so no solubility tag is added and the standard "
-                    f"25 °C induction is kept. The peptide is {len(seq)} residues, short enough "
-                    f"that its own folding is not the limiting step; what the yield then depends "
-                    f"on is how the carrier behaves."
-                )
-
-        if cys >= 2:
+                lines.append("No source URL is recorded for these expression fields.")
             lines.append(
-                f"The peptide has {cys} cysteines, so the host is {plan.strain}: an oxidative "
-                f"cytoplasm lets the disulfide close without a refolding step."
+                "These fields concern the cited scaffold sequence or family, within the "
+                "source's stated limits. They do not establish expression conditions or "
+                "yield for the scaffold–linker–peptide fusion."
             )
-        elif cys == 1:
-            lines.append(
-                "One cysteine is present, which cannot form an intrachain disulfide on its "
-                "own and instead cross-links neighbouring molecules on storage. A reducing "
-                "agent is kept in the buffer until the final step."
-            )
-
-        if c.scores.thermal_stability is not None:
-            lines.append(
-                f"Predicted thermal stability is {_pct(c.scores.thermal_stability)} "
-                f"(TemStaPro). It does not enter the host choice; it bears on storage "
-                f"temperature and on any heating step after purification."
-            )
-
-        if scaffold is None:
-            lines.append(
-                "No scaffold is bound to this construct — the stored binding is a placeholder "
-                "— so the carrier sequence and the construct's total length are unknown, and "
-                "the host stays at the E. coli default. Binding a library scaffold moves the "
-                "route to P. pastoris when that scaffold is a recombinant-collagen fragment "
-                "longer than 600 residues, and to a recA-deficient strain when it is a "
-                "repeat-rich silk or collagen."
-            )
-            if not c.assembled_sequence_available:
-                lines.append(
-                    "With no fused sequence on the record, a synthetic gene cannot be ordered "
-                    "until that binding is filled in; the route above describes what to do once "
-                    "it is."
-                )
-        elif scaffold.category in ("spider-silk", "silkworm-silk"):
-            described = (
-                f"a {scaffold.category.replace('-', ' ')} entry of {scaffold.length} residues"
-                if scaffold.length
-                else f"a {scaffold.category.replace('-', ' ')} entry of unstated length"
-            )
-            lines.append(
-                f"The bound scaffold is {scaffold.short_name}, {described}. Its repeats are "
-                f"what put the gene at risk of rearrangement, which is why the strain is "
-                f"recA-deficient rather than the usual BL21."
-            )
-        elif scaffold.category == "recombinant-collagen":
-            described = (
-                f"a recombinant-collagen entry of {scaffold.length} residues"
-                if scaffold.length
-                else "a recombinant-collagen entry of unstated length"
-            )
-            lines.append(
-                f"The bound scaffold is {scaffold.short_name}, {described}. At that length the "
-                f"repeat is short enough to keep in E. coli, and the strain is recA-deficient "
-                f"so it does not rearrange during propagation. A bacterial host cannot "
-                f"hydroxylate the prolines of a triple helix, which is the standing limitation "
-                f"of expressing any collagen fragment this way."
-            )
-
+        lines.append(
+            "Induction and purification conditions for the fusion require a matching "
+            "experimental source or direct testing; peptide predictor scores cannot supply them."
+        )
         return AnalysisBlock(
-            id="expression_strategy",
-            type="expression_strategy",
-            title="Expression and handling",
-            icon="flask",
-            content="\n".join(lines),
-            plan=plan,
-            citations=[
-                "peptide.sequence",
-                "scores.solubility",
-                "scores.thermal_stability",
-                "scaffold.category",
-                "scaffold.length",
-            ],
+            id="expression_strategy", type="expression_strategy", title="Expression and handling",
+            icon="flask", content="\n".join(lines), plan=None,
+            citations=["scaffold.expression"],
         )
 
     # -- block 5 ------------------------------------------------------------
-    def _comparison(self, c: ConstructDetail) -> AnalysisBlock:
-        rows = _direction_peers(c.direction, limit=5)
+    def _comparison(self, c: ConstructDetail, *, peers: list[dict] | None = None) -> AnalysisBlock:
+        rows = peers if peers is not None else _direction_peers(
+            c.direction, limit=5, route_id=c.safety.route_id,
+        )
         lines = [
             f"Peers within the {c.direction_label} direction, ordered by composite under "
             f"{_route_name(c.safety.route_id)}. The composite is a ranking score computed "
-            f"from developability components, so a higher value means a better combination "
-            f"of penetration, solubility and thermal stability rather than stronger activity."
+            f"from model signals using the project's weights. This is an exploratory ordering; "
+            f"a higher value does not establish measured penetration, solubility, thermal "
+            f"stability or activity."
         ]
+        if not rows:
+            lines.append("No peer records are available in this context, so no candidate comparison can be made.")
         for i, peer in enumerate(rows, 1):
             marker = " ← this construct" if peer["id"] == c.id else ""
             lines.append(
@@ -667,7 +355,7 @@ class TemplateGenerator:
                 "Not assessed for this construct: " + ", ".join(c.unassessed_metrics) + "."
             )
         else:
-            lines.append("Every metric in the nine-score contract has a measured value.")
+            lines.append("Every metric in the nine-score contract has a predictor value.")
 
         if c.safety.unassessed:
             lines.append(
@@ -677,8 +365,8 @@ class TemplateGenerator:
 
         if not c.assembled_sequence_available:
             lines.append(
-                "No fused sequence is available, because the scaffold binding is a "
-                "placeholder. Any downstream step that needs the full construct sequence "
+                "No fused sequence is available because a complete scaffold sequence is "
+                "unavailable for this selection. Any downstream step needing the full sequence "
                 "cannot proceed on this record."
             )
 
@@ -711,47 +399,21 @@ class TemplateGenerator:
         *,
         history: list[dict[str, str]] | None = None,
     ) -> str:
-        # `history` is accepted and unused. A template answers from the record, so a previous
-        # turn cannot change what the record says; the parameter exists so the model-backed
-        # generator can be dropped in without a request-shape change.
-        q = question.lower().strip()
-
-        if any(w in q for w in ("safe", "safety", "tox", "hemo", "immun", "gate")):
-            return self._safety(c).content
-        if any(w in q for w in ("sequence", "assembl", "backbone", "scaffold", "fuse")):
-            return self._linker_rationale(c).content
-        if any(w in q for w in ("solubility", "express", "purif", "yield", "stability", "thermal")):
-            return self._expression_strategy(c).content
-        if any(w in q for w in ("origin", "source", "composit", "peptide")):
-            return self._peptide_origin(c).content
-        if any(w in q for w in ("compare", "rank", "best", "peer", "composite")):
-            return self._comparison(c).content
-        if any(w in q for w in ("risk", "caveat", "unassess", "missing", "limit")):
-            return self._risk(c).content
-
-        return (
-            f"This answer is generated from the record for {c.name} rather than from a "
-            f"language model, so it covers the fields the record actually holds. Available "
-            f"topics: the safety gates and the route's immunogenicity threshold; the peptide's "
-            f"origin and composition; the linker and the state of the scaffold binding; "
-            f"solubility and thermal stability; the comparison with peers in the same "
-            f"direction; and the construct's unassessed metrics. "
-            f"Current composite under {_route_name(c.safety.route_id)}: {_pct(c.composite)}."
-        )
+        return template_answer(c, question)[0]
 
     def suggested_questions(self, c: ConstructDetail) -> list[str]:
         out = [
             "How does the safety gate read under this route?",
             "Which metrics were not assessed?",
             "What is the state of the scaffold binding?",
-            "What expression route is recommended?",
+            "What expression evidence is recorded for this scaffold?",
         ]
         if c.semantics == ScoreSemantics.ranking_only:
             out.append("Why is the functional score a ranking signal rather than a probability?")
         return out
 
 
-def _direction_peers(direction: str, limit: int = 5) -> list[dict]:
+def _direction_peers(direction: str, limit: int = 5, route_id: str | None = None) -> list[dict]:
     """Top constructs of the same direction, for the comparison block.
 
     Runs the same computation the detail response uses, so a peer row cannot disagree with
@@ -763,13 +425,13 @@ def _direction_peers(direction: str, limit: int = 5) -> list[dict]:
     from ..repositories import constructs as repo
     from . import constructs as construct_service
 
-    rows, _ = repo.list_constructs(direction=direction, channel="top", limit=limit, offset=0)
+    rows, _ = repo.list_constructs(direction=direction, channel="top", limit=500, offset=0)
     if not rows:
         return []
     enriched = construct_service.load_enrichment(rows)
     out = []
     for row in rows:
-        a = construct_service.compute(row, enriched.get(row["peptide_id"], {}), None)
+        a = construct_service.compute(row, enriched.get(row["peptide_id"], {}), route_id)
         out.append({
             "id": construct_service.public_id(row["id"]),
             "name": construct_service.public_id(row["id"]),
@@ -778,7 +440,189 @@ def _direction_peers(direction: str, limit: int = 5) -> list[dict]:
             "toxicity": a.scores.toxicity,
             "hemolysis": a.scores.hemolysis,
         })
-    return out
+    out.sort(key=lambda item: (
+        item["composite"] is None,
+        -(item["composite"] or 0.0),
+        item["id"],
+    ))
+    return out[:limit]
+
+
+# ---------------------------------------------------------------------------
+# Record excerpts shared by deterministic analysis and model citations
+# ---------------------------------------------------------------------------
+
+class InvalidModelOutput(ModelUnavailable):
+    """A completion failed the structured answer or fact/citation contract."""
+
+
+def make_context_key(
+    construct_id: str, route_id: str | None = None,
+    scaffold_id: str | None = None, linker_id: str | None = None,
+) -> str:
+    return json.dumps([construct_id, route_id or "", scaffold_id or "", linker_id or ""], separators=(",", ":"))
+
+
+def valid_source_url(value: str | None) -> str | None:
+    if not value or any(character.isspace() for character in value):
+        return None
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return None
+    return value if parsed.scheme in ("http", "https") and parsed.netloc else None
+
+
+def build_claims(c: ConstructDetail) -> dict[str, ChatEvidence]:
+    """Evidence excerpts for citations, separate from the model-generated answer."""
+    template = TemplateGenerator()
+    # Chat currently loads one candidate and has no peer fact tokens. The separate standing
+    # analysis may compare peers, but that broader table must not leak into this chat context.
+    blocks = {block.id: block for block in template.blocks(c, peers=[])}
+    claims: dict[str, ChatEvidence] = {}
+
+    def add(claim_id: str, label: str, text: str, field: str | None = None,
+            kind: str = "record", url: str | None = None) -> None:
+        claims[claim_id] = ChatEvidence(
+            id=claim_id, label=label, text=text, kind=kind, field=field, url=url,
+        )
+
+    add("route", "Current context",
+        f"Record {c.id}; application route: {_route_name(c.safety.route_id)} "
+        f"({c.safety.route_id}). MHC-I screening threshold: "
+        f"{_pct(c.safety.immunogenicity_threshold)}. Current route composite: {_pct(c.composite)}. "
+        "The composite orders candidates under the project's selected weighting profile; "
+        "its components have limited validation for short peptides. It is not a probability "
+        "or a measured fusion-protein outcome.",
+        "safety.route_id;composite")
+    for claim_id, block_id, field in (
+        ("safety", "safety", "safety"),
+        ("provenance", "peptide_origin", "peptide;functional_score"),
+        ("assembly", "linker_rationale", "scaffold;linker;backbone_binding;assembled_sequence_available"),
+        ("linker", "linker_rationale", "linker;linker_note"),
+        ("expression", "expression_strategy", "scaffold.expression"),
+        ("missing", "risk", "unassessed_metrics;safety.unassessed;status;channel"),
+    ):
+        block = blocks[block_id]
+        add(claim_id, block.title, block.content, field,
+            "limitation" if claim_id == "missing" else "record")
+    add("comparison", "Comparison needs another record",
+        "Only the current candidate and its selected application, scaffold and linker are "
+        "available to this chat. No other candidate records have been loaded for comparison. "
+        "A justified candidate-to-candidate comparison requires loading the other candidate's "
+        "scores, missing-data flags and evidence under the same application route. This "
+        "context cannot identify the best candidate or infer another candidate's values.",
+        "direction;delivery_scores", "limitation")
+    score_lines = []
+    for key in type(c.scores).model_fields:
+        value = getattr(c.scores, key)
+        meta = c.score_meta.get(key)
+        label = "functional_score" if key == _FUNCTIONAL_SLOT else key
+        text = f"{label}: {_pct(value)}"
+        if key == _FUNCTIONAL_SLOT:
+            text += f"; functional_score_key: {c.functional_score_key}; direction: {c.direction_label}"
+        if meta:
+            text += f"; tool: {meta.tool}; semantics: {meta.semantics or 'not specified'}"
+            if meta.semantics == "ranking_only":
+                text += "; a ranking signal, not a probability"
+        score_lines.append(text + ".")
+        field = "functional_score;functional_score_key" if key == _FUNCTIONAL_SLOT else f"scores.{key};score_meta.{key}"
+        add(f"score_{key}", label, text + ".", field)
+    add("scores", "Recorded predictor scores", "\n".join(score_lines), "scores;score_meta")
+    add("scope", "Scope of evidence",
+        "Predictor scores describe the functional peptide alone. No predictor was run on "
+        "the assembled fusion protein; a joined sequence does not establish its activity, "
+        "safety, expression or yield. Screening gates are project/tool rules rather than "
+        "clinical safety evidence. The composite is exploratory: it includes indicators "
+        "whose use on short peptides has not been calibrated. Missing measurements remain "
+        "not assessed, never zero or a pass.",
+        "score_meta;backbone_binding;assembled_sequence_available", "limitation")
+    add("thermal", "Thermal-score limitation",
+        f"The recorded TemStaPro score is {_pct(c.scores.thermal_stability)}. The project "
+        "aggregates classifier outputs across temperature thresholds; this is not a melting "
+        "temperature or a probability of tolerating a temperature interval. Its applicability "
+        "to short peptides has not been calibrated, and it cannot determine fusion storage "
+        "temperature or a heating protocol.",
+        "scores.thermal_stability;score_meta.thermal_stability", "limitation",
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC11001493/")
+    add("unsupported", "Evidence needed",
+        "The supplied record does not establish that requested experimental outcome or "
+        "condition. A matching primary source or direct experimental validation is needed.",
+        kind="limitation")
+    expression = c.scaffold.expression if c.scaffold else None
+    if expression and valid_source_url(expression.source_url):
+        add("expression_source", "Scaffold expression source",
+            f"Expression source for {c.scaffold.short_name}"
+            + (f" (sequence {expression.sequence_id})" if expression.sequence_id else "")
+            + f": {expression.source_url}. The source's qualifiers in the expression claim apply.",
+            "scaffold.expression.source_url", "source", expression.source_url)
+    if c.linker and c.linker.reference:
+        reference_text = c.linker.reference
+        url = valid_source_url(reference_text)
+        if url is None:
+            match = re.search(r"\bPMID\s*:?\s*(\d+)\b", reference_text, re.I)
+            if match:
+                url = f"https://pubmed.ncbi.nlm.nih.gov/{match.group(1)}/"
+        add("linker_source", "Linker reference", reference_text, "linker.reference", "source", url)
+    return claims
+
+
+def default_claim_ids(question: str) -> list[str]:
+    q = question.lower().strip()
+    topics = (
+        ("safety", ("safe", "safety", "tox", "hemo", "immun", "gate", "veto", "安全", "毒", "溶血", "免疫", "阈值")),
+        ("assembly", ("sequence", "assembl", "backbone", "scaffold", "fuse", "序列", "组装", "骨架", "融合")),
+        ("linker", ("linker", "连接肽", "接头")),
+        ("expression", ("solubility", "express", "purif", "yield", "表达", "纯化", "产量", "宿主", "载体", "诱导", "菌株")),
+        ("thermal", ("stability", "thermal", "温度", "耐热", "热稳定", "储存")),
+        ("comparison", ("compare", "rank", "best", "peer", "composite", "比较", "排名", "综合分", "候选", "最好")),
+        ("provenance", ("origin", "source", "composition", "peptide", "来源", "出处", "成分", "功能肽")),
+        ("missing", ("risk", "caveat", "unassess", "missing", "limit", "风险", "缺失", "未评估", "局限", "限制")),
+        ("scores", ("score", "评分", "分数")),
+    )
+    selected = [claim_id for claim_id, words in topics if any(word in q for word in words)]
+    return ["route", *(selected or ["unsupported"])]
+
+
+def render_claims(
+    c: ConstructDetail, claim_ids: list[str], *, catalog: dict[str, ChatEvidence] | None = None,
+) -> tuple[str, list[ChatEvidence]]:
+    catalog = catalog if catalog is not None else build_claims(c)
+    ids = list(dict.fromkeys(["route", *claim_ids]))
+    if "expression_source" in ids:
+        ids.append("expression")
+    if "linker_source" in ids:
+        ids.append("linker")
+    if any(key in ("safety", "scores") or key.startswith("score_") for key in ids):
+        ids.append("missing")
+    if "expression" in ids and "expression_source" in catalog:
+        ids.append("expression_source")
+    if any(key in ids for key in ("assembly", "linker")):
+        if "linker_source" in catalog:
+            ids.append("linker_source")
+        if "expression_source" in catalog:
+            ids.append("expression_source")
+    ids.append("scope")
+    evidence = [catalog[key] for key in dict.fromkeys(ids)]
+    content = "\n\n".join(item.text for item in evidence)
+    if len(content) > 4000:
+        raise InvalidModelOutput("selected claims exceed the answer size limit")
+    return content, evidence
+
+
+def template_answer(
+    c: ConstructDetail, question: str, *, catalog: dict[str, ChatEvidence] | None = None,
+) -> tuple[str, list[ChatEvidence]]:
+    """Keep a multi-topic template answer bounded without cutting a source qualifier."""
+    claims = catalog if catalog is not None else build_claims(c)
+    ids = default_claim_ids(question)
+    while True:
+        try:
+            return render_claims(c, ids, catalog=claims)
+        except InvalidModelOutput:
+            if len(ids) <= 2:
+                return render_claims(c, ["unsupported"], catalog=claims)
+            ids.pop()
 
 
 # ---------------------------------------------------------------------------
@@ -802,13 +646,12 @@ def llm_configured() -> bool:
     """Whether a model is configured at all, by settings.
 
     Not the same question as "did this answer come from a model". A model can be configured
-    and still fail on one turn; the answer then falls back to the template, and the response's
-    `provider` is what says so. This function is used to decide whether to build a model-backed
-    generator in the first place.
+    and still fail on one turn; that request then returns an explicit error. This function
+    decides whether to build a model-backed generator in the first place.
     """
     from ..config import get_settings
     s = get_settings()
-    return bool(s.llm_base_url and s.llm_api_key and s.analysis_provider == "llm")
+    return bool(s.llm_base_url and s.llm_api_key and s.llm_model and s.analysis_provider == "llm")
 
 
 def build_llm_generator() -> "AnalysisGenerator | None":
@@ -831,12 +674,17 @@ def build_llm_generator() -> "AnalysisGenerator | None":
         endpoint = chat_completions_endpoint(s.llm_base_url or "")
 
         def call_model(messages: list[dict[str, str]]) -> str | None:
-            payload = json.dumps({
-                "model": s.llm_model,
-                "messages": messages,
-                "temperature": 0.2,
-                "max_tokens": 700,
-            }).encode("utf-8")
+            if s.llm_model == "MiniMax-M3.1-Flash":
+                # This model budgets reasoning and the final answer together. Its default
+                # reasoning effort can exhaust a small output budget before content exists.
+                options = {"reasoning_effort": "medium", "reasoning_split": True,
+                           "max_completion_tokens": 8192}
+                timeout = 60
+            else:
+                options = {"temperature": 0, "max_tokens": 1800}
+                timeout = TIMEOUT_SECONDS
+            payload = json.dumps({"model": s.llm_model, "messages": messages,
+                                  **options}).encode("utf-8")
             request = urllib.request.Request(
                 endpoint,
                 data=payload,
@@ -845,9 +693,16 @@ def build_llm_generator() -> "AnalysisGenerator | None":
                     "Authorization": f"Bearer {s.llm_api_key}",
                 },
             )
-            with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-                body = json.loads(response.read().decode("utf-8"))
-            return body["choices"][0]["message"]["content"]
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                raw = response.read()
+            # A completed HTTP response with an unusable envelope is invalid model output,
+            # rather than an unavailable provider. Network/read/non-2xx errors remain transport
+            # failures and are classified by LlmGenerator.
+            try:
+                body = json.loads(raw.decode("utf-8"))
+                return body["choices"][0]["message"]["content"]
+            except (UnicodeError, ValueError, KeyError, IndexError, TypeError) as exc:
+                raise InvalidModelOutput("the provider returned an invalid completion envelope") from exc
 
         return LlmGenerator(call_model)
     except Exception as exc:  # noqa: BLE001
@@ -866,6 +721,9 @@ def ensure_generator() -> AnalysisGenerator:
     `lru_cache` hit on a `Settings` object.
     """
     global _generator
+    if not llm_configured():
+        _generator = TemplateGenerator()
+        return _generator
     if getattr(_generator, "name", None) == PROVIDER_LLM:
         return _generator
     model_generator = build_llm_generator()
@@ -876,70 +734,51 @@ def ensure_generator() -> AnalysisGenerator:
     return _generator
 
 
-def build_response(c: ConstructDetail) -> tuple[str, list[AnalysisBlock]]:
-    g = get_generator()
-    return g.name, g.blocks(c)
-
-
-def _accepts_history(generator: AnalysisGenerator) -> bool:
-    """Whether this generator's `answer` takes the `history` keyword.
-
-    Asked of the signature rather than discovered by catching `TypeError`. A `TypeError`
-    raised *inside* an answer is a bug in that generator, and a fallback that retried the call
-    without the keyword would swallow it and return prose written past the failing line.
-    """
-    try:
-        parameters = inspect.signature(generator.answer).parameters
-    except (TypeError, ValueError):  # not inspectable, e.g. a C-level callable
-        return False
-    return "history" in parameters or any(
-        p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()
-    )
+def build_response(
+    c: ConstructDetail, *, peers: list[dict] | None = None,
+) -> tuple[str, list[AnalysisBlock]]:
+    return PROVIDER_TEMPLATE, TemplateGenerator().blocks(c, peers=peers)
 
 
 def chat(
     c: ConstructDetail,
     question: str,
     history: list[ChatMessage] | None = None,
+    *,
+    context_key: str | None = None,
+    mode: str = "ai",
 ) -> ChatResponse:
-    """Answer one question, and say which generator answered it.
+    """Answer with a real model, or render records only when explicitly requested."""
+    from ..config import get_settings
+    from .llm import LlmGenerator
 
-    The fallback lives here rather than inside the model-backed generator because the two
-    things that must agree — the text and the label naming its source — are decided together
-    at this point and nowhere else. A generator that fails raises `ModelUnavailable`; the
-    template's answer is written here, and `provider` moves with it, so a response whose text
-    came from the template cannot claim to be a model's.
-    """
-    g = get_generator()
+    key = context_key or make_context_key(c.id, c.safety.route_id)
     turns = [
         {"role": m.role, "content": m.content}
         for m in (history or [])
-        if m.role in ("user", "assistant")
+        if m.role in ("user", "assistant") and m.context_key == key and m.provider != PROVIDER_TEMPLATE
     ]
-
-    if _accepts_history(g):
-        try:
-            content, provider = g.answer(c, question, history=turns), g.name
-        except ModelUnavailable as exc:
-            log.warning("no model answer for %s (%s); answering from the record", c.id, exc)
-            content, provider = TemplateGenerator().answer(c, question), PROVIDER_TEMPLATE
+    catalog = build_claims(c)
+    configured = llm_configured()
+    if mode == "record":
+        content, evidence = template_answer(c, question, catalog=catalog)
+        provider = PROVIDER_TEMPLATE
     else:
-        # A generator written against the original two-argument protocol. Kept so a
-        # third-party generator does not have to be rewritten to keep working.
-        content, provider = g.answer(c, question), g.name
-
+        if not configured:
+            raise LlmNotConfigured("AI chat requires a configured model endpoint, API key and model name")
+        generator = get_generator()
+        if not isinstance(generator, LlmGenerator):
+            raise ModelUnavailable("the configured model generator is unavailable")
+        content, evidence = generator.answer_with_evidence(c, question, history=turns, catalog=catalog)
+        provider = PROVIDER_LLM
     message = ChatMessage(
-        id=f"msg_{uuid.uuid4().hex[:12]}",
-        role="assistant",
-        content=content,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        actions=[],
+        id=f"msg_{uuid.uuid4().hex[:12]}", role="assistant", content=content,
+        timestamp=datetime.now(timezone.utc).isoformat(), actions=[], provider=provider,
+        evidence=evidence, context_key=key,
     )
-    suggested = getattr(g, "suggested_questions", None)
     return ChatResponse(
-        provider=provider,
-        construct_id=c.id,
-        message=message,
-        suggested_questions=suggested(c) if callable(suggested) else [],
-        llm_configured=(provider == PROVIDER_LLM),
+        provider=provider, construct_id=c.id, message=message,
+        suggested_questions=TemplateGenerator().suggested_questions(c),
+        llm_configured=configured, context_key=key, fallback_reason=None,
+        model=get_settings().llm_model if configured else None,
     )

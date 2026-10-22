@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { fetchReference, fetchScaffold, fetchScaffolds } from "@/api"
 import type { ScaffoldSummary } from "@/api/types"
+import { ExpressionBlock } from "@/components/scaffold-expression"
 import { formLabel, materialFormLabels } from "@/lib/derive"
 import { useAsync } from "@/lib/useAsync"
 
@@ -79,6 +80,10 @@ export default function ScaffoldDetailPage() {
     detail.category
 
   const admittedBy = reference.routes.filter((route) => detail.route_ids.includes(route.id))
+  const longest = detail.sequences.reduce(
+    (longest, variant) => (variant.length > longest ? variant.length : longest),
+    0,
+  )
 
   return (
     <div className="min-h-[calc(100vh-8rem)]">
@@ -249,6 +254,11 @@ export default function ScaffoldDetailPage() {
                             {variant.evidence_level}
                           </Badge>
                         )}
+                        {variant.length === longest && (
+                          <Badge variant="accent" className="text-[10px] ml-2">
+                            representative
+                          </Badge>
+                        )}
                         {variant.product_use && (
                           <p className="text-[11px] text-gray-400 mt-0.5">{variant.product_use}</p>
                         )}
@@ -285,6 +295,18 @@ export default function ScaffoldDetailPage() {
                           </div>
                         )}
                       </dl>
+
+                      {variant.expression && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-2">
+                            Expression system
+                          </p>
+                          <ExpressionBlock
+                            expression={variant.expression}
+                            variantLabel={false}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -251,7 +251,7 @@ TOOLS: list[ToolDefinition] = [
         group="safety",
         semantics="probability",
         threshold=0.38,
-        threshold_source="tool",
+        threshold_source="project",
         threshold_note=(
             "Calibrated on the project's own 20.20 M-peptide library rather than taken from "
             "the model's default, so the boundary is a project choice written into the "
@@ -320,29 +320,37 @@ TOOLS: list[ToolDefinition] = [
         key="thermal_stability",
         tool="TemStaPro",
         measures=(
-            "Predicted thermal stability, reported as the probability that the peptide "
-            "tolerates its assigned temperature band. Relevant to fabrication, storage and "
-            "shelf life."
+            "Exploratory TemStaPro signal: the mean of the model outputs at six temperature "
+            "thresholds (40, 45, 50, 55, 60 and 65 °C). This is not a measured melting "
+            "temperature or a calibrated probability for short peptides."
         ),
         higher_is_better=True,
         group="developability",
-        semantics="probability",
+        semantics="ranking_only",
         threshold=None,
         threshold_note=(
-            "The predictor is multi-class over temperature bands rather than binary, so it "
-            "carries no single acceptance boundary. The band assignment travels in the row's "
-            "label beside the score."
+            "TemStaPro uses separate binary classifiers at temperature thresholds. The stored "
+            "mean has not been calibrated on short peptides; it does not establish a safe "
+            "processing temperature, storage condition or shelf life for a fusion protein."
         ),
         coverage_note="All 496 constructs carry a value.",
     ),
     ToolDefinition(
         key="solubility",
         tool="SoDoPE",
-        measures="Predicted solubility on recombinant expression — drives purification yield.",
+        measures=(
+            "Exploratory solubility signal from a model of recombinant protein expression. "
+            "A short-peptide score does not establish the aqueous solubility, expression "
+            "yield or purification behaviour of the assembled fusion protein."
+        ),
         higher_is_better=True,
         group="developability",
-        semantics="probability",
+        semantics="ranking_only",
         threshold=None,
+        threshold_note=(
+            "Use for exploratory comparison only. The final sequence and expression context "
+            "require separate assessment; no expression conditions are determined by this score."
+        ),
         coverage_note="All 496 constructs carry a value.",
     ),
     ToolDefinition(
@@ -363,8 +371,9 @@ TOOLS: list[ToolDefinition] = [
         key="composite",
         tool="Composite scorer",
         measures=(
-            "A derived ranking score, not a prediction. Weighted combination of the "
-            "developability components under one application route's weighting profile."
+            "An exploratory, pool-relative ranking under an application route's weighting "
+            "profile. Includes model signals whose short-peptide applicability is unverified; "
+            "it is not an activity, safety or experimental-success probability."
         ),
         higher_is_better=True,
         group="developability",
@@ -515,7 +524,9 @@ PIPELINE_VIEW = PipelineView(
         "standard-deviation weighting over the developability components, recomputed per "
         "application route because each route carries a different weighting profile. The "
         "components, their normalised values and the weight each received are returned with "
-        "every score so the number can be reproduced by hand."
+        "every score so the number can be reproduced by hand. This remains an exploratory "
+        "ranking: the model signals are not all calibrated for short peptides, and the "
+        "composite does not establish activity, fusion-protein safety or experimental success."
     ),
     excluded_note=(
         "Rounds 5-8 concern 3D structure and are out of MVP scope. Because Round 7 also "

@@ -11,6 +11,7 @@ import type {
   BuildResult,
   ChatMessage,
   ChatResponse,
+  ChatStatus,
   ConstructDetail,
   ConstructSummary,
   DeliveryRoute,
@@ -120,17 +121,47 @@ export function fetchConstructAnalysis(
 
 export interface ChatRequestPayload {
   message: string
+  mode?: "ai" | "record"
   route_id?: string | null
+  scaffold_id?: string | null
+  linker_id?: string | null
   history?: ChatMessage[]
 }
 
+export function fetchChatStatus(): Promise<ChatStatus> {
+  return request<ChatStatus>("/api/chat/status")
+}
+
 export function sendChat(id: string, payload: ChatRequestPayload): Promise<ChatResponse> {
-  return postJson<ChatResponse>(`/api/constructs/${id}/chat`, {
+  const contextKey = JSON.stringify([
+    id, payload.route_id ?? "", payload.scaffold_id ?? "", payload.linker_id ?? "",
+  ])
+  const history = (payload.history ?? [])
+    .filter((message) => message.context_key === contextKey)
+    .slice(-6)
+    .map((message): ChatMessage => ({
+      id: message.id,
+      role: message.role,
+      content: message.content.slice(0, 2000),
+      timestamp: message.timestamp,
+      actions: [],
+      context_key: contextKey,
+    }))
+  const body = {
     construct_id: id,
+    context_key: contextKey,
     message: payload.message,
+    mode: payload.mode ?? "ai",
     route_id: payload.route_id ?? null,
-    history: payload.history ?? [],
-  })
+    scaffold_id: payload.scaffold_id ?? null,
+    linker_id: payload.linker_id ?? null,
+    history,
+  }
+  // Leave headroom under the endpoint's body limit, including for multibyte conversations.
+  while (history.length && new TextEncoder().encode(JSON.stringify(body)).byteLength > 28_000) {
+    history.shift()
+  }
+  return postJson<ChatResponse>(`/api/constructs/${id}/chat`, body)
 }
 
 // ── Build ───────────────────────────────────────────────────────────────────

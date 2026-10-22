@@ -49,6 +49,13 @@ def _validate_route(route_id: str | None) -> None:
         )
 
 
+def _validate_assembly(scaffold_id: str | None, linker_id: str | None) -> None:
+    if scaffold_id is not None and scaffolds_repo.get_scaffold(scaffold_id) is None:
+        raise HTTPException(status_code=404, detail=f"scaffold {scaffold_id!r} not found")
+    if linker_id is not None and linkers_service.view_for(linker_id) is None:
+        raise HTTPException(status_code=404, detail=f"linker {linker_id!r} not found")
+
+
 @router.get("", response_model=ConstructPage)
 def list_constructs(
     direction: str | None = Query(default=None, description="Stored direction value."),
@@ -186,14 +193,20 @@ def peptide_detail(construct_id: str) -> dict:
 def analysis(
     construct_id: str,
     route_id: str | None = Query(default=None),
+    scaffold_id: str | None = Query(default=None),
+    linker_id: str | None = Query(default=None),
 ) -> AnalysisResponse:
     _validate_route(route_id)
+    _validate_assembly(scaffold_id, linker_id)
     row = _load(construct_id)
     enriched = enrichment.scores_for_peptides([row["peptide_id"]])
-    detail = service.build_detail(row, enriched.get(row["peptide_id"], {}), route_id=route_id)
+    detail = service.build_detail(
+        row, enriched.get(row["peptide_id"], {}), route_id=route_id,
+        scaffold_id=scaffold_id, linker_id=linker_id,
+    )
     provider, blocks = analysis_service.build_response(detail)
     return AnalysisResponse(
-        construct_id=construct_id, provider=provider, route_id=route_id, blocks=blocks,
+        construct_id=construct_id, provider=provider, route_id=detail.safety.route_id, blocks=blocks,
     )
 
 
@@ -201,18 +214,26 @@ def analysis(
 def chat(construct_id: str, request: ChatRequest) -> ChatResponse:
     """Answer a question about one construct.
 
-    The answer is derived from the construct's own record, so the same question under the same
-    route describes the same numbers every time. `history` is passed to the generator, which
-    uses it to read a follow-up against the turns before it — the template ignores it, because
-    what the record says does not depend on what was asked earlier, and a model-backed
-    generator uses it to resolve a question like "and the one above it". Either way the
-    history changes how the question is read and not what the record contains; `provider` on
-    the response says which of the two answered.
+    AI mode generates original prose using the record and recent conversation. Record values
+    remain program-rendered and cited. Model failures return errors; explicit record mode
+    renders deterministic excerpts independently of the conversational transcript.
     """
     route_id = request.route_id
+    if request.construct_id != construct_id:
+        raise HTTPException(status_code=400, detail="request construct_id does not match the URL")
     _validate_route(route_id)
+    _validate_assembly(request.scaffold_id, request.linker_id)
     row = _load(construct_id)
     enriched = enrichment.scores_for_peptides([row["peptide_id"]])
-    detail = service.build_detail(row, enriched.get(row["peptide_id"], {}), route_id=route_id)
-    analysis_service.ensure_generator()
-    return analysis_service.chat(detail, request.message, history=request.history)
+    detail = service.build_detail(
+        row, enriched.get(row["peptide_id"], {}), route_id=route_id,
+        scaffold_id=request.scaffold_id, linker_id=request.linker_id,
+    )
+    if request.mode == "ai":
+        analysis_service.ensure_generator()
+    return analysis_service.chat(
+        detail, request.message, history=request.history, mode=request.mode,
+        context_key=analysis_service.make_context_key(
+            construct_id, request.route_id, request.scaffold_id, request.linker_id,
+        ),
+    )

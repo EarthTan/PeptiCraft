@@ -62,6 +62,8 @@ const MIME = {
 }
 
 const escaped = []
+// Request-local test snapshots, without changing the deployment's exported files on disk.
+const assetOverrides = new Map()
 
 const realFetch = globalThis.fetch
 globalThis.fetch = (input, init) => {
@@ -85,6 +87,12 @@ const staticServer = createServer((req, res) => {
   // the prefix is stripped here to reach the directory. A real deployment does the same thing
   // by publishing `public/` at the site root.
   const relative = url.pathname.replace(/^\/data\/?/, '')
+  if (assetOverrides.has(relative)) {
+    const payload = assetOverrides.get(relative)
+    res.writeHead(payload === null ? 404 : 200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(payload))
+    return
+  }
   const file = join(DATA_DIR, normalize(relative).replace(/^(\.\.[/\\])+/, ''))
   if (!existsSync(file) || !statSync(file).isFile()) {
     res.writeHead(404, { 'Content-Type': 'application/json' })
@@ -378,6 +386,68 @@ console.log('\nroute-dependent numbers')
     `${detailRouted?.scores?.composite} vs ${detailRouted?.delivery_scores?.['injectable-filler']?.composite}`,
   )
   check('a named route reports its own safety verdict', typeof detailRouted?.safety_verdict === 'string')
+  const reference = await staticMod.serveStatic('GET', '/api/meta/reference', new URLSearchParams())
+  for (const route of reference.routes) {
+    const shown = await staticMod.serveStatic('GET', `/api/constructs/${id}`, new URLSearchParams({ route_id: route.id }))
+    const expected = detailDefault.route_contexts?.[route.id]
+    check(`${route.id}: a complete service-authored context is exported`, Boolean(expected?.safety))
+    check(`${route.id}: the entire safety table follows the selected route`,
+      JSON.stringify(shown?.safety) === JSON.stringify(expected?.safety))
+    check(`${route.id}: both composite fields follow the same context`,
+      shown?.composite === expected?.composite && shown?.scores?.composite === expected?.composite)
+    const gate = shown?.safety?.gates?.find((candidate) => candidate.key === 'immunogenicity')
+    check(`${route.id}: immunogenicity threshold labels follow the selected safety gate`,
+      shown?.safety?.route_id === route.id &&
+      shown?.safety?.immunogenicity_threshold === route.screening.immunogenicity_threshold &&
+      shown?.score_meta?.immunogenicity?.applied_threshold?.value === gate?.threshold &&
+      shown?.score_meta?.immunogenicity?.applied_threshold?.source === gate?.threshold_source)
+    const analysis = await staticMod.serveStatic('GET', `/api/constructs/${id}/analysis`, new URLSearchParams({ route_id: route.id }))
+    check(`${route.id}: the prose names its actual route`, analysis?.route_id === route.id)
+    const byRoute = JSON.parse(await readFile(join(DATA_DIR, `constructs/${id}/analysis_by_route.json`), 'utf8'))
+    check(`${route.id}: all analysis prose comes from that route's export`,
+      JSON.stringify(analysis) === JSON.stringify(byRoute[route.id]))
+  }
+}
+
+console.log('\nold or incomplete snapshots cannot substitute a different route')
+{
+  const staticMod = await loadAppModule('api/static.ts')
+  const source = JSON.parse(await readFile(join(DATA_DIR, 'constructs/con_0001.json'), 'utf8'))
+  const old = structuredClone(source)
+  old.id = 'con_90000001'
+  delete old.route_contexts
+  assetOverrides.set(`constructs/${old.id}.json`, old)
+  assetOverrides.set(`constructs/${old.id}/analysis_by_route.json`, null)
+  const defaultAnalysis = JSON.parse(await readFile(join(DATA_DIR, 'constructs/con_0001/analysis.json'), 'utf8'))
+  assetOverrides.set(`constructs/${old.id}/analysis.json`, { ...defaultAnalysis, construct_id: old.id })
+  const ownRoute = await staticMod.serveStaticResult('GET', `/api/constructs/${old.id}`, new URLSearchParams({ route_id: old.safety.route_id }))
+  check('a legacy snapshot still supports its stored route', ownRoute.payload?.safety?.route_id === old.safety.route_id && !ownRoute.error)
+  for (const suffix of ['', '/analysis']) {
+    const result = await staticMod.serveStaticResult('GET', `/api/constructs/${old.id}${suffix}`, new URLSearchParams({ route_id: 'hair-coating' }))
+    check(`legacy ${suffix || 'detail'}: a different route is explicitly unavailable`,
+      result.covered && result.payload === null && result.error?.kind === 'data_unavailable')
+  }
+  const clientMod = await loadModuleWithTs('api/client.ts')
+  const before = escaped.length
+  let clientError
+  try { await clientMod.request(`/api/constructs/${old.id}?route_id=hair-coating`) } catch (error) { clientError = error }
+  check('the client distinguishes missing route context from database failure or not-found',
+    clientError?.kind === 'data_unavailable' && clientError?.status === 503, clientError?.kind)
+  check('an unavailable exported context never falls through to the network', escaped.length === before)
+
+  const incomplete = structuredClone(source)
+  incomplete.id = 'con_90000002'
+  incomplete.route_contexts['hair-coating'].safety.gates = incomplete.route_contexts['hair-coating'].safety.gates.filter((gate) => gate.key !== 'toxicity')
+  assetOverrides.set(`constructs/${incomplete.id}.json`, incomplete)
+  const broken = await staticMod.serveStaticResult('GET', `/api/constructs/${incomplete.id}`, new URLSearchParams({ route_id: 'hair-coating' }))
+  check('an incomplete authoritative gate table is explicitly unavailable', broken.error?.kind === 'data_unavailable')
+
+  const nullComposite = structuredClone(source)
+  nullComposite.id = 'con_90000003'
+  nullComposite.route_contexts['hair-coating'].composite = null
+  assetOverrides.set(`constructs/${nullComposite.id}.json`, nullComposite)
+  const nullShown = await staticMod.serveStatic('GET', `/api/constructs/${nullComposite.id}`, new URLSearchParams({ route_id: 'hair-coating' }))
+  check('an authoritative null composite stays null in both fields', nullShown?.composite === null && nullShown?.scores?.composite === null)
 }
 
 console.log('\nscaffolds, linkers, analysis')

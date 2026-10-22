@@ -53,14 +53,12 @@ async def lifespan(app: FastAPI):
         if generator.name == "llm":
             log.info("analysis provider: model-backed (%s)", settings.llm_model)
         else:
-            # The settings ask for a model and there is none reachable, so the template stays
-            # active. Said plainly at startup because a deployment that thinks it has a model
-            # and does not would otherwise present template prose as model output until a
-            # reader noticed.
+            # Configuration is checked locally; availability is checked by the chat call.
+            # Missing settings must be visible instead of producing a pretend AI answer.
             log.warning(
-                "ANALYSIS_PROVIDER=llm is set but no model is reachable (%s); the template "
-                "generator remains active and every response says provider=template.",
-                "no base URL or API key" if not settings.llm_base_url else "the request failed",
+                "ANALYSIS_PROVIDER=llm is set but no model is configured (%s); AI chat "
+                "will return an explicit unavailable error.",
+                "missing endpoint, API key or model name",
             )
     db.init_pool()
     try:
@@ -133,6 +131,27 @@ async def _query_failed(request: Request, exc: db.QueryFailed) -> JSONResponse:
         status_code=500,
         content={"error": "query_failed", "detail": str(exc)},
     )
+
+
+@app.exception_handler(analysis_service.ModelUnavailable)
+async def _model_unavailable(request: Request, exc: analysis_service.ModelUnavailable) -> JSONResponse:
+    """A failed AI request must not masquerade as a successful record-based answer."""
+    if isinstance(exc, analysis_service.LlmNotConfigured):
+        code, status, detail = "llm_not_configured", 503, "AI model is not configured."
+    elif isinstance(exc, analysis_service.InvalidModelOutput):
+        code, status, detail = "invalid_model_output", 502, "The model returned an invalid answer. Please retry."
+    else:
+        code, status, detail = "model_unavailable", 503, "The AI model is temporarily unavailable. Please retry."
+    log.warning("AI chat error: %s", code)
+    return JSONResponse(status_code=status, content={"error": code, "detail": detail})
+
+
+@app.get("/api/chat/status")
+def chat_status() -> dict:
+    """Configuration status only; a configured provider can still fail on a chat request."""
+    configured = analysis_service.llm_configured()
+    return {"llm_configured": configured,
+            "model": get_settings().llm_model if configured else None}
 
 
 app.include_router(catalog.router, prefix="/api")

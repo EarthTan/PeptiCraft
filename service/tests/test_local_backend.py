@@ -220,7 +220,7 @@ def test_analysis_and_chat(client):
 
     reply = client.post(
         "/api/constructs/con_9001/chat",
-        json={"construct_id": "con_9001", "message": "How does the safety gate read?"},
+        json={"construct_id": "con_9001", "message": "How does the safety gate read?", "mode": "record"},
     ).json()
     assert reply["provider"] == "template"
     assert reply["llm_configured"] is False
@@ -228,48 +228,25 @@ def test_analysis_and_chat(client):
     assert reply["suggested_questions"]
 
 
-def test_expression_block_returns_a_recommended_route(client):
-    """The block has to answer "what should I do", not only "the dataset does not say".
-
-    The record genuinely carries no expression condition, and that caveat has to survive —
-    but it used to be the whole block, which left a reader with nothing to act on.
-    """
+def test_expression_block_does_not_invent_an_experimental_route(client):
     body = client.get("/api/constructs/con_9002/analysis").json()
     block = next(b for b in body["blocks"] if b["id"] == "expression_strategy")
-
-    assert block["content"].startswith("Recommended route:")
-    assert "no expression host, vector or induction condition" in block["content"]
-
-    plan = block["plan"]
-    assert plan is not None
-    assert plan["host"] == "Escherichia coli"
-    # con_9002's solubility is below the planning cut, so the rescue route is the correct one
-    # and the plan and the prose must agree about it.
-    assert plan["tier"] == "solubility-rescue"
-    assert plan["vector"] == "pET SUMO"
-    assert plan["temperature_c"] == 16
-    assert "His6-SUMO" in block["content"]
+    assert block["plan"] is None
+    assert "No source-backed expression conditions" in block["content"]
+    assert "IPTG" not in block["content"]
+    assert "16 °C" not in block["content"]
 
 
-def test_long_collagen_carrier_moves_the_host_to_a_secreted_yeast(client):
+def test_carrier_length_alone_does_not_determine_a_host(client):
     detail = ConstructDetail.model_validate(client.get("/api/constructs/con_9001").json())
     long_collagen = ScaffoldSummary(
-        id="fixture-long-collagen",
-        name="Long collagen",
-        short_name="Long collagen",
-        category="recombinant-collagen",
-        applicant="fixture",
-        length=1071,
-        has_sequence=True,
+        id="fixture-long-collagen", name="Long collagen", short_name="Long collagen",
+        category="recombinant-collagen", applicant="fixture", length=1071, has_sequence=True,
     )
-
-    plan = TemplateGenerator()._expression_plan(
-        detail.model_copy(update={"scaffold": long_collagen})
-    )
-
-    assert plan.tier == "secretion"
-    assert plan.host.startswith("Pichia pastoris")
-    assert plan.temperature_c == 28
+    block = TemplateGenerator()._expression_strategy(detail.model_copy(update={"scaffold": long_collagen}))
+    assert block.plan is None
+    assert "No source-backed expression conditions" in block.content
+    assert "Pichia pastoris" not in block.content
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@
  * second one lands, which is the kind of bug that looks like wrong data rather than like a
  * race.
  */
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { ApiError } from "@/api/client"
 
@@ -108,32 +108,41 @@ export function useAsyncAction<TArgs extends unknown[], TResult>(
   const [error, setError] = useState<ApiError | null>(null)
   const [data, setData] = useState<TResult | null>(null)
   const actionRef = useRef(action)
-  actionRef.current = action
   const mounted = useRef(true)
+  const sequence = useRef(0)
+
+  useLayoutEffect(() => {
+    actionRef.current = action
+  }, [action])
 
   useEffect(() => {
     mounted.current = true
     return () => {
       mounted.current = false
+      sequence.current += 1
     }
   }, [])
 
   const run = useCallback(async (...args: TArgs) => {
+    const ticket = ++sequence.current
     setPending(true)
     setError(null)
     try {
       const result = await actionRef.current(...args)
-      if (mounted.current) setData(result)
+      if (!mounted.current || ticket !== sequence.current) return null
+      setData(result)
       return result
     } catch (cause) {
-      if (mounted.current) setError(toApiError(cause))
+      if (mounted.current && ticket === sequence.current) setError(toApiError(cause))
       return null
     } finally {
-      if (mounted.current) setPending(false)
+      if (mounted.current && ticket === sequence.current) setPending(false)
     }
   }, [])
 
   const reset = useCallback(() => {
+    sequence.current += 1
+    setPending(false)
     setError(null)
     setData(null)
   }, [])

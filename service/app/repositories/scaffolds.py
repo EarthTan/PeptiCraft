@@ -15,6 +15,8 @@ SELECT id, name, short_name, category, construct_cn, applicant, patent_family, s
        length_aa, aa_sequence, sequence_count, application_tags, route_ids, material_forms,
        max_evidence, product_use, potential_uses, evidence_limits, registrations,
        registration_note, description, patent_source_url, regulatory_evidence_url,
+       expression_system, expression_vector_recorded, expression_vector_recommended,
+       expression_rationale, expression_source_url, expression_sequence_id,
        source_version
   FROM scaffold_library
 """
@@ -59,7 +61,8 @@ def sequences_for(scaffold_ids: Sequence[str]) -> dict[str, list[dict[str, Any]]
         SELECT sequence_id, scaffold_id, fasta_filename, length_aa, aa_sequence, sha256,
                product_use, regulatory_status, evidence_level, experiment_group,
                experiment_level, specific_experiments, principal_result, result_location,
-               evidence_limitations
+               evidence_limitations, expression_system, expression_vector_recorded,
+               expression_vector_recommended, expression_rationale, expression_source_url
           FROM scaffold_library_sequences
          WHERE scaffold_id = ANY(%s)
          ORDER BY scaffold_id, length_aa DESC

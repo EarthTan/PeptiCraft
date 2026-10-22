@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Engineering — PeptiCraft</title>
+<style>
+:root{
+  --ink:#2C2C2A; --ink-2:#5F5E5A; --ink-3:#888780;
+  --line:#D3D1C7; --line-2:#E7E5DC; --surface:#FFFFFF; --page:#FAFAF7;
+  --amber:#854F0B; --amber-fill:#FAC775;
+  --teal:#0F6E56; --teal-fill:#9FE1CB;
+  --red:#A32D2D;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--page); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-size:16px; line-height:1.65; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:900px; margin:0 auto; padding:56px 24px 96px}
+.crumb{font-size:13px; color:var(--ink-3); letter-spacing:.02em; margin-bottom:28px}
+.crumb span{color:var(--line)}
+h1{font-size:38px; line-height:1.18; font-weight:500; margin:0 0 20px; letter-spacing:-.01em}
+.standfirst{font-size:19px; line-height:1.6; color:var(--ink-2); margin:0 0 18px; max-width:780px}
+.legend{font-size:13px; color:var(--ink-3); margin:0; max-width:780px}
+h2{font-size:21px; font-weight:500; margin:66px 0 10px; letter-spacing:-.005em}
+.lede{color:var(--ink-2); margin:14px 0 22px; max-width:780px}
+.caption{font-size:13px; color:var(--ink-3); margin:12px 0 0; max-width:780px}
+figure{margin:0}
+.rules{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:26px 0 0}
+.rule{background:var(--surface); border:1px solid var(--line-2); border-radius:10px; padding:22px 22px 20px}
+.rule b{display:block; font-size:15px; font-weight:500; margin-bottom:8px; line-height:1.4}
+.rule span{font-size:14px; color:var(--ink-2); line-height:1.55}
+.foot{margin-top:72px; padding-top:20px; border-top:1px solid var(--line-2); font-size:13px; color:var(--ink-3)}
+svg{display:block; width:100%; height:auto}
+@media (max-width:640px){
+  .rules{grid-template-columns:1fr}
+  h1{font-size:30px}
+  .standfirst{font-size:17px}
+  .wrap{padding:36px 18px 72px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<p class="crumb">Project <span>/</span> Engineering</p>
+
+<h1>Five stages, each forced by the last</h1>
+
+<p class="standfirst">Every stage below is read the same way: what it took in, what it produced, what the run revealed, and what that forced in the next one. The amber line carries the number that changed the design. None of them arrived as an error message — each came from reading results that had already been accepted.</p>
+
+<p class="legend">In each strip a filled block was executed and a hollow block was written but never run. Strips are not to scale: the stages operate on pools five orders of magnitude apart.</p>
+
+<h2>1.1 — The first funnel</h2>
+
+<figure>
+<svg viewBox="0 0 820 158" role="img" aria-labelledby="p11t p11d">
+<title id="p11t">Stage 1.1 overview</title>
+<desc id="p11d">Six phases, one executed. 1843 curated antioxidant peptides produced 107 survivors. A curated set still failed safety almost entirely.</desc>
+<rect x="20" y="12" width="48" height="24" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
+<text x="44" y="24" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#2C2C2A">1.1</text>
+<text x="80" y="26" dominant-baseline="central" font-size="16" font-weight="500" fill="#2C2C2A">The first funnel</text>
+<text x="800" y="26" text-anchor="end" dominant-baseline="central" font-size="12" fill="#888780">partially run</text>
+<text x="80" y="52" dominant-baseline="central" font-size="13" fill="#5F5E5A">1,843 curated antioxidant peptides &#8594; 107 survivors &#183; seconds to minutes</text>
+<text x="80" y="80" dominant-baseline="central" font-size="12" fill="#888780">6 phases</text>
+<rect x="190" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="220" y="72" width="24" height="16" rx="3" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="0.5"/>
+<rect x="250" y="72" width="24" height="16" rx="3" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="0.5"/>
+<rect x="280" y="72" width="24" height="16" rx="3" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="0.5"/>
+<rect x="310" y="72" width="24" height="16" rx="3" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="0.5"/>
+<rect x="340" y="72" width="24" height="16" rx="3" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="0.5"/>
+<rect x="68" y="106" width="3" height="11" rx="1.5" fill="#854F0B"/>
+<text x="80" y="112" dominant-baseline="central" font-size="13" fill="#854F0B">94% of an already-curated antioxidant set failed a safety filter.</text>
+<rect x="68" y="130" width="3" height="11" rx="1.5" fill="#0F6E56"/>
+<text x="80" y="136" dominant-baseline="central" font-size="13" fill="#0F6E56">The limit was the size of the pool, not the filter.</text>
+</svg>
+</figure>
+
+<p class="lede">The first pipeline asked one question — from a set already annotated as antioxidant, which peptides are safe enough to build a fusion around — and answered it in one direction only: 656 removed for predicted toxicity, 1,077 for allergenicity and 3 for haemolysis. A curated set is not a safe set. The remaining phases were written and not run, because a run whose ceiling is a few hundred constructs was not worth the hours it would take.</p>
+
+<h2>1.2 — The first complete run</h2>
+
+<figure>
+<svg viewBox="0 0 820 158" role="img" aria-labelledby="p12t p12d">
+<title id="p12t">Stage 1.2 overview</title>
+<desc id="p12d">Eight rounds, all executed. 1081772 sequences produced 150 constructs in about six and a half hours. The run succeeded and its arithmetic did not.</desc>
+<rect x="20" y="12" width="48" height="24" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
+<text x="44" y="24" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#2C2C2A">1.2</text>
+<text x="80" y="26" dominant-baseline="central" font-size="16" font-weight="500" fill="#2C2C2A">The first complete run</text>
+<text x="800" y="26" text-anchor="end" dominant-baseline="central" font-size="12" fill="#888780">complete</text>
+<text x="80" y="52" dominant-baseline="central" font-size="13" fill="#5F5E5A">1,081,772 sequences &#8594; 150 constructs &#183; about 6.5 hours</text>
+<text x="80" y="80" dominant-baseline="central" font-size="12" fill="#888780">8 rounds</text>
+<rect x="190" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="220" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="250" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="280" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="310" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="340" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="370" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="400" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="68" y="106" width="3" height="11" rx="1.5" fill="#854F0B"/>
+<text x="80" y="112" dominant-baseline="central" font-size="13" fill="#854F0B">The run succeeded. The arithmetic inside it did not.</text>
+<rect x="68" y="130" width="3" height="11" rx="1.5" fill="#0F6E56"/>
+<text x="80" y="136" dominant-baseline="central" font-size="13" fill="#0F6E56">Safety became a threshold; each metric is used exactly once.</text>
+</svg>
+</figure>
+
+<p class="lede">Two findings came out of reading the stored results as arithmetic rather than as output. The safety coefficients — 0.13, 0.09 and 0.05 — were each smaller than the activity weight they were meant to override, so a peptide with a severe haemolysis signal could still finish near the top. And the composite used in the later rounds still carried the functional score at its largest coefficient, which meant the control arm was being ordered by the property that defined it as the control. Neither produced a failure.</p>
+
+<figure>
+<svg viewBox="0 0 820 176" role="img" aria-labelledby="coT coD">
+<title id="coT">Coefficients in the weighted total</title>
+<desc id="coD">Activity carried 0.50. Toxicity 0.13, haemolysis 0.09 and immunogenicity 0.05, each thinner than the term they had to override.</desc>
+<text x="80" y="20" font-size="12" fill="#888780">bar length = coefficient in the composite</text>
+<text x="80" y="48" dominant-baseline="central" font-size="12" fill="#5F5E5A">activity</text>
+<rect x="180" y="38" width="200" height="18" rx="4" fill="#FAC775"/>
+<text x="388" y="48" dominant-baseline="central" font-size="12" fill="#854F0B">0.50</text>
+<text x="80" y="76" dominant-baseline="central" font-size="12" fill="#5F5E5A">toxicity</text>
+<rect x="180" y="66" width="52" height="18" rx="4" fill="#FAC775"/>
+<text x="240" y="76" dominant-baseline="central" font-size="12" fill="#854F0B">0.13</text>
+<text x="80" y="104" dominant-baseline="central" font-size="12" fill="#5F5E5A">haemolysis</text>
+<rect x="180" y="94" width="36" height="18" rx="4" fill="#FAC775"/>
+<text x="224" y="104" dominant-baseline="central" font-size="12" fill="#854F0B">0.09</text>
+<text x="80" y="132" dominant-baseline="central" font-size="12" fill="#5F5E5A">immunogenicity</text>
+<rect x="180" y="122" width="20" height="18" rx="4" fill="#FAC775"/>
+<text x="208" y="132" dominant-baseline="central" font-size="12" fill="#854F0B">0.05</text>
+<text x="80" y="160" font-size="12" fill="#888780">An activity term of 0.50 outweighs a haemolysis penalty of 0.09 more than five times over.</text>
+</svg>
+</figure>
+
+<h2>1.3 — The scale step</h2>
+
+<figure>
+<svg viewBox="0 0 820 158" role="img" aria-labelledby="p13t p13d">
+<title id="p13t">Stage 1.3 overview</title>
+<desc id="p13d">Six stages planned, one executed. 849 million sequences scanned produced 19.9 million candidates in 98.7 minutes.</desc>
+<rect x="20" y="12" width="48" height="24" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
+<text x="44" y="24" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#2C2C2A">1.3</text>
+<text x="80" y="26" dominant-baseline="central" font-size="16" font-weight="500" fill="#2C2C2A">The scale step</text>
+<text x="800" y="26" text-anchor="end" dominant-baseline="central" font-size="12" fill="#888780">stage one only</text>
+<text x="80" y="52" dominant-baseline="central" font-size="13" fill="#5F5E5A">849,416,450 scanned &#8594; 19,890,021 in window &#183; 98.7 minutes</text>
+<text x="80" y="80" dominant-baseline="central" font-size="12" fill="#888780">6 stages</text>
+<rect x="190" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="220" y="72" width="24" height="16" rx="3" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="0.5"/>
+<rect x="250" y="72" width="24" height="16" rx="3" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="0.5"/>
+<rect x="280" y="72" width="24" height="16" rx="3" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="0.5"/>
+<rect x="310" y="72" width="24" height="16" rx="3" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="0.5"/>
+<rect x="340" y="72" width="24" height="16" rx="3" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="0.5"/>
+<rect x="68" y="106" width="3" height="11" rx="1.5" fill="#854F0B"/>
+<text x="80" y="112" dominant-baseline="central" font-size="13" fill="#854F0B">96.3% of the survivors were unannotated metagenomic fragments.</text>
+<rect x="68" y="130" width="3" height="11" rx="1.5" fill="#0F6E56"/>
+<text x="80" y="136" dominant-baseline="central" font-size="13" fill="#0F6E56">Weights from the pool's spread; state moved into a database.</text>
+</svg>
+</figure>
+
+<p class="lede">Three rounds of enlarging the labelled sets had returned less each time, so the requirement was dropped and the sequence universe was screened instead of a curated catalogue. That changed what the pool was made of: a reference proteome loses 99.7% of its entries to a thirty-residue ceiling, while a metagenomic catalogue of predicted small proteins loses 97% and supplies almost everything that survives. The pool became large and almost entirely unannotated — a real cost, accepted because a sequence nobody has studied can still be synthesised and tested, whereas a label that does not exist cannot be invented.</p>
+
+<h2>1.4 — Hierarchical filtering</h2>
+
+<figure>
+<svg viewBox="0 0 820 158" role="img" aria-labelledby="p14t p14d">
+<title id="p14t">Stage 1.4 overview</title>
+<desc id="p14d">Nine rounds, all executed. 19.9 million candidates produced 250 constructs in about 65 hours.</desc>
+<rect x="20" y="12" width="48" height="24" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
+<text x="44" y="24" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#2C2C2A">1.4</text>
+<text x="80" y="26" dominant-baseline="central" font-size="16" font-weight="500" fill="#2C2C2A">Hierarchical filtering</text>
+<text x="800" y="26" text-anchor="end" dominant-baseline="central" font-size="12" fill="#888780">complete</text>
+<text x="80" y="52" dominant-baseline="central" font-size="13" fill="#5F5E5A">19,890,021 candidates &#8594; 250 constructs &#183; about 65 hours</text>
+<text x="80" y="80" dominant-baseline="central" font-size="12" fill="#888780">9 rounds</text>
+<rect x="190" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="220" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="250" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="280" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="310" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="340" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="370" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="400" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="430" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="68" y="106" width="3" height="11" rx="1.5" fill="#854F0B"/>
+<text x="80" y="112" dominant-baseline="central" font-size="13" fill="#854F0B">The score has no functional term, so the control arm outranks the selected one.</text>
+<rect x="68" y="130" width="3" height="11" rx="1.5" fill="#0F6E56"/>
+<text x="80" y="136" dominant-baseline="central" font-size="13" fill="#0F6E56">Rank on physical quality; draw wet-lab candidates from both arms.</text>
+</svg>
+</figure>
+
+<p class="lede">One criterion per round, safety as a veto, and a single weighted average whose weights come from the data. The final score is structure only — surface exposure, aggregation propensity and structural confidence — with no activity term anywhere in it. The consequence reads at first like a mistake: the eight highest-scoring constructs in the entire run come from the control arm. It is in fact the proof that the two arms are independent, and it changed the instruction we would give a wet lab.</p>
+
+<figure>
+<svg viewBox="0 0 820 266" role="img" aria-labelledby="fT fD">
+<title id="fT">Scale of the 1.4 funnel</title>
+<desc id="fD">Five stages from 849 million sequences scanned to 250 final constructs, drawn on a logarithmic width scale.</desc>
+<text x="80" y="18" font-size="12" fill="#888780">bar width — logarithmic scale</text>
+<text x="238" y="50" text-anchor="end" dominant-baseline="central" font-size="13" fill="#5F5E5A">Sequences scanned</text>
+<rect x="250" y="34" width="480" height="32" rx="5" fill="#D3D1C7"/>
+<text x="718" y="50" text-anchor="end" dominant-baseline="central" font-size="12" fill="#2C2C2A">849,416,450</text>
+<text x="238" y="100" text-anchor="end" dominant-baseline="central" font-size="13" fill="#5F5E5A">Within 3–30 residues</text>
+<rect x="250" y="84" width="377" height="32" rx="5" fill="#B4B2A9"/>
+<text x="577" y="100" text-anchor="end" dominant-baseline="central" font-size="12" fill="#2C2C2A">19,890,021</text>
+<text x="238" y="150" text-anchor="end" dominant-baseline="central" font-size="13" fill="#5F5E5A">Peptides into assembly</text>
+<rect x="250" y="134" width="148" height="32" rx="5" fill="#888780"/>
+<text x="350" y="150" dominant-baseline="central" font-size="12" fill="#FFFFFF">4,324</text>
+<text x="238" y="200" text-anchor="end" dominant-baseline="central" font-size="13" fill="#5F5E5A">Constructs enumerated</text>
+<rect x="250" y="184" width="196" height="32" rx="5" fill="#5F5E5A"/>
+<text x="438" y="200" text-anchor="end" dominant-baseline="central" font-size="12" fill="#FFFFFF">25,944</text>
+<text x="238" y="250" text-anchor="end" dominant-baseline="central" font-size="13" fill="#5F5E5A">Final constructs</text>
+<rect x="250" y="234" width="69" height="32" rx="5" fill="#0F6E56"/>
+<text x="331" y="250" dominant-baseline="central" font-size="12" fill="#FFFFFF">250</text>
+</svg>
+<p class="caption">99.9987% rejected. The two most expensive steps — safety, then structure — sit where the population is smallest, which is the argument for ordering a pipeline by cost rather than by concept.</p>
+</figure>
+
+<h2>2.0 — The platform</h2>
+
+<figure>
+<svg viewBox="0 0 820 158" role="img" aria-labelledby="p20t p20d">
+<title id="p20t">Stage 2.0 overview</title>
+<desc id="p20d">Four rounds run once per direction across four directions. A 20.2 million peptide library produced 496 constructs.</desc>
+<rect x="20" y="12" width="48" height="24" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
+<text x="44" y="24" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#2C2C2A">2.0</text>
+<text x="80" y="26" dominant-baseline="central" font-size="16" font-weight="500" fill="#2C2C2A">The platform</text>
+<text x="800" y="26" text-anchor="end" dominant-baseline="central" font-size="12" fill="#888780">four runs</text>
+<text x="80" y="52" dominant-baseline="central" font-size="13" fill="#5F5E5A">20,248,885 peptides &#8594; 496 constructs &#183; seconds per run</text>
+<text x="80" y="80" dominant-baseline="central" font-size="12" fill="#888780">4 rounds &#215; 4 directions</text>
+<rect x="250" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="280" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="310" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="340" y="72" width="24" height="16" rx="3" fill="#5F5E5A"/>
+<rect x="68" y="106" width="3" height="11" rx="1.5" fill="#854F0B"/>
+<text x="80" y="112" dominant-baseline="central" font-size="13" fill="#854F0B">One published cut labelled 72.83% of the library positive, another 99.5%.</text>
+<rect x="68" y="130" width="3" height="11" rx="1.5" fill="#0F6E56"/>
+<text x="80" y="136" dominant-baseline="central" font-size="13" fill="#0F6E56">Percentile cuts, three veto gates, and no measurement rendered as a zero.</text>
+</svg>
+</figure>
+
+<p class="lede">Before the four runs, every tool was reproduced from its authors' code, its decision logic read, and several were retrained in an attempt to improve them. The gains were marginal and the same defects reappeared under a different representation, which puts the problem in the benchmark rather than in the model. The tools were therefore reclassified by what each can actually support — three can eliminate a candidate, two can rank, one ranks weakly, the rest only inform — and functional selection moved from a probability threshold to an in-pool percentile.</p>
+
+<figure>
+<svg viewBox="0 0 820 148" role="img" aria-labelledby="bT bD">
+<title id="bT">Share of the library called positive at the published boundary</title>
+<desc id="bD">Two functional predictors labelled 72.83 and 99.5 per cent of a 20 million peptide library positive. The percentile cut actually used sits near ten per cent.</desc>
+<text x="80" y="18" font-size="12" fill="#888780">share of a 20-million-peptide library called positive</text>
+<text x="230" y="48" text-anchor="end" dominant-baseline="central" font-size="13" fill="#5F5E5A">Predictor A, cut at 0.5</text>
+<rect x="242" y="36" width="419" height="24" rx="4" fill="#FAC775"/>
+<text x="671" y="48" dominant-baseline="central" font-size="12" fill="#854F0B">72.83%</text>
+<text x="230" y="88" text-anchor="end" dominant-baseline="central" font-size="13" fill="#5F5E5A">Predictor B, cut at 0.5</text>
+<rect x="242" y="76" width="573" height="24" rx="4" fill="#FAC775"/>
+<text x="805" y="88" text-anchor="end" dominant-baseline="central" font-size="12" fill="#2C2C2A">99.5%</text>
+<line x1="300" y1="30" x2="300" y2="110" stroke="#0F6E56" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="306" y="128" font-size="12" fill="#0F6E56">10% — the percentile cut actually used</text>
+</svg>
+<p class="caption">A boundary that admits three-quarters of a library, or almost all of it, is not a gate, whatever accuracy it reported on its own test set. The same stage produced the case the weighting was built for: the B-cell epitope table was empty, its computed weight came out at exactly 0.00, and the term left the composite on its own instead of spending a fifth of the score on a measurement that did not exist.</p>
+</figure>
+
+<p class="lede">Four runs produced 496 constructs across four directions. Two of those directions ship as pending signatures rather than as results, because the only available model answers whether a sequence resembles a known functional peptide rather than whether it has the activity. That distinction is carried in the data and in the interface rather than smoothed over: 198 of the 496 constructs carry no immunogenicity value from either pathway, and an unmeasured gate is reported as indeterminate — never as a pass, and never as a zero.</p>
+
+<h2>Four rules that came out of it</h2>
+
+<div class="rules">
+  <div class="rule"><b>A precondition is a threshold, never a weight</b><span>A coefficient small enough to be a fair weight is also small enough to be outvoted.</span></div>
+  <div class="rule"><b>A score that cannot separate candidates is not evidence</b><span>A constant given a coefficient becomes noise in every decision downstream of it.</span></div>
+  <div class="rule"><b>A published boundary belongs to its authors' population</b><span>Re-establish it on the population being screened. This is checkable before any biology is discussed.</span></div>
+  <div class="rule"><b>Scarcity of data sets the ceiling, not model capacity</b><span>Where labels are absent, the useful move is to change the question rather than to train harder.</span></div>
+</div>
+
+<h2>What this does not establish</h2>
+
+<p class="lede">No construct has been shown to be active. Every functional number is a prediction from a model trained on other data, and the wet-lab comparison that would test the premise of the design — that the two arms behave differently — has not been run. Structural confidence averages 0.42 on a scale where 0.50 marks the edge of meaningful confidence, a property of silk's glycine-alanine repeats rather than of the predictor, so the ranking built on those structures orders imperfect models consistently and does not measure them.</p>
+
+<p class="foot">Figures are from the PeptiCraft 1.1–1.4 runs and the four platform-scale runs. Full records: <em>PeptiCraft-Engineering.md</em>, <em>PeptiCraft-1.x-Master-Reference.md</em>, <em>PeptiCraft-2.0-Master-Reference.md</em>.</p>
+
+</div>
+</body>
+</html>

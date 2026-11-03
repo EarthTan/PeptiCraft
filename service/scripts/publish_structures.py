@@ -40,6 +40,30 @@ exists and the files are large enough to want multipart uploads:
 
 Either way the remote is named as `<bucket>` alone; the rclone remote name is configured on
 the machine rather than passed in, so that the same command line works for both backends.
+
+The rate limit, and why this uploader obeys it
+---------------------------------------------
+Cloudflare's own documentation states that the REST API is limited to 1,200 requests per
+five minutes across all R2 operations on an account, and that the S3-compatible API or a
+Workers binding is the way to do high-throughput object operations. The OAuth token this
+backend uses is an API token, so it spends that administrative quota rather than the
+object-quota path.
+
+That limit is not a formality at this scale. A run produces twenty-six thousand files, and
+uploading them as fast as the network allows spends the whole five-minute quota in seconds
+and then answers every remaining request with 429. The symptom is deceptive: the first
+thousand files succeed, the rest fail, and the next run — which begins with a fresh quota —
+fails in exactly the same place, so the count in the store never grows.
+
+So the uploader paces itself. It keeps a running count of requests inside the current
+five-minute window and waits rather than issuing a request that would be refused, and a
+request that is refused anyway is retried after the window rolls over. The result is a
+publish that takes hours instead of one that takes minutes and achieves nothing.
+
+Two further rules follow from the same quota. The index files are uploaded last and only
+once every coordinate file they refer to is present, because an index that names a file the
+store does not have produces a broken page rather than a missing one. And a file whose
+upload failed is not recorded as uploaded, so the next pass retries it.
 """
 from __future__ import annotations
 
@@ -50,14 +74,25 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 DEFAULT_BUCKET = "pepticraft-structures"
 DEFAULT_ACCOUNT = "37284f93088427a09c4ddb47f08d4cf4"
 WRANGLER_CONFIG = Path.home() / "Library/Preferences/.wrangler/config/default.toml"
+
+# The API's published limit: 1,200 requests per five minutes, across all R2 operations on
+# the account. The uploader spends most of that budget on coordinate files, so it aims below
+# the ceiling rather than at it.
+RATE_LIMIT = 1200
+RATE_WINDOW = 300.0
+# The fraction of the ceiling the uploader aims for, leaving room for the requests other
+# tools on the account make.
+RATE_TARGET = 0.7
 
 
 def run(command: list[str], *, dry_run: bool = False) -> None:
@@ -72,7 +107,14 @@ def run(command: list[str], *, dry_run: bool = False) -> None:
 
 
 def read_oauth_token() -> str:
-    """The OAuth token wrangler holds after `wrangler login`."""
+    """The OAuth token wrangler holds after `wrangler login`.
+
+    The token is short-lived: wrangler's OAuth grant expires within hours, and a batch that
+    runs for months will outlive it many times over. So the token is refreshed when it is
+    about to expire, and refreshed again if a request is refused because it expired
+    meanwhile. `CLOUDFLARE_OAUTH_TOKEN` in the environment overrides the file, which is the
+    way to run this on a machine whose token is managed elsewhere.
+    """
     from_env = os.environ.get("CLOUDFLARE_OAUTH_TOKEN")
     if from_env:
         return from_env
@@ -87,14 +129,165 @@ def read_oauth_token() -> str:
     raise SystemExit(f"no OAuth token in {WRANGLER_CONFIG}")
 
 
-class RestUploader:
-    """Uploads objects through the store's HTTP API, several at a time."""
+def token_expiry() -> datetime | None:
+    """When the stored token stops being accepted, if the file says."""
+    if not WRANGLER_CONFIG.exists():
+        return None
+    match = re.search(r'expiration_time\s*=\s*"([^"]+)"', WRANGLER_CONFIG.read_text())
+    if not match:
+        return None
+    try:
+        return datetime.fromisoformat(match.group(1).replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
-    def __init__(self, bucket: str, account: str, token: str, workers: int = 12) -> None:
+
+def wrangler_commands() -> list[list[str]]:
+    """Ways to run wrangler on this machine, most direct first.
+
+    A launch agent does not inherit the session's PATH, so the bare names "npx" and
+    "node" are not found even though both are installed. The cached copy of wrangler that
+    npx keeps is preferred, because calling it directly needs no registry access and
+    cannot fail on a network hiccup; the npx wrapper is the fallback.
+    """
+    commands: list[list[str]] = []
+
+    node_dirs = [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        str(Path.home() / ".workbuddy/binaries/node/versions"),
+    ]
+    versions = Path.home() / ".workbuddy/binaries/node/versions"
+    if versions.is_dir():
+        node_dirs.extend(str(p / "bin") for p in sorted(versions.iterdir(), reverse=True))
+
+    cache = Path.home() / ".npm/_npx"
+    if cache.is_dir():
+        for candidate in sorted(cache.glob("*/node_modules/.bin/wrangler"), reverse=True):
+            if os.access(candidate, os.X_OK):
+                commands.append([str(candidate)])
+                break
+
+    for node_dir in node_dirs:
+        npx = Path(node_dir) / "npx"
+        if npx.is_file() and os.access(npx, os.X_OK):
+            commands.append([str(npx), "wrangler"])
+            break
+
+    return commands
+
+
+def refresh_token() -> str | None:
+    """Renew the stored OAuth token. Returns the new token, or None.
+
+    Wrangler owns this exchange, and it holds a refresh token alongside the access token,
+    so the renewal is silent: any wrangler command that needs an authenticated call will
+    perform the exchange itself and write the new token back to its configuration file.
+    `wrangler whoami` is the cheapest command that forces it, and it reports whether the
+    renewal worked without touching any of the account's resources.
+
+    `wrangler login` is the fallback for when there is no refresh token left at all. That
+    path needs a browser and a person, so it is only reached in that case.
+    """
+    commands = wrangler_commands()
+    if not commands:
+        print(
+            "no wrangler on this machine, so the Cloudflare token cannot be renewed; set "
+            "CLOUDFLARE_OAUTH_TOKEN in the environment instead",
+            file=sys.stderr,
+        )
+        return None
+
+    env = dict(os.environ)
+    node_paths = [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        str(Path.home() / ".workbuddy/binaries/node/versions"),
+    ]
+    versions = Path.home() / ".workbuddy/binaries/node/versions"
+    if versions.is_dir():
+        node_paths.extend(str(p / "bin") for p in sorted(versions.iterdir(), reverse=True))
+    env["PATH"] = ":".join(node_paths + [env.get("PATH", "")])
+
+    before = read_oauth_token() if WRANGLER_CONFIG.exists() else ""
+    for base in commands:
+        for argument in ("whoami", "login"):
+            command = base + [argument]
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    env=env,
+                    cwd=str(Path.home()),
+                )
+            except OSError as exc:
+                print(f"could not run {' '.join(command)}: {exc}", file=sys.stderr)
+                continue
+            if result.returncode != 0:
+                continue
+            try:
+                token = read_oauth_token()
+            except SystemExit:
+                return None
+            if token != before:
+                print("renewed the Cloudflare OAuth token", file=sys.stderr)
+                return token
+            # The command succeeded but the token did not change: the silent renewal
+            # either was not needed or did not happen, so the next form is tried.
+    print("wrangler could not renew the Cloudflare OAuth token", file=sys.stderr)
+    return None
+
+
+class RateLimiter:
+    """Keeps the request count inside the API's five-minute window.
+
+    The window slides: a request made now is counted against the five minutes that follow
+    it. The limiter therefore remembers when each request was made, drops the ones that have
+    aged out of the window, and waits whenever the ones still inside it number more than the
+    budget allows.
+
+    The wait is not a fixed pause. It is the time until the oldest request in the window
+    leaves it, because that is the earliest moment a request could be issued without
+    exceeding the ceiling. Sleeping for a fixed interval instead would either exceed the
+    limit under load or waste the window's remaining capacity when the queue is short.
+    """
+
+    def __init__(self, limit: int = RATE_LIMIT, window: float = RATE_WINDOW,
+                 target: float = RATE_TARGET) -> None:
+        self.limit = int(limit * target)
+        self.window = window
+        self._stamps: list[float] = []
+        self._lock = threading.Lock()
+
+    def acquire(self) -> None:
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                self._stamps = [t for t in self._stamps if now - t < self.window]
+                if len(self._stamps) < self.limit:
+                    self._stamps.append(now)
+                    return
+                wait = self.window - (now - self._stamps[0]) + 0.5
+            time.sleep(max(wait, 0.5))
+
+
+class RestUploader:
+    """Uploads objects through the store's HTTP API, several at a time.
+
+    A refused request is retried rather than given up on, because the refusal is a rate
+    limit rather than a verdict on the request: the same file succeeds later, and the
+    alternative — recording it as failed — means the publish never completes.
+    """
+
+    def __init__(self, bucket: str, account: str, token: str, workers: int = 12,
+                 limiter: RateLimiter | None = None) -> None:
         self.bucket = bucket
         self.account = account
         self.token = token
         self.workers = workers
+        self.limiter = limiter or RateLimiter()
         self.base = (
             f"https://api.cloudflare.com/client/v4/accounts/{account}"
             f"/r2/buckets/{bucket}/objects"
@@ -102,25 +295,42 @@ class RestUploader:
 
     def put(self, key: str, payload: bytes, content_type: str) -> tuple[str, bool, str]:
         url = f"{self.base}/{key}"
-        request = urllib.request.Request(
-            url,
-            data=payload,
-            method="PUT",
-            headers={
-                "Authorization": f"Bearer {self.token}",
-                "Content-Type": content_type,
-            },
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=120) as response:
-                body = json.loads(response.read())
-            etag = body.get("result", {}).get("etag", "")
-            return key, True, etag
-        except urllib.error.HTTPError as error:
-            detail = error.read().decode()[:200]
-            return key, False, f"{error.code} {detail}"
-        except Exception as error:  # noqa: BLE001 - network failures are reported, not raised
-            return key, False, str(error)[:200]
+        detail = ""
+        for attempt in range(6):
+            request = urllib.request.Request(
+                url,
+                data=payload,
+                method="PUT",
+                headers={
+                    "Authorization": f"Bearer {self.token}",
+                    "Content-Type": content_type,
+                },
+            )
+            self.limiter.acquire()
+            try:
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    body = json.loads(response.read())
+                etag = body.get("result", {}).get("etag", "")
+                return key, True, etag
+            except urllib.error.HTTPError as error:
+                detail = f"{error.code} {error.read().decode()[:200]}"
+                if error.code == 429:
+                    # The window is full. Waiting it out is the only thing that helps, so
+                    # the pause grows with the number of attempts.
+                    time.sleep(RATE_WINDOW / 6 * (attempt + 1))
+                    continue
+                if error.code in (401, 9109):
+                    # The token expired mid-run, which a batch that outlives the grant
+                    # will hit sooner or later. Renewing it and trying again is right.
+                    renewed = refresh_token()
+                    if renewed:
+                        self.token = renewed
+                        continue
+                    return key, False, detail
+                return key, False, detail
+            except Exception as error:  # noqa: BLE001 - network failures are reported, not raised
+                return key, False, str(error)[:200]
+        return key, False, detail
 
 
 def upload_with_rest(
@@ -129,11 +339,18 @@ def upload_with_rest(
     state_path: Path | None,
     *,
     dry_run: bool = False,
+    index_keys: frozenset[str] = frozenset(),
 ) -> tuple[int, int]:
     """Upload every file, skipping the ones a previous run already stored.
 
     The skip list records the size and the store's own entity tag, so a file that changed
     on disk is uploaded again and a file that did not is not.
+
+    The index files named in `index_keys` are held back until every coordinate file has
+    been stored. An index that names a file the store does not have is worse than an index
+    that is merely out of date: the first produces a viewer that fails on a structure the
+    site claims exists, while the second produces one that correctly says the structure has
+    not been predicted yet.
     """
     state: dict[str, list] = {}
     if state_path and state_path.exists():
@@ -156,30 +373,50 @@ def upload_with_rest(
     if dry_run:
         return skipped, 0
 
+    coordinates = [(k, p) for k, p in pending if k not in index_keys]
+    indexes = [(k, p) for k, p in pending if k in index_keys]
+
     failures: list[tuple[str, str]] = []
     done = 0
     started = time.time()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=uploader.workers) as pool:
-        futures = {
-            pool.submit(
-                uploader.put,
-                key,
-                path.read_bytes(),
-                content_type_for(path),
-            ): (key, path)
-            for key, path in pending
-        }
-        for future in concurrent.futures.as_completed(futures):
-            key, path = futures[future]
-            _, ok, detail = future.result()
-            done += 1
-            if ok:
-                state[key] = [path.stat().st_size, detail]
-            else:
-                failures.append((key, detail))
-            if done % 200 == 0 or done == len(pending):
-                rate = done / max(time.time() - started, 1e-6)
-                print(f"  {done}/{len(pending)} uploaded ({rate:.0f}/s)", flush=True)
+
+    def upload_all(batch: list[tuple[str, Path]]) -> None:
+        nonlocal done
+        if not batch:
+            return
+        with concurrent.futures.ThreadPoolExecutor(max_workers=uploader.workers) as pool:
+            futures = {
+                pool.submit(
+                    uploader.put,
+                    key,
+                    path.read_bytes(),
+                    content_type_for(path),
+                ): (key, path)
+                for key, path in batch
+            }
+            for future in concurrent.futures.as_completed(futures):
+                key, path = futures[future]
+                _, ok, detail = future.result()
+                done += 1
+                if ok:
+                    state[key] = [path.stat().st_size, detail]
+                else:
+                    failures.append((key, detail))
+                if done % 200 == 0 or done == len(batch):
+                    rate = done / max(time.time() - started, 1e-6)
+                    print(f"  {done}/{len(batch)} uploaded ({rate:.1f}/s)", flush=True)
+
+    upload_all(coordinates)
+
+    # The index goes last, and only if every coordinate file it names is in the store.
+    if indexes and not failures:
+        upload_all(indexes)
+    elif indexes:
+        print(
+            "index withheld: some coordinate files failed to upload, so the index would "
+            "name structures the store does not have",
+            file=sys.stderr,
+        )
 
     if state_path:
         state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -275,8 +512,23 @@ def main(argv: list[str] | None = None) -> int:
         print("published")
         return 0
 
-    uploader = RestUploader(args.bucket, args.account, read_oauth_token(), args.workers)
-    skipped, uploaded = upload_with_rest(uploader, files, args.state, dry_run=args.dry_run)
+    token = read_oauth_token()
+    expiry = token_expiry()
+    if expiry is not None and expiry <= datetime.now(timezone.utc) + timedelta(minutes=10):
+        # Renew before the first request rather than after the first refusal, so a long
+        # upload does not discover the problem halfway through.
+        renewed = refresh_token()
+        if renewed:
+            token = renewed
+
+    uploader = RestUploader(args.bucket, args.account, token, args.workers)
+    skipped, uploaded = upload_with_rest(
+        uploader,
+        files,
+        args.state,
+        dry_run=args.dry_run,
+        index_keys=frozenset({"structures.json", "structure_lookup.json"}),
+    )
     print(f"published: {uploaded} uploaded, {skipped} already present")
     return 0
 

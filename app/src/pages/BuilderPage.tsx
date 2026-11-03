@@ -1,13 +1,15 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ErrorState } from "@/components/ui/error-state"
 import { CardGridSkeleton, ListSkeleton } from "@/components/ui/loading-state"
 import { Notice } from "@/components/ui/notice"
 import { StructureViewer } from "@/components/structure-viewer"
+import { BuildRecordsPanel } from "@/components/build-records"
 import {
   AlertTriangle,
   ArrowRight,
@@ -17,17 +19,21 @@ import {
   ChevronRight,
   Eye,
   FlaskConical,
+  History,
+  Save,
   ShieldAlert,
 } from "lucide-react"
 import { fetchBuild, fetchLinkers, fetchReference, fetchScaffolds } from "@/api"
 import { structureEnabled } from "@/api/structure"
 import type {
+  BuildResult,
   DeliveryRoute,
   FunctionDirection,
   LinkerView,
   MaterialForm,
   ScaffoldSummary,
 } from "@/api/types"
+import { listBuildRecords, saveBuildRecord, type BuildRecord } from "@/lib/buildRecords"
 import { distinctForms, formLabel, groupScaffoldsByRoute, materialFormLabels } from "@/lib/derive"
 import { DIRECTION_STATUS_LABEL, iconFor, WEIGHT_TIER_LABEL } from "@/lib/display"
 import { formatScore, verdictSkin } from "@/lib/score"
@@ -73,6 +79,11 @@ export default function BuilderPage() {
   const [scaffoldId, setScaffoldId] = useState("")
   const [linkerId, setLinkerId] = useState("")
   const [formFilter, setFormFilter] = useState<MaterialForm | "all">("all")
+
+  // Builds worth keeping again. They live in this browser rather than on a server, so the
+  // list is read from storage whenever it is opened rather than held in sync continuously.
+  const [records, setRecords] = useState<BuildRecord[]>([])
+  const [recordsOpen, setRecordsOpen] = useState(false)
 
   const load = useCallback(async () => {
     const [reference, scaffolds, linkers] = await Promise.all([
@@ -138,6 +149,70 @@ export default function BuilderPage() {
     setScaffoldId("")
     setLinkerId("")
     setFormFilter("all")
+  }
+
+  const openRecords = () => {
+    setRecords(listBuildRecords())
+    setRecordsOpen(true)
+  }
+
+  // The count on the button has to be right before the panel is ever opened, so the store
+  // is read once on mount rather than only when the panel asks for it.
+  useEffect(() => {
+    setRecords(listBuildRecords())
+  }, [])
+
+  /** Put a saved build's parameters back into the Builder and run it again. */
+  const loadRecord = (record: BuildRecord) => {
+    const route = routes.find((item) => item.id === record.params.route_id)
+    setRouteId(record.params.route_id)
+    setDirectionIds(record.params.direction)
+    setScaffoldId(record.params.scaffold_id ?? "")
+    setLinkerId(record.params.linker_id ?? "")
+    setFormFilter("all")
+    setRecordsOpen(false)
+    // A record names a route that the library may no longer carry. The rest of its
+    // parameters still apply, but the results step needs a route to render under, so an
+    // unknown one sends the reader back to the first step to choose a live route.
+    setStep(route ? 5 : 1)
+  }
+
+  /**
+   * Write the build on screen into the record store.
+   *
+   * The parameters are recorded alongside the result rather than read back from the
+   * interface's own state at a later moment, so a record always describes the build it
+   * was made from even if the Builder's choices have moved on since.
+   */
+  const handleSaveBuild = (title: string, note: string, data: BuildResult) => {
+    const outcome = saveBuildRecord({
+      title,
+      note,
+      params: {
+        direction: directionIds,
+        route_id: routeId,
+        scaffold_id: scaffoldId || null,
+        linker_id: effectiveLinkerId || null,
+        limit: RESULT_LIMIT,
+      },
+      labels: {
+        route: routeObj?.name ?? routeId,
+        directions: directions
+          .filter((direction) => directionIds.includes(direction.id))
+          .map((direction) => direction.name)
+          .join(" + "),
+        scaffold: selectedScaffold?.short_name ?? null,
+        linker: selectedLinker?.name ?? null,
+      },
+      counts: data.counts,
+      total: data.total,
+      candidates: data.items,
+    })
+    if (outcome.ok) {
+      setRecords(listBuildRecords())
+      return { ok: true as const }
+    }
+    return { ok: false as const, error: outcome.error }
   }
 
   const canProceed = (target: number) => {
@@ -210,14 +285,27 @@ export default function BuilderPage() {
     <div className="min-h-[calc(100vh-8rem)]">
       <section className="gradient-hero border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-          <Badge variant="accent" className="mb-3">
-            Construct Builder
-          </Badge>
-          <h1 className="text-2xl sm:text-3xl font-bold text-primary-900">Build Your Construct</h1>
-          <p className="text-sm text-gray-500 mt-1 max-w-3xl leading-relaxed">
-            One choice drives everything — your application route decides which scaffolds stay
-            eligible, how they are screened, and how the results are ranked.
-          </p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Badge variant="accent" className="mb-3">
+                Construct Builder
+              </Badge>
+              <h1 className="text-2xl sm:text-3xl font-bold text-primary-900">
+                Build Your Construct
+              </h1>
+              <p className="text-sm text-gray-500 mt-1 max-w-3xl leading-relaxed">
+                One choice drives everything — your application route decides which scaffolds
+                stay eligible, how they are screened, and how the results are ranked.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={openRecords} className="flex-shrink-0">
+              <History className="w-4 h-4" />
+              Saved builds
+              {records.length > 0 && (
+                <span className="ml-0.5 font-mono text-[11px] text-gray-400">{records.length}</span>
+              )}
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -503,9 +591,19 @@ export default function BuilderPage() {
             linker={selectedLinker}
             onBack={() => setStep(4)}
             onReset={resetAll}
+            onSave={handleSaveBuild}
+            onOpenRecords={openRecords}
           />
         )}
       </div>
+
+      <BuildRecordsPanel
+        open={recordsOpen}
+        onClose={() => setRecordsOpen(false)}
+        records={records}
+        onRecordsChange={setRecords}
+        onLoad={loadRecord}
+      />
     </div>
   )
 }
@@ -989,6 +1087,8 @@ function ResultStep({
   linker,
   onBack,
   onReset,
+  onSave,
+  onOpenRecords,
 }: {
   route: DeliveryRoute
   directionIds: string[]
@@ -997,6 +1097,12 @@ function ResultStep({
   linker: LinkerView | null
   onBack: () => void
   onReset: () => void
+  onSave: (
+    title: string,
+    note: string,
+    data: BuildResult,
+  ) => { ok: true } | { ok: false; error: string }
+  onOpenRecords: () => void
 }) {
   const load = useCallback(
     () =>
@@ -1020,6 +1126,14 @@ function ResultStep({
   /** The candidate whose predicted structure is on screen, if any. */
   const [structureFor, setStructureFor] = useState<string | null>(null)
 
+  // Saving. A build is a composition rather than a stored row, so nothing of it outlives
+  // the page unless it is kept deliberately; the form below is that decision.
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [saveTitle, setSaveTitle] = useState("")
+  const [saveNote, setSaveNote] = useState("")
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+
   const items = data?.items ?? []
   const counts = data?.counts ?? null
 
@@ -1027,6 +1141,25 @@ function ResultStep({
     .filter((direction) => directionIds.includes(direction.id))
     .map((direction) => direction.name)
     .join(" + ")
+
+  // A saved mark belongs to the build it was made from. Changing any of the four choices
+  // produces a different build, and the mark goes with it.
+  useEffect(() => {
+    setSaved(false)
+    setSaveOpen(false)
+  }, [route.id, directionIds, scaffold?.id, linker?.id])
+
+  const submitSave = () => {
+    if (!data) return
+    const outcome = onSave(saveTitle, saveNote, data)
+    if (outcome.ok) {
+      setSaveOpen(false)
+      setSaved(true)
+      setSaveError(null)
+    } else {
+      setSaveError(outcome.error)
+    }
+  }
 
   return (
     <div>
@@ -1119,6 +1252,89 @@ function ResultStep({
                     counts.without_composite === 1 ? "it sits" : "they sit"
                   } at the end of the ranking rather than counting as a zero.`}
               </p>
+
+              <div className="mt-4 pt-3 border-t border-accent-100 flex items-center justify-between gap-3 flex-wrap">
+                {saved ? (
+                  <p className="text-xs text-accent-700 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Saved to the build records.
+                    <button
+                      type="button"
+                      onClick={onOpenRecords}
+                      className="underline underline-offset-2 cursor-pointer"
+                    >
+                      Open them
+                    </button>
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-500 max-w-md leading-relaxed">
+                    A build leaves nothing behind once this page is closed. Saving keeps the
+                    parameters it was made under and the ranking it produced.
+                  </p>
+                )}
+                {!saved && !saveOpen && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSaveTitle(
+                        [route.name, selectedNames, scaffold?.short_name]
+                          .filter(Boolean)
+                          .join(" · "),
+                      )
+                      setSaveNote("")
+                      setSaveError(null)
+                      setSaveOpen(true)
+                    }}
+                  >
+                    <Save className="w-4 h-4" />
+                    Save this build
+                  </Button>
+                )}
+              </div>
+
+              {saveOpen && (
+                <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3 space-y-2.5">
+                  <div>
+                    <label
+                      htmlFor="build-record-title"
+                      className="block text-[11px] text-gray-500 mb-1"
+                    >
+                      Name
+                    </label>
+                    <Input
+                      id="build-record-title"
+                      value={saveTitle}
+                      onChange={(event) => setSaveTitle(event.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="build-record-note"
+                      className="block text-[11px] text-gray-500 mb-1"
+                    >
+                      Note
+                    </label>
+                    <Input
+                      id="build-record-note"
+                      value={saveNote}
+                      placeholder="What this build is for"
+                      onChange={(event) => setSaveNote(event.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  {saveError && <p className="text-xs text-red-600">{saveError}</p>}
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setSaveOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button variant="accent" size="sm" onClick={submitSave}>
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </CardContent>

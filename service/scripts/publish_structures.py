@@ -329,7 +329,16 @@ class RestUploader:
                     return key, False, detail
                 return key, False, detail
             except Exception as error:  # noqa: BLE001 - network failures are reported, not raised
-                return key, False, str(error)[:200]
+                # An interrupted connection says nothing about the request, and the proxy
+                # in front of this machine does drop them from time to time. Retrying is
+                # what distinguishes a transient drop from a file the store will not take:
+                # the retry either succeeds or fails the same way, and either answer is
+                # more useful than reporting the first drop as the outcome.
+                detail = str(error)[:200]
+                if attempt < 5:
+                    time.sleep(2 ** attempt)
+                    continue
+                return key, False, detail
         return key, False, detail
 
 

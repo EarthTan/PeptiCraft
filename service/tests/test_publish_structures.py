@@ -227,6 +227,57 @@ def test_a_non_rate_limit_error_is_not_retried(monkeypatch):
     assert len(attempts) == 1
 
 
+def test_a_dropped_connection_is_retried(monkeypatch):
+    """A connection the proxy drops mid-request says nothing about the file."""
+    attempts = []
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps({"result": {"etag": "abc"}}).encode()
+
+    def fake_urlopen(request, timeout=None):
+        attempts.append(request.full_url)
+        if len(attempts) == 1:
+            raise urllib.error.URLError(
+                OSError(5, "EOF occurred in violation of protocol"))
+        return _Response()
+
+    monkeypatch.setattr("scripts.publish_structures.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("scripts.publish_structures.time.sleep", lambda _s: None)
+
+    uploader = RestUploader("bucket", "account", "token", workers=1)
+    key, ok, _ = uploader.put("structures/s0.pdb", b"ATOM", "chemical/x-pdb")
+
+    assert ok
+    assert key == "structures/s0.pdb"
+    assert len(attempts) == 2
+
+
+def test_a_connection_that_keeps_dropping_is_reported(monkeypatch):
+    """The retries are bounded; a file that never gets through is a failure."""
+    attempts = []
+
+    def fake_urlopen(request, timeout=None):
+        attempts.append(request.full_url)
+        raise urllib.error.URLError(OSError(5, "EOF occurred in violation of protocol"))
+
+    monkeypatch.setattr("scripts.publish_structures.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("scripts.publish_structures.time.sleep", lambda _s: None)
+
+    uploader = RestUploader("bucket", "account", "token", workers=1)
+    key, ok, detail = uploader.put("structures/s0.pdb", b"ATOM", "chemical/x-pdb")
+
+    assert not ok
+    assert "EOF" in detail
+    assert len(attempts) == 6
+
+
 def test_an_expired_token_is_renewed_and_the_upload_retried(monkeypatch):
     """A batch that outlives the OAuth grant must renew it rather than stop."""
     attempts = []

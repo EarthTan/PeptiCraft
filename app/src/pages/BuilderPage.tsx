@@ -7,10 +7,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ErrorState } from "@/components/ui/error-state"
 import { CardGridSkeleton, ListSkeleton } from "@/components/ui/loading-state"
 import { Notice } from "@/components/ui/notice"
+import { StructureViewer } from "@/components/structure-viewer"
 import {
   AlertTriangle,
   ArrowRight,
   Bot,
+  Box,
   CheckCircle2,
   ChevronRight,
   Eye,
@@ -18,6 +20,7 @@ import {
   ShieldAlert,
 } from "lucide-react"
 import { fetchBuild, fetchLinkers, fetchReference, fetchScaffolds } from "@/api"
+import { structureEnabled } from "@/api/structure"
 import type {
   DeliveryRoute,
   FunctionDirection,
@@ -1014,6 +1017,9 @@ function ResultStep({
     linker?.id,
   ])
 
+  /** The candidate whose predicted structure is on screen, if any. */
+  const [structureFor, setStructureFor] = useState<string | null>(null)
+
   const items = data?.items ?? []
   const counts = data?.counts ?? null
 
@@ -1233,8 +1239,29 @@ function ResultStep({
                       Details
                     </Button>
                   </Link>
+                  {scaffold && linker && structureEnabled() && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setStructureFor((current) => (current === item.id ? null : item.id))
+                      }
+                    >
+                      <Box className="w-4 h-4" />
+                      3D
+                    </Button>
+                  )}
                 </div>
               </div>
+              {structureFor === item.id && scaffold && linker && (
+                <div className="px-4 pb-4">
+                  <StructureViewer
+                    constructId={item.id}
+                    scaffoldId={scaffold.id}
+                    linkerId={linker.id}
+                  />
+                </div>
+              )}
             </Card>
           )
         })}

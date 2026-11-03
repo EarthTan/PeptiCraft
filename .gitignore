@@ -9,9 +9,14 @@ iGEM-platform-main/
 # 必要跟着仓库走两遍。
 resouces/pg_export_20261011/
 
+# 送往工作站的交付包：与上面同理，入库的是 .tar.gz 与 .sha256，解开的目录不入库。归档本身
+# 也是可再生成的（service/scripts/export_omegafold_pack.py），留一份是为了交付时有确定的字节。
+exports/*/
+
 # 依赖与构建产物
 node_modules/
 dist/
+dist-new/
 dist-ssr/
 *.tsbuildinfo
 
@@ -49,3 +54,11 @@ app/.verify-cache/
 # 496 条构造，manifest.json 与 health.json 的 source_backend 均记 postgres。
 # 导出会整体替换 public/data/：真重新导过一次，就得连同新文件一起提交，否则仓库里那份
 # 会静默变旧，而它看起来与新的没有区别。
+
+# wrangler 的本地状态目录
+.wrangler/
+app/.wrangler/
+
+# 3D 预预测交付包：生成器在 service/scripts/export_omegafold_pack.py，manifest 与 FASTA
+# 可随时重建；9.8 GB 的坐标文件与这个包的中间产物不入库。
+exports/

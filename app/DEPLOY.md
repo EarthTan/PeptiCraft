@@ -138,6 +138,18 @@ never reaches the browser: the Function reads it, and nothing else can.
 | `LLM_API_KEY` | for chat | The provider's key. |
 | `LLM_MODEL` | for chat | The model id, e.g. `qwen-plus`. |
 
+One variable is set in the repository rather than the dashboard, because its value is public and
+a clone of the repository should build a site that already shows structures:
+
+| Variable | Where | Meaning |
+| --- | --- | --- |
+| `VITE_STRUCTURE_BASE_URL` | `app/.env.production` | The R2 bucket that holds the predicted coordinate files and the two index files. Unset means the viewer renders nothing and no structure is claimed. |
+
+The bucket is public by design, like the site's own `public/data` directory, so the address is
+committed rather than held as a deployment setting. It is read at build time and baked into the
+bundle; the browser fetches the coordinate files from it at run time, which is why the bucket
+carries a CORS policy allowing the site's origin.
+
 Without them the data pages remain available, but AI conversation is disabled. Readers can
 explicitly select **View records**; this is not a generated answer and does not enter the AI
 conversation. With a model configured, it writes an answer to the actual question and recent

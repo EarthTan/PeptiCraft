@@ -2,7 +2,7 @@
 
 > English version: [英文版](README.md) — 2026-10-18 的中文原版存档，英文版可能已更新。
 
-七份英文文档，合计约 165 KB，从产品形态一路覆盖到上线进度。它们同时面向三类读者：项目负责人，关心的是工作进展而非代码；领域专家，关心的是生物学与每个字段的含义；以及接下来接手的人，需要知道哪些已完成、哪些是临时形态、决策记录在哪里。
+八份英文文档，合计约 175 KB，从产品形态一路覆盖到上线进度。它们同时面向三类读者：项目负责人，关心的是工作进展而非代码；领域专家，关心的是生物学与每个字段的含义；以及接下来接手的人，需要知道哪些已完成、哪些是临时形态、决策记录在哪里。
 
 | 文档 | 内容 |
 | --- | --- |
@@ -13,8 +13,9 @@
 | `PeptiCraft-Documentation/04-Technical-Architecture-and-Progress.md` | 架构、接口面、分层进度，以及未决风险。 |
 | `PeptiCraft-Documentation/05-Development-Handoff-Reference.md` | 完整接口表、枚举值、不变量，以及某类改动该落在代码的哪一处。 |
 | `PeptiCraft-Documentation/06-Release-Progress-and-Next-Work.md` | 静态部署改造的完成情况、上线前剩余的三件事，以及部署形态带来的新边界。 |
+| `PeptiCraft-Documentation/07-Predicted-Structures.md` | The predicted structures: what a monomer prediction can and cannot show, how they are produced on the workstation, where they are stored, and how the page reads them. |
 
-这七份采用编号而不嵌套：读者从 `00` 出发，可以不经中间几份直接读到后面任何一份。术语在首次出现处解释，而不是收进术语表或附录；每份文档按主题组织，而不是按代码结构分节，因此同一主题在一处讲完。
+这八份采用编号而不嵌套：读者从 `00` 出发，可以不经中间几份直接读到后面任何一份。术语在首次出现处解释，而不是收进术语表或附录；每份文档按主题组织，而不是按代码结构分节，因此同一主题在一处讲完。
 
 其中四份与各目录 README 主题相同，但不是它们的重复。README 说明一个目录怎么跑、里面有什么；这些文档承载理由、出处与未完成事项。两者不一致时，以运行中的接口和对数据库的一次 `count(*)` 为准；部署形态相关的部分以《06》为准，它写于形态改变之后。
 

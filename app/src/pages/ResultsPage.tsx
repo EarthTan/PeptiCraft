@@ -9,6 +9,7 @@ import { Notice } from "@/components/ui/notice"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AnalysisBlocks, SafetyGateList, ToolScoreGrid } from "@/components/construct-panels"
 import { ExpressionBlock } from "@/components/scaffold-expression"
+import { StructureViewer } from "@/components/structure-viewer"
 import {
   ArrowLeft,
   Bot,
@@ -1006,6 +1007,12 @@ function ConstructTab({
           )}
         </CardContent>
       </Card>
+
+      <StructureViewer
+        constructId={detail.id}
+        scaffoldId={detail.scaffold?.id ?? null}
+        linkerId={detail.linker?.id ?? null}
+      />
 
       <Card>
         <CardHeader>

@@ -143,12 +143,19 @@ a clone of the repository should build a site that already shows structures:
 
 | Variable | Where | Meaning |
 | --- | --- | --- |
-| `VITE_STRUCTURE_BASE_URL` | `app/.env.production` | The R2 bucket that holds the predicted coordinate files and the two index files. Unset means the viewer renders nothing and no structure is claimed. |
+| `VITE_STRUCTURE_BASE_URL` | `app/.env.production`, `app/.env.development` | The R2 bucket that holds the predicted coordinate files and the two index files. Unset means the viewer renders nothing and no structure is claimed. |
 
 The bucket is public by design, like the site's own `public/data` directory, so the address is
 committed rather than held as a deployment setting. It is read at build time and baked into the
 bundle; the browser fetches the coordinate files from it at run time, which is why the bucket
 carries a CORS policy allowing the site's origin.
+
+It appears in two files because Vite loads only the file matching the mode it runs in. `vite`
+and `vite preview` for a development build read `.env.development`, and `vite build` reads
+`.env.production`; a variable present in only one of them is missing in the other mode. The two
+values are the same, and a local server therefore shows the same structures the deployed site
+does. The bucket's CORS policy lists the local origins the development server uses
+(`localhost` and `127.0.0.1` on ports 5173, 4173 and 5174) alongside the deployed origin.
 
 Without them the data pages remain available, but AI conversation is disabled. Readers can
 explicitly select **View records**; this is not a generated answer and does not enter the AI

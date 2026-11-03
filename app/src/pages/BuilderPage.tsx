@@ -425,41 +425,30 @@ export default function BuilderPage() {
     <div className="min-h-[calc(100vh-8rem)]">
       <section className="gradient-hero border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Badge variant="accent" className="mb-3">
-                Construct Builder
-              </Badge>
-              <h1 className="text-2xl sm:text-3xl font-bold text-primary-900">
-                Build Your Construct
-              </h1>
-              <p className="text-sm text-gray-500 mt-1 max-w-3xl leading-relaxed">
-                One choice drives everything — your application route decides which scaffolds
-                stay eligible, how they are screened, and how the results are ranked.
-              </p>
-              {/* On the results step the build's name is the heading, so it is not repeated
-                  here as a smaller line above it. */}
-              {step < 5 && (
-                <button
-                  type="button"
-                  onClick={() => setNameOpen(true)}
-                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-800 cursor-pointer"
-                  title="Rename this build"
-                >
-                  <span className="font-semibold">{session.title}</span>
-                  <span className="text-gray-400">· rename</span>
-                </button>
-              )}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={openHistoryPanel}
-              className="flex-shrink-0"
-            >
-              <History className="w-4 h-4" />
-              History
-            </Button>
+          <div>
+            <Badge variant="accent" className="mb-3">
+              Construct Builder
+            </Badge>
+            <h1 className="text-2xl sm:text-3xl font-bold text-primary-900">
+              Build Your Construct
+            </h1>
+            <p className="text-sm text-gray-500 mt-1 max-w-3xl leading-relaxed">
+              One choice drives everything — your application route decides which scaffolds stay
+              eligible, how they are screened, and how the results are ranked.
+            </p>
+            {/* On the results step the build's name is the heading, so it is not repeated
+                here as a smaller line above it. */}
+            {step < 5 && (
+              <button
+                type="button"
+                onClick={() => setNameOpen(true)}
+                className="mt-2 inline-flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-800 cursor-pointer"
+                title="Rename this build"
+              >
+                <span className="font-semibold">{session.title}</span>
+                <span className="text-gray-400">· rename</span>
+              </button>
+            )}
           </div>
         </div>
       </section>

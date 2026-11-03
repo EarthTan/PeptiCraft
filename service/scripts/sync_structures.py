@@ -80,8 +80,10 @@ def publish(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--remote", default="dku-1387-tailscale:/home/lenovo/pepticraft/folds/pdb",
-                        help="where the workstation keeps the finished coordinate files")
+    parser.add_argument("--remote", action="append", default=None,
+                        help="where a machine keeps its finished coordinate files; "
+                             "repeat to collect from several, which is safe because a "
+                             "structure's name is derived from its own sequence")
     parser.add_argument("--staging", type=Path, default=DEFAULT_STAGING,
                         help="where to keep them on this machine")
     parser.add_argument("--manifest", type=Path, required=True,
@@ -95,10 +97,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="minutes between runs when watching")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
+    remotes = args.remote or [
+        "dku-1387-tailscale:/home/lenovo/pepticraft/folds/pdb",
+    ]
 
     while True:
         started = time.time()
-        count = pull(args.remote, args.staging, dry_run=args.dry_run)
+        count = 0
+        for remote in remotes:
+            count = pull(remote, args.staging, dry_run=args.dry_run)
         print(f"{count} coordinate files locally", flush=True)
         publish(args.staging, args.manifest, args.bucket, args.state, args.workers,
                 dry_run=args.dry_run)

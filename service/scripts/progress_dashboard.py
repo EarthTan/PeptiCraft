@@ -111,7 +111,8 @@ def card(label: str, value: str, note: str) -> str:
     )
 
 
-def render(stats: dict, published: int, generated: datetime) -> str:
+def render(stats: dict, published: int, generated: datetime, machines: str = "一台机器 7×24",
+           hours_per_day: float = 24.0) -> str:
     per_tier = stats["per_tier"]
     count_share = stats["done"] / stats["total"] if stats["total"] else 0.0
     total_hours = stats["hours_done"] + stats["hours_left"]
@@ -122,8 +123,8 @@ def render(stats: dict, published: int, generated: datetime) -> str:
     tier3 = per_tier[3]
     tier3_share = tier3["done"] / tier3["total"] if tier3["total"] else 0.0
 
-    phase_one_days = phase_one["hours_left"] / 24
-    total_days = stats["hours_left"] / 24
+    phase_one_days = phase_one["hours_left"] / hours_per_day
+    total_days = stats["hours_left"] / hours_per_day
     phase_one_date = generated + timedelta(days=phase_one_days)
     total_date = generated + timedelta(days=total_days)
 
@@ -191,8 +192,8 @@ footer {{ margin-top:32px; font-size:12px; color:var(--faint); line-height:1.7; 
   <div class="metrics">
     {card("已完成结构", num(stats["done"]), f'共 {num(stats["total"])} 条')}
     {card("已用机时", f'{stats["hours_done"]:.1f} 小时', f"全程约 {num(round(total_hours))} 小时")}
-    {card("剩余机时", num(round(stats["hours_left"])) + " 小时", f"约 {total_days:.0f} 天不间断")}
-    {card("全部完成", day(total_date), "按 7×24 估算")}
+    {card("剩余机时", num(round(stats["hours_left"])) + " 小时", f"约 {total_days:.0f} 天")}
+    {card("全部完成", day(total_date), machines)}
   </div>
 
   <h2>两条进度条</h2>
@@ -233,7 +234,7 @@ footer {{ margin-top:32px; font-size:12px; color:var(--faint); line-height:1.7; 
     </div>
     <div class="row-head" style="margin-bottom:7px">
       <span style="color:var(--muted)">{num(tier3["done"])} / {num(tier3["total"])} 条</span>
-      <span class="value">还剩 {tier3["hours_left"] / 24:.1f} 天</span>
+      <span class="value">还剩 {tier3["hours_left"] / hours_per_day:.1f} 天</span>
     </div>
     <div class="track thin"><div class="fill thin" style="width:{tier3_share * 100:.2f}%;background:var(--blue)"></div></div>
   </div>
@@ -254,6 +255,12 @@ def main() -> int:
     parser.add_argument("--folds", required=True, type=Path)
     parser.add_argument("--state", type=Path, default=None)
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--hours-per-day", type=float, default=24.0,
+                        help="machine time the batch actually gets per day; two machines "
+                             "that share the work and one that only runs in the daytime "
+                             "both come out as a single figure here")
+    parser.add_argument("--machines", default="一台机器 7×24",
+                        help="how the capacity is made up, shown under the finish date")
     args = parser.parse_args()
 
     tiers = read_manifest(args.manifest)
@@ -261,7 +268,8 @@ def main() -> int:
     published = count_published(args.state) if args.state else len(folded)
 
     stats = summarise(tiers, folded)
-    page = render(stats, published, datetime.now())
+    page = render(stats, published, datetime.now(),
+                  machines=args.machines, hours_per_day=args.hours_per_day)
     args.out.write_text(page, encoding="utf-8")
 
     print(

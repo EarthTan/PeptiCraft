@@ -90,7 +90,7 @@ export default function LibraryPage() {
                 Peptides, scaffolds and linkers — every entry read from the project database
               </p>
             </div>
-            <Link to="/builder">
+            <Link to="/builder?new=1">
               <Button variant="gradient" size="sm">
                 <FlaskConical className="w-4 h-4" />
                 New Build

@@ -114,6 +114,14 @@ export default function ResultsPage() {
   const routeId = searchParams.get("route_id")
   const scaffoldId = searchParams.get("scaffold_id")
   const linkerId = searchParams.get("linker_id")
+
+  // A construct reached from a build carries that build's record id. The way back then leads
+  // to the build, not to the library: the reader is part-way through one build's candidates
+  // and is far more likely to want the next of those than the whole catalogue. A construct
+  // reached from the library has no build behind it, so the library stays the way back.
+  const fromBuild = searchParams.get("from")
+  const backTo = fromBuild ? `/builder?record=${encodeURIComponent(fromBuild)}` : "/library"
+  const backLabel = fromBuild ? "Back to the build" : "Back to Library"
   const contextKey = JSON.stringify([id ?? "", routeId ?? "", scaffoldId ?? "", linkerId ?? ""])
 
   const [activeTab, setActiveTab] = useState<ResultTab>("construct")
@@ -303,10 +311,10 @@ export default function ResultsPage() {
         <div className="w-full max-w-2xl">
           <ErrorState error={error} onRetry={reload} />
           <div className="text-center mt-6">
-            <Link to="/library">
+            <Link to={backTo}>
               <Button variant="outline">
                 <ArrowLeft className="w-4 h-4" />
-                Back to Library
+                {backLabel}
               </Button>
             </Link>
           </div>
@@ -347,10 +355,10 @@ export default function ResultsPage() {
       <section className="gradient-hero border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <Link
-            to="/library"
+            to={backTo}
             className="text-sm text-primary-500 hover:text-primary-700 flex items-center gap-1 mb-4 w-fit"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to Library
+            <ArrowLeft className="w-4 h-4" /> {backLabel}
           </Link>
 
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">

@@ -70,7 +70,7 @@ export default function LandingPage() {
               sourced, and what still needs to be tested.
             </p>
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/builder">
+              <Link to="/builder?new=1">
                 <Button variant="gradient" size="lg" className="w-full sm:w-auto">
                   <FlaskConical className="w-5 h-5" />
                   Explore the Builder
@@ -129,7 +129,7 @@ export default function LandingPage() {
             and its evidence before your team chooses what to test.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link to="/builder">
+            <Link to="/builder?new=1">
               <Button variant="gradient" size="lg">
                 <FlaskConical className="w-5 h-5" />
                 Build a Candidate

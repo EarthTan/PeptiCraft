@@ -1,9 +1,18 @@
-import { useState, useEffect } from "react"
-import { Link, useLocation } from "react-router-dom"
+import { useState, useEffect, useSyncExternalStore } from "react"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
+import { BuildHistoryPanel } from "@/components/build-history"
 import { DataSourceBanner } from "@/components/DataSourceBanner"
+import {
+  closeHistoryPanel,
+  historyPanelOpen,
+  historyPanelOpenOnServer,
+  openHistoryPanel,
+  subscribeHistoryPanel,
+} from "@/lib/historyPanel"
+import { listBuildRecords, type BuildRecord } from "@/lib/buildRecords"
 import { cn } from "@/lib/utils"
-import { Dna, Menu, X } from "lucide-react"
+import { Dna, History, Menu, X } from "lucide-react"
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -20,6 +29,34 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
+
+  // The history panel is mounted once, here, because it is asked for from the top bar and
+  // from inside the Builder. The records are read when it opens rather than kept in sync:
+  // a record is written by a page, and the only moment the list has to be right is the
+  // moment somebody looks at it.
+  const historyOpen = useSyncExternalStore(
+    subscribeHistoryPanel,
+    historyPanelOpen,
+    historyPanelOpenOnServer,
+  )
+  const [records, setRecords] = useState<BuildRecord[]>([])
+
+  useEffect(() => {
+    if (historyOpen) setRecords(listBuildRecords())
+  }, [historyOpen])
+
+  /**
+   * Reopen a recorded build.
+   *
+   * Loading one is a navigation rather than a call into the Builder, because the panel can
+   * be opened from any page: the Builder is sent the record's id and puts it back together
+   * itself, which is the same path whether the reader was already there or not.
+   */
+  const loadRecord = (record: BuildRecord) => {
+    closeHistoryPanel()
+    navigate(`/builder?record=${encodeURIComponent(record.id)}`)
+  }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10)
@@ -77,8 +114,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </nav>
 
             {/* Desktop CTA */}
-            <div className="hidden md:flex items-center gap-3">
-              <Link to="/builder">
+            <div className="hidden md:flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openHistoryPanel}
+                className="w-8 px-0"
+                aria-label="Build history"
+                title="Build history"
+              >
+                <History className="w-4 h-4" />
+              </Button>
+              <Link to="/builder?new=1">
                 <Button variant="gradient" size="sm">
                   Start Building
                 </Button>
@@ -121,11 +168,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 {link.label}
               </Link>
             ))}
-            <Link to="/builder" className="block pt-2">
-              <Button variant="gradient" className="w-full">
-                Start Building
+            <div className="flex items-center gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={openHistoryPanel}
+                className="h-10 w-10 px-0"
+                aria-label="Build history"
+                title="Build history"
+              >
+                <History className="w-4 h-4" />
               </Button>
-            </Link>
+              <Link to="/builder?new=1" className="flex-1">
+                <Button variant="gradient" className="w-full">
+                  Start Building
+                </Button>
+              </Link>
+            </div>
           </div>
         </nav>
       </header>
@@ -165,6 +223,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </footer>
+
+      <BuildHistoryPanel
+        open={historyOpen}
+        onClose={closeHistoryPanel}
+        records={records}
+        onRecordsChange={setRecords}
+        onLoad={loadRecord}
+      />
     </div>
   )
 }

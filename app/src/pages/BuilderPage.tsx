@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { Link } from "react-router-dom"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Link, useSearchParams } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ErrorState } from "@/components/ui/error-state"
 import { CardGridSkeleton, ListSkeleton } from "@/components/ui/loading-state"
 import { Notice } from "@/components/ui/notice"
 import { StructureViewer } from "@/components/structure-viewer"
-import { BuildRecordsPanel } from "@/components/build-records"
+import { BuildNameDialog } from "@/components/build-history"
 import {
   AlertTriangle,
   ArrowRight,
@@ -20,20 +19,20 @@ import {
   Eye,
   FlaskConical,
   History,
-  Save,
   ShieldAlert,
 } from "lucide-react"
 import { fetchBuild, fetchLinkers, fetchReference, fetchScaffolds } from "@/api"
 import { structureEnabled } from "@/api/structure"
 import type {
-  BuildResult,
+  BuildCounts,
   DeliveryRoute,
   FunctionDirection,
   LinkerView,
   MaterialForm,
   ScaffoldSummary,
 } from "@/api/types"
-import { listBuildRecords, saveBuildRecord, type BuildRecord } from "@/lib/buildRecords"
+import { listBuildRecords, recordBuild, renameSession, type BuildRecord } from "@/lib/buildRecords"
+import { openHistoryPanel } from "@/lib/historyPanel"
 import { distinctForms, formLabel, groupScaffoldsByRoute, materialFormLabels } from "@/lib/derive"
 import { DIRECTION_STATUS_LABEL, iconFor, WEIGHT_TIER_LABEL } from "@/lib/display"
 import { formatScore, verdictSkin } from "@/lib/score"
@@ -71,19 +70,129 @@ type Step = 1 | 2 | 3 | 4 | 5
  *  page is sliced, so this bounds the response and not the ranking. */
 const RESULT_LIMIT = 100
 
-export default function BuilderPage() {
-  const [step, setStep] = useState<Step>(1)
+/**
+ * The build in progress, kept for this tab.
+ *
+ * A reload is not a new build, and neither is stepping away to look at one of its constructs,
+ * so the name and the place in the five steps survive both. What does not survive is a new
+ * build: "Start Building" carries a `new` marker in the address, and honouring it is what
+ * makes every start begin with its own name instead of the last one.
+ */
+const SESSION_KEY = "pepticraft.builder-session.v2"
+const LEGACY_SESSION_KEY = "pepticraft.builder-session.v1"
 
-  const [routeId, setRouteId] = useState("")
-  const [directionIds, setDirectionIds] = useState<string[]>([])
-  const [scaffoldId, setScaffoldId] = useState("")
-  const [linkerId, setLinkerId] = useState("")
+interface BuildIdentity {
+  id: string
+  title: string
+}
+
+/** The identity of a build together with where it had got to. */
+interface BuilderSession extends BuildIdentity {
+  step: Step
+  route_id: string
+  direction: string[]
+  scaffold_id: string
+  linker_id: string
+}
+
+function newSessionId(): string {
+  const cryptoApi = globalThis.crypto
+  if (cryptoApi && typeof cryptoApi.randomUUID === "function") return cryptoApi.randomUUID()
+  return `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** "Build · Nov 3 23:48" — a name that says when, for a build nobody has named yet. */
+function defaultSessionTitle(): string {
+  const now = new Date()
+  return `Build · ${now.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })} ${now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`
+}
+
+/** A build that has not been started yet: a fresh name, and nothing chosen. */
+function newSession(): BuilderSession {
+  return {
+    id: newSessionId(),
+    title: defaultSessionTitle(),
+    step: 1,
+    route_id: "",
+    direction: [],
+    scaffold_id: "",
+    linker_id: "",
+  }
+}
+
+function readSession(): BuilderSession | null {
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<BuilderSession>
+    if (typeof parsed.id !== "string" || typeof parsed.title !== "string" || !parsed.title) {
+      return null
+    }
+    const step = typeof parsed.step === "number" ? parsed.step : 1
+    return {
+      id: parsed.id,
+      title: parsed.title,
+      step: (step >= 1 && step <= STEP_COUNT ? step : 1) as Step,
+      route_id: typeof parsed.route_id === "string" ? parsed.route_id : "",
+      direction: Array.isArray(parsed.direction) ? parsed.direction.filter((id) => typeof id === "string") : [],
+      scaffold_id: typeof parsed.scaffold_id === "string" ? parsed.scaffold_id : "",
+      linker_id: typeof parsed.linker_id === "string" ? parsed.linker_id : "",
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeSession(session: BuilderSession): void {
+  try {
+    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
+    // The v1 key held a name and nothing else. Left behind, it would be a stale name that
+    // nothing reads.
+    window.sessionStorage.removeItem(LEGACY_SESSION_KEY)
+  } catch {
+    // A browser that refuses session storage still gets a working build; the name just does
+    // not survive a reload, which is the lesser of the two failures.
+  }
+}
+
+export default function BuilderPage() {
+  const [params, setParams] = useSearchParams()
+
+  /**
+   * Which build this page is.
+   *
+   * Three arrivals reach this page and they mean different things. "Start Building" carries
+   * `new`, and wants a build of its own — a fresh name rather than the last one, and no
+   * choices carried over. A history record carries `record`, and wants to be put back
+   * together. Anything else — a reload, a step away and back — continues the build this tab
+   * was already on.
+   */
+  const [boot] = useState(() => {
+    const fresh = params.get("new") === "1"
+    const stored = fresh ? null : readSession()
+    return { session: stored ?? newSession(), fresh, named: Boolean(stored) }
+  })
+
+  const [step, setStep] = useState<Step>(boot.session.step)
+
+  const [routeId, setRouteId] = useState(boot.session.route_id)
+  const [directionIds, setDirectionIds] = useState<string[]>(boot.session.direction)
+  const [scaffoldId, setScaffoldId] = useState(boot.session.scaffold_id)
+  const [linkerId, setLinkerId] = useState(boot.session.linker_id)
   const [formFilter, setFormFilter] = useState<MaterialForm | "all">("all")
 
-  // Builds worth keeping again. They live in this browser rather than on a server, so the
-  // list is read from storage whenever it is opened rather than held in sync continuously.
-  const [records, setRecords] = useState<BuildRecord[]>([])
-  const [recordsOpen, setRecordsOpen] = useState(false)
+  // The name of the build in progress. Every build that reaches its results is recorded
+  // under it, so it is asked for before the choices are made rather than after them.
+  const [session, setSession] = useState<BuildIdentity>(boot.session)
+  const [nameOpen, setNameOpen] = useState(!boot.named)
+
+  // A record asked for from the history panel, by id. The parameters are applied once the
+  // library has arrived, because whether the record's route still exists decides which step
+  // it can be reopened on.
+  const [pendingRecord, setPendingRecord] = useState<string | null>(() => params.get("record"))
 
   const load = useCallback(async () => {
     const [reference, scaffolds, linkers] = await Promise.all([
@@ -102,7 +211,7 @@ export default function BuilderPage() {
   const scaffolds = useMemo(() => data?.scaffolds ?? [], [data])
   const linkers = useMemo(() => data?.linkers ?? [], [data])
 
-  const routes = reference?.routes ?? []
+  const routes = useMemo(() => reference?.routes ?? [], [reference])
   const directions = reference?.directions ?? []
   const labels = materialFormLabels(reference)
 
@@ -142,77 +251,108 @@ export default function BuilderPage() {
     )
   }
 
-  const resetAll = () => {
+  /** Begin again: a new name, and none of the choices that were on screen. */
+  const startFresh = useCallback(() => {
+    setSession(newSession())
     setStep(1)
     setRouteId("")
     setDirectionIds([])
     setScaffoldId("")
     setLinkerId("")
     setFormFilter("all")
-  }
-
-  const openRecords = () => {
-    setRecords(listBuildRecords())
-    setRecordsOpen(true)
-  }
-
-  // The count on the button has to be right before the panel is ever opened, so the store
-  // is read once on mount rather than only when the panel asks for it.
-  useEffect(() => {
-    setRecords(listBuildRecords())
+    setNameOpen(true)
   }, [])
 
-  /** Put a saved build's parameters back into the Builder and run it again. */
-  const loadRecord = (record: BuildRecord) => {
-    const route = routes.find((item) => item.id === record.params.route_id)
+  // Where the build stands, for this tab. A reload is not a new build, so the name and the
+  // step survive one; a construct opened from step 5 and closed again comes back to it.
+  useEffect(() => {
+    writeSession({
+      id: session.id,
+      title: session.title,
+      step,
+      route_id: routeId,
+      direction: directionIds,
+      scaffold_id: scaffoldId,
+      linker_id: linkerId,
+    })
+  }, [session, step, routeId, directionIds, scaffoldId, linkerId])
+
+  // The address is read once for the two requests it can carry, and both are taken out of
+  // it afterwards: a reload repeats neither a new build nor a record that was reopened.
+  useEffect(() => {
+    const fresh = params.get("new") === "1"
+    const record = params.get("record")
+    if (!fresh && !record) return
+    const next = new URLSearchParams(params)
+    next.delete("new")
+    next.delete("record")
+    setParams(next, { replace: true })
+    if (record) {
+      setPendingRecord(record)
+      return
+    }
+    // A fresh start was already made while this page was mounting; only a second press,
+    // with the page already on screen, has to be acted on here.
+    if (!boot.fresh) startFresh()
+  }, [params, setParams, boot.fresh, startFresh])
+
+  // Reopening a record. Its own session and name are adopted, so running it again refreshes
+  // that record instead of filing a second copy under the name of whatever was on screen.
+  useEffect(() => {
+    if (!pendingRecord || !data) return
+    const record = listBuildRecords().find((item) => item.id === pendingRecord)
+    setPendingRecord(null)
+    if (!record) return
+    setSession((current) => ({ ...current, id: record.session_id, title: record.title }))
     setRouteId(record.params.route_id)
     setDirectionIds(record.params.direction)
     setScaffoldId(record.params.scaffold_id ?? "")
     setLinkerId(record.params.linker_id ?? "")
     setFormFilter("all")
-    setRecordsOpen(false)
+    setNameOpen(false)
     // A record names a route that the library may no longer carry. The rest of its
     // parameters still apply, but the results step needs a route to render under, so an
     // unknown one sends the reader back to the first step to choose a live route.
-    setStep(route ? 5 : 1)
+    setStep(routes.some((route) => route.id === record.params.route_id) ? 5 : 1)
+  }, [pendingRecord, data, routes])
+
+  // A build restored from this tab can point at a route the library no longer carries. The
+  // results step needs one to render under, so such a build falls back to the first step
+  // rather than to a page with nothing on it.
+  useEffect(() => {
+    if (!data || pendingRecord || step !== 5 || routeObj) return
+    setStep(1)
+  }, [data, pendingRecord, step, routeObj])
+
+  const applyName = (title: string) => {
+    const name = title.trim() || defaultSessionTitle()
+    setSession((current) => ({ ...current, title: name }))
+    setNameOpen(false)
   }
 
+  // Renaming the build renames the lines it already has in the history, so the header and
+  // the record never describe the same build under two names.
+  useEffect(() => {
+    renameSession(session.id, session.title)
+  }, [session.id, session.title])
+
   /**
-   * Write the build on screen into the record store.
+   * Write a build into the history.
    *
-   * The parameters are recorded alongside the result rather than read back from the
-   * interface's own state at a later moment, so a record always describes the build it
-   * was made from even if the Builder's choices have moved on since.
+   * Called from the results step once a build has landed, with the parameters that produced
+   * it rather than with the page's current state: the two are the same at that moment, and
+   * a record has to describe its own build even after the choices move on. The session is
+   * what the record is filed under, so re-running a combination inside one build refreshes
+   * that line, while the same combination started again becomes its own.
    */
-  const handleSaveBuild = (title: string, note: string, data: BuildResult) => {
-    const outcome = saveBuildRecord({
-      title,
-      note,
-      params: {
-        direction: directionIds,
-        route_id: routeId,
-        scaffold_id: scaffoldId || null,
-        linker_id: effectiveLinkerId || null,
-        limit: RESULT_LIMIT,
-      },
-      labels: {
-        route: routeObj?.name ?? routeId,
-        directions: directions
-          .filter((direction) => directionIds.includes(direction.id))
-          .map((direction) => direction.name)
-          .join(" + "),
-        scaffold: selectedScaffold?.short_name ?? null,
-        linker: selectedLinker?.name ?? null,
-      },
-      counts: data.counts,
-      total: data.total,
-      candidates: data.items,
-    })
-    if (outcome.ok) {
-      setRecords(listBuildRecords())
-      return { ok: true as const }
-    }
-    return { ok: false as const, error: outcome.error }
+  const handleRecord = (input: {
+    params: BuildRecord["params"]
+    labels: BuildRecord["labels"]
+    counts: BuildCounts
+    total: number
+    candidates: Parameters<typeof recordBuild>[0]["candidates"]
+  }) => {
+    return recordBuild({ session_id: session.id, title: session.title, ...input })
   }
 
   const canProceed = (target: number) => {
@@ -297,13 +437,28 @@ export default function BuilderPage() {
                 One choice drives everything — your application route decides which scaffolds
                 stay eligible, how they are screened, and how the results are ranked.
               </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={openRecords} className="flex-shrink-0">
-              <History className="w-4 h-4" />
-              Saved builds
-              {records.length > 0 && (
-                <span className="ml-0.5 font-mono text-[11px] text-gray-400">{records.length}</span>
+              {/* On the results step the build's name is the heading, so it is not repeated
+                  here as a smaller line above it. */}
+              {step < 5 && (
+                <button
+                  type="button"
+                  onClick={() => setNameOpen(true)}
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-800 cursor-pointer"
+                  title="Rename this build"
+                >
+                  <span className="font-semibold">{session.title}</span>
+                  <span className="text-gray-400">· rename</span>
+                </button>
               )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openHistoryPanel}
+              className="flex-shrink-0"
+            >
+              <History className="w-4 h-4" />
+              History
             </Button>
           </div>
         </div>
@@ -584,25 +739,24 @@ export default function BuilderPage() {
 
         {step === 5 && routeObj && (
           <ResultStep
+            title={session.title}
             route={routeObj}
             directionIds={directionIds}
             directions={directions}
             scaffold={selectedScaffold}
             linker={selectedLinker}
             onBack={() => setStep(4)}
-            onReset={resetAll}
-            onSave={handleSaveBuild}
-            onOpenRecords={openRecords}
+            onReset={startFresh}
+            onRecord={handleRecord}
+            onOpenHistory={openHistoryPanel}
           />
         )}
       </div>
 
-      <BuildRecordsPanel
-        open={recordsOpen}
-        onClose={() => setRecordsOpen(false)}
-        records={records}
-        onRecordsChange={setRecords}
-        onLoad={loadRecord}
+      <BuildNameDialog
+        open={nameOpen}
+        initialValue={session.title}
+        onSubmit={applyName}
       />
     </div>
   )
@@ -1080,6 +1234,7 @@ function LinkerOption({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ResultStep({
+  title,
   route,
   directionIds,
   directions,
@@ -1087,9 +1242,11 @@ function ResultStep({
   linker,
   onBack,
   onReset,
-  onSave,
-  onOpenRecords,
+  onRecord,
+  onOpenHistory,
 }: {
+  /** The name this build was started under. It is the heading of the page. */
+  title: string
   route: DeliveryRoute
   directionIds: string[]
   directions: FunctionDirection[]
@@ -1097,42 +1254,39 @@ function ResultStep({
   linker: LinkerView | null
   onBack: () => void
   onReset: () => void
-  onSave: (
-    title: string,
-    note: string,
-    data: BuildResult,
-  ) => { ok: true } | { ok: false; error: string }
-  onOpenRecords: () => void
+  onRecord: (input: {
+    params: BuildRecord["params"]
+    labels: BuildRecord["labels"]
+    counts: BuildCounts
+    total: number
+    candidates: Parameters<typeof recordBuild>[0]["candidates"]
+  }) => { ok: true; record: BuildRecord; created: boolean } | { ok: false; error: string }
+  onOpenHistory: () => void
 }) {
-  const load = useCallback(
-    () =>
-      fetchBuild({
-        direction: directionIds,
-        route_id: route.id,
-        scaffold_id: scaffold?.id ?? null,
-        linker_id: linker?.id ?? null,
-        limit: RESULT_LIMIT,
-      }),
-    [directionIds, route.id, scaffold?.id, linker?.id],
-  )
+  // The parameters travel with the response rather than being read again at write time.
+  // A request is in flight for a moment after the choices change, and for that moment the
+  // page's own state describes a build that has not arrived — recording from it would file
+  // one build's figures under another's choices.
+  const load = useCallback(async () => {
+    const params = {
+      direction: directionIds,
+      route_id: route.id,
+      scaffold_id: scaffold?.id ?? null,
+      linker_id: linker?.id ?? null,
+      limit: RESULT_LIMIT,
+    }
+    const result = await fetchBuild(params)
+    return { params, result }
+  }, [directionIds, route.id, scaffold?.id, linker?.id])
 
-  const { data, loading, error, reload } = useAsync(load, [
-    directionIds,
-    route.id,
-    scaffold?.id,
-    linker?.id,
-  ])
+  const build = useAsync(load, [directionIds, route.id, scaffold?.id, linker?.id])
+  const data = build.data?.result ?? null
+  const loading = build.loading
+  const error = build.error
+  const reload = build.reload
 
   /** The candidate whose predicted structure is on screen, if any. */
   const [structureFor, setStructureFor] = useState<string | null>(null)
-
-  // Saving. A build is a composition rather than a stored row, so nothing of it outlives
-  // the page unless it is kept deliberately; the form below is that decision.
-  const [saveOpen, setSaveOpen] = useState(false)
-  const [saveTitle, setSaveTitle] = useState("")
-  const [saveNote, setSaveNote] = useState("")
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
 
   const items = data?.items ?? []
   const counts = data?.counts ?? null
@@ -1142,51 +1296,75 @@ function ResultStep({
     .map((direction) => direction.name)
     .join(" + ")
 
-  // A saved mark belongs to the build it was made from. Changing any of the four choices
-  // produces a different build, and the mark goes with it.
-  useEffect(() => {
-    setSaved(false)
-    setSaveOpen(false)
-  }, [route.id, directionIds, scaffold?.id, linker?.id])
+  // Recording. It happens on arrival rather than on a click: a build that ran is part of
+  // the history, and the moment to notice that is when its results appear.
+  const [recordError, setRecordError] = useState<string | null>(null)
+  const [recorded, setRecorded] = useState<{
+    id: string
+    at: string
+    created: boolean
+  } | null>(null)
+  const record = useRef(onRecord)
+  record.current = onRecord
 
-  const submitSave = () => {
-    if (!data) return
-    const outcome = onSave(saveTitle, saveNote, data)
+  useEffect(() => {
+    if (!build.data) return
+    const outcome = record.current({
+      params: build.data.params,
+      labels: {
+        route: route.name,
+        directions: selectedNames,
+        scaffold: scaffold?.short_name ?? null,
+        linker: linker?.name ?? null,
+      },
+      counts: build.data.result.counts,
+      total: build.data.result.total,
+      candidates: build.data.result.items,
+    })
     if (outcome.ok) {
-      setSaveOpen(false)
-      setSaved(true)
-      setSaveError(null)
+      setRecordError(null)
+      setRecorded({ id: outcome.record.id, at: new Date().toISOString(), created: outcome.created })
     } else {
-      setSaveError(outcome.error)
+      setRecorded(null)
+      setRecordError(outcome.error)
     }
-  }
+    // Only the response can trigger a write. `onRecord` is held in a ref because a new
+    // function identity on every parent render would otherwise record the same build again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [build.data])
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <button
           onClick={onBack}
           className="text-sm text-primary-500 hover:text-primary-700 flex items-center gap-1 cursor-pointer"
         >
           <ChevronRight className="w-4 h-4 rotate-180" /> Back
         </button>
-        <span className="text-gray-300">|</span>
-        <span className="text-sm text-primary-600">
-          <strong>{route.name}</strong> · <strong>{selectedNames}</strong>
-          {scaffold && (
-            <>
-              {" · "}
-              <strong>{scaffold.short_name}</strong>
-            </>
-          )}
-          {linker && (
-            <>
-              {" · "}
-              <strong>{linker.name}</strong>
-            </>
-          )}
-        </span>
       </div>
+
+      {/* The build's name heads its own results. Everything below describes that one build,
+          so the name is the page's title rather than a line inside it. */}
+      <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 leading-tight break-words">
+        {title}
+      </h1>
+      <p className="text-sm text-gray-500 mt-1.5 mb-5">
+        <strong className="font-medium text-primary-700">{route.name}</strong> ·{" "}
+        <strong className="font-medium text-primary-700">{selectedNames}</strong>
+        {scaffold && (
+          <>
+            {" · "}
+            <strong className="font-medium text-primary-700">{scaffold.short_name}</strong>
+          </>
+        )}
+        {linker && (
+          <>
+            {" · "}
+            <strong className="font-medium text-primary-700">{linker.name}</strong>
+          </>
+        )}
+      </p>
 
       <Card className="border-accent-200 bg-gradient-to-r from-accent-50 to-white mb-6">
         <CardContent className="p-5">
@@ -1254,87 +1432,31 @@ function ResultStep({
               </p>
 
               <div className="mt-4 pt-3 border-t border-accent-100 flex items-center justify-between gap-3 flex-wrap">
-                {saved ? (
-                  <p className="text-xs text-accent-700 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Saved to the build records.
-                    <button
-                      type="button"
-                      onClick={onOpenRecords}
-                      className="underline underline-offset-2 cursor-pointer"
-                    >
-                      Open them
-                    </button>
-                  </p>
+                {recordError ? (
+                  <p className="text-xs text-red-600 max-w-md leading-relaxed">{recordError}</p>
                 ) : (
-                  <p className="text-xs text-gray-500 max-w-md leading-relaxed">
-                    A build leaves nothing behind once this page is closed. Saving keeps the
-                    parameters it was made under and the ranking it produced.
+                  <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-accent-500" />
+                    {recorded
+                      ? recorded.created
+                        ? "Added to the build history"
+                        : "Already in the history; its figures were refreshed"
+                      : "Recording this build…"}
+                    {recorded && (
+                      <span className="text-gray-400">
+                        · {new Date(recorded.at).toLocaleTimeString(undefined, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    )}
                   </p>
                 )}
-                {!saved && !saveOpen && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSaveTitle(
-                        [route.name, selectedNames, scaffold?.short_name]
-                          .filter(Boolean)
-                          .join(" · "),
-                      )
-                      setSaveNote("")
-                      setSaveError(null)
-                      setSaveOpen(true)
-                    }}
-                  >
-                    <Save className="w-4 h-4" />
-                    Save this build
-                  </Button>
-                )}
+                <Button variant="ghost" size="sm" onClick={onOpenHistory}>
+                  <History className="w-4 h-4" />
+                  View history
+                </Button>
               </div>
-
-              {saveOpen && (
-                <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3 space-y-2.5">
-                  <div>
-                    <label
-                      htmlFor="build-record-title"
-                      className="block text-[11px] text-gray-500 mb-1"
-                    >
-                      Name
-                    </label>
-                    <Input
-                      id="build-record-title"
-                      value={saveTitle}
-                      onChange={(event) => setSaveTitle(event.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="build-record-note"
-                      className="block text-[11px] text-gray-500 mb-1"
-                    >
-                      Note
-                    </label>
-                    <Input
-                      id="build-record-note"
-                      value={saveNote}
-                      placeholder="What this build is for"
-                      onChange={(event) => setSaveNote(event.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                  {saveError && <p className="text-xs text-red-600">{saveError}</p>}
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setSaveOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button variant="accent" size="sm" onClick={submitSave}>
-                      Save
-                    </Button>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </CardContent>
@@ -1445,10 +1567,14 @@ function ResultStep({
                           : "no scaffold"}
                     </div>
                   </div>
+                  {/* The record travels with the link so the construct page can offer a way
+                      back to the build it belongs to rather than to the whole library. */}
                   <Link
                     to={`/results/${item.id}?route_id=${route.id}${
                       scaffold ? `&scaffold_id=${scaffold.id}` : ""
-                    }${linker ? `&linker_id=${linker.id}` : ""}`}
+                    }${linker ? `&linker_id=${linker.id}` : ""}${
+                      recorded ? `&from=${encodeURIComponent(recorded.id)}` : ""
+                    }`}
                   >
                     <Button variant="ghost" size="sm">
                       <Eye className="w-4 h-4" />

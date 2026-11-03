@@ -126,7 +126,7 @@ export default function ScaffoldDetailPage() {
                   Evidence {detail.max_evidence}
                 </Badge>
               )}
-              <Link to="/builder">
+              <Link to="/builder?new=1">
                 <Button variant="gradient" size="sm">
                   <FlaskConical className="w-4 h-4" />
                   Use in Builder

@@ -186,8 +186,11 @@ def refresh_token() -> str | None:
     `wrangler whoami` is the cheapest command that forces it, and it reports whether the
     renewal worked without touching any of the account's resources.
 
-    `wrangler login` is the fallback for when there is no refresh token left at all. That
-    path needs a browser and a person, so it is only reached in that case.
+    Nothing here opens a browser. `wrangler login` would, and it is the one thing this
+    function must not do: the caller runs unattended on a timer, so a login means a window
+    appearing on somebody's desktop every half hour, forever, and nobody there to finish it.
+    When the refresh token is gone the honest outcome is to stop and say so; a login is a
+    person's decision, made by hand, in a terminal.
     """
     commands = wrangler_commands()
     if not commands:
@@ -211,32 +214,39 @@ def refresh_token() -> str | None:
 
     before = read_oauth_token() if WRANGLER_CONFIG.exists() else ""
     for base in commands:
-        for argument in ("whoami", "login"):
-            command = base + [argument]
-            try:
-                result = subprocess.run(
-                    command,
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                    env=env,
-                    cwd=str(Path.home()),
-                )
-            except OSError as exc:
-                print(f"could not run {' '.join(command)}: {exc}", file=sys.stderr)
-                continue
-            if result.returncode != 0:
-                continue
-            try:
-                token = read_oauth_token()
-            except SystemExit:
-                return None
-            if token != before:
-                print("renewed the Cloudflare OAuth token", file=sys.stderr)
-                return token
-            # The command succeeded but the token did not change: the silent renewal
-            # either was not needed or did not happen, so the next form is tried.
-    print("wrangler could not renew the Cloudflare OAuth token", file=sys.stderr)
+        command = base + ["whoami"]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env=env,
+                cwd=str(Path.home()),
+            )
+        except OSError as exc:
+            print(f"could not run {' '.join(command)}: {exc}", file=sys.stderr)
+            continue
+        if result.returncode != 0:
+            # This form could not reach the service at all; the next one might, and asking
+            # twice costs one request rather than a browser window.
+            continue
+        try:
+            token = read_oauth_token()
+        except SystemExit:
+            return None
+        if token != before:
+            print("renewed the Cloudflare OAuth token", file=sys.stderr)
+            return token
+        # Wrangler answered, so the exchange was attempted and left the token alone. Trying
+        # the other forms would ask the same service the same question and get the same
+        # answer; there is nothing further this machine can do without a person.
+        break
+    print(
+        "wrangler could not renew the Cloudflare OAuth token; uploads are stopped until "
+        "`wrangler login` is run in a terminal by hand",
+        file=sys.stderr,
+    )
     return None
 
 
@@ -288,6 +298,10 @@ class RestUploader:
         self.token = token
         self.workers = workers
         self.limiter = limiter or RateLimiter()
+        # Set once the token has been found unrenewable. Every worker shares this uploader, so
+        # the first refusal after that is answered from here instead of each file asking the
+        # service the same question again.
+        self.renewal_failed = False
         self.base = (
             f"https://api.cloudflare.com/client/v4/accounts/{account}"
             f"/r2/buckets/{bucket}/objects"
@@ -322,10 +336,13 @@ class RestUploader:
                 if error.code in (401, 9109):
                     # The token expired mid-run, which a batch that outlives the grant
                     # will hit sooner or later. Renewing it and trying again is right.
+                    if self.renewal_failed:
+                        return key, False, detail
                     renewed = refresh_token()
                     if renewed:
                         self.token = renewed
                         continue
+                    self.renewal_failed = True
                     return key, False, detail
                 return key, False, detail
             except Exception as error:  # noqa: BLE001 - network failures are reported, not raised
@@ -529,6 +546,17 @@ def main(argv: list[str] | None = None) -> int:
         renewed = refresh_token()
         if renewed:
             token = renewed
+        elif expiry <= datetime.now(timezone.utc):
+            # An already-expired token refuses every request. Sending a few thousand files
+            # to be told so costs minutes and leaves the index withheld anyway, so the round
+            # ends here and the staged files wait for a person.
+            print(
+                "the Cloudflare token has expired and could not be renewed; nothing was "
+                "uploaded this round and the files stay staged until `wrangler login` is "
+                "run by hand",
+                file=sys.stderr,
+            )
+            return 1
 
     uploader = RestUploader(args.bucket, args.account, token, args.workers)
     skipped, uploaded = upload_with_rest(

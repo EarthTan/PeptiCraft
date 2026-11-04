@@ -113,10 +113,9 @@ page shows the whole-chain figure and the figure restricted to the peptide's own
 switch that highlights the peptide — the peptide occupies the C-terminal end of the fusion, so
 its position follows from the chain length.
 
-There are two entrances: a "3D" button on every candidate row of the Builder's results, and the
-construct page, where the structure appears when the URL names a scaffold and a linker, which is
-the state in which the page is previewing an assembly. Both look the structure up by the same
-triple, `construct_id|scaffold|linker`. A combination that has not been predicted is reported as
+The structure is presented on the construct page, where it appears when the URL names a scaffold
+and a linker, which is the state in which the page is previewing an assembly. The lookup is by the
+triple `construct_id|scaffold|linker`. A combination that has not been predicted is reported as
 such rather than shown as an empty frame. The bucket is named at build time by
 `VITE_STRUCTURE_BASE_URL`, which is set in `app/.env.production`; with that variable unset the
 whole feature renders nothing and the platform behaves as it did before it existed. The address

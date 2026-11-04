@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/ui/error-state"
 import { CardGridSkeleton, ListSkeleton } from "@/components/ui/loading-state"
 import { Notice } from "@/components/ui/notice"
 import { Skeleton } from "@/components/ui/skeleton"
+import { InfoTip } from "@/components/ui/tooltip"
 import {
   AnalysisBlocks,
   SafetyGateList,
@@ -40,7 +41,8 @@ import type {
   ScaffoldSummary,
 } from "@/api/types"
 import { distinctForms, formLabel, materialFormLabels } from "@/lib/derive"
-import { iconFor, RIGIDITY_ORDER } from "@/lib/display"
+import { iconFor, pipelineStatusLabel, RIGIDITY_ORDER } from "@/lib/display"
+import { FUNCTIONAL_SCORE_NOTES, GLOSSARY, VERDICT_GLOSSARY } from "@/lib/glossary"
 import { formatScore, verdictSkin } from "@/lib/score"
 import { useAsync } from "@/lib/useAsync"
 import { cn } from "@/lib/utils"
@@ -273,17 +275,27 @@ function PeptidesPanel({
               count={directions.reduce((sum, item) => sum + item.construct_count, 0)}
             />
             {directions.map((item) => (
-              <DirectionChip
-                key={item.id}
-                direction={item}
-                active={direction === item.id}
-                onClick={() => selectDirection(item.id)}
-              />
+              <span key={item.id} className="inline-flex items-center gap-1">
+                <DirectionChip
+                  direction={item}
+                  active={direction === item.id}
+                  onClick={() => selectDirection(item.id)}
+                />
+                {item.status === "wip" && (
+                  <>
+                    <span className="text-[10px] text-amber-600 font-medium">WIP</span>
+                    <InfoTip content={GLOSSARY.wip} />
+                  </>
+                )}
+              </span>
             ))}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-gray-400 mr-1">Screened under:</span>
+            <span className="text-xs text-gray-400 mr-1 inline-flex items-center gap-1">
+              Screening profile:
+              <InfoTip content={GLOSSARY.route_profile} />
+            </span>
             {routes.map((route) => (
               <button
                 key={route.id}
@@ -301,7 +313,7 @@ function PeptidesPanel({
               >
                 {route.name}
                 <span className="ml-1.5 font-mono text-[11px] text-gray-400">
-                  ≤{route.screening.immunogenicity_threshold.toFixed(2)}
+                  immuno ≤{route.screening.immunogenicity_threshold.toFixed(2)}
                 </span>
               </button>
             ))}
@@ -335,12 +347,14 @@ function PeptidesPanel({
 
           <p className="text-xs text-gray-400">
             Composite and safety verdict are computed under the <strong>{effectiveRouteName}</strong>{" "}
-            profile: immunogenicity gate{" "}
+            profile: immunogenicity gate ≤{" "}
             {routes
               .find((route) => route.id === effectiveRoute)
               ?.screening.immunogenicity_threshold.toFixed(2) ?? "-"}
             , and that route's weighting for penetration, solubility and thermal stability. The
-            same construct scores differently under another route.
+            same construct scores differently under another route. The immunogenicity gate is
+            the one gate where a lower value is safer: it is the predicted MHC-I presentation
+            score, so a higher number means stronger predicted binding and greater risk.
           </p>
         </div>
       </section>
@@ -455,20 +469,13 @@ function DirectionChip({
             ? "border-primary-400 bg-primary-50 text-primary-800 shadow-sm cursor-pointer"
             : "border-gray-200 bg-white text-gray-600 hover:border-primary-200 cursor-pointer",
       )}
-      title={
-        direction.status === "wip"
-          ? "These rows exist in the database but the pipeline has not signed them off."
-          : direction.description
-      }
+      title={direction.description}
     >
       <Icon className="w-3 h-3" style={{ color: unavailable ? undefined : direction.color }} />
       <span className="font-medium">{direction.name}</span>
       <span className={cn("font-mono", unavailable ? "text-gray-300" : "text-gray-400")}>
         {direction.construct_count}
       </span>
-      {direction.status === "wip" && (
-        <span className="text-[10px] text-amber-600 font-medium">WIP</span>
-      )}
     </button>
   )
 }
@@ -521,9 +528,12 @@ function ConstructRow({
                 {construct.direction_label}
               </Badge>
               {!isCandidate && (
-                <Badge variant="warning" className="text-[10px]">
-                  Pipeline status {construct.status}
-                </Badge>
+                <span className="inline-flex items-center gap-1">
+                  <Badge variant="warning" className="text-[10px]">
+                    {pipelineStatusLabel(construct.status)}
+                  </Badge>
+                  <InfoTip content={GLOSSARY.pipeline_status} />
+                </span>
               )}
             </div>
 
@@ -557,12 +567,14 @@ function ConstructRow({
             <div className={cn("flex items-center gap-1.5 text-xs font-medium", skin.text)}>
               <span className={cn("w-1.5 h-1.5 rounded-full", skin.dot)} />
               {skin.label}
+              <InfoTip content={GLOSSARY[VERDICT_GLOSSARY[construct.safety_verdict ?? "indeterminate"]]} />
             </div>
 
-            <ScoreCell label="Composite" value={construct.composite} />
+            <ScoreCell label="Composite" value={construct.composite} note={GLOSSARY.composite} />
             <ScoreCell
               label={construct.functional_score_label}
               value={construct.functional_score}
+              note={FUNCTIONAL_SCORE_NOTES[construct.functional_score_key]}
               rankingOnly={construct.semantics === "ranking_only"}
               small
             />
@@ -587,18 +599,24 @@ function ScoreCell({
   label,
   value,
   small,
+  note,
   rankingOnly = false,
 }: {
   label: string
   value: number | null
   small?: boolean
+  /** What the number measures, shown beside the label for a reader outside the project. */
+  note?: string
   /** The value orders candidates and is not a probability, so it is not colour-banded as one. */
   rankingOnly?: boolean
 }) {
   return (
     <div className="text-center min-w-[56px]">
-      <div className="text-[10px] text-gray-400 truncate max-w-[80px]" title={label}>
-        {label}
+      <div className="flex items-center justify-center gap-1 min-w-0">
+        <span className="text-[10px] text-gray-400 truncate max-w-[80px]" title={label}>
+          {label}
+        </span>
+        {note && <InfoTip content={note} />}
       </div>
       <div
         className={cn(

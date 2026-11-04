@@ -1,7 +1,10 @@
 import type { ReactNode } from "react"
 import { AlertTriangle, Info, TriangleAlert } from "lucide-react"
 
+import { GLOSSARY } from "@/lib/glossary"
 import { cn } from "@/lib/utils"
+
+import { InfoTip } from "./tooltip"
 
 type NoticeTone = "info" | "caution" | "warning"
 
@@ -69,16 +72,9 @@ export function Notice({
 /** Small inline marker for a value the service reports as ranking-only. */
 export function RankingOnlyMarker({ note }: { note?: string }) {
   return (
-    <span
-      className="text-[10px] text-gray-400"
-      title={
-        note ??
-        "This score orders candidates. The predictor behind it separates functional-looking " +
-          "peptides from random fragments rather than measuring activity, so it is not a " +
-          "probability."
-      }
-    >
-      ranking only
+    <span className="inline-flex items-center gap-1">
+      <span className="text-[10px] text-gray-400">ranking only</span>
+      <InfoTip content={note ?? GLOSSARY.ranking_only} />
     </span>
   )
 }

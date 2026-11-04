@@ -76,6 +76,24 @@ export const DIRECTION_STATUS_LABEL: Record<string, string> = {
 }
 
 /**
+ * The pipeline's own state for a row, phrased for a reader.
+ *
+ * The stored values are field names - `failed_safety`, `failed_score`, `WIP` - and printed
+ * raw they read as identifiers rather than as a statement about the row.
+ */
+export const PIPELINE_STATUS_LABEL: Record<string, string> = {
+  passed: "Signed off",
+  failed_safety: "Eliminated on safety",
+  failed_score: "Eliminated on score",
+  WIP: "Not signed off",
+}
+
+export function pipelineStatusLabel(status: string | null | undefined): string {
+  if (!status) return "unknown"
+  return PIPELINE_STATUS_LABEL[status] ?? status
+}
+
+/**
  * Where a threshold came from, phrased for a reader.
  *
  * The service carries `tool` / `route` / `project` as tokens, which is right for a field and

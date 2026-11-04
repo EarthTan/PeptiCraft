@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ErrorState } from "@/components/ui/error-state"
 import { CardGridSkeleton, ListSkeleton } from "@/components/ui/loading-state"
 import { Notice } from "@/components/ui/notice"
+import { InfoTip } from "@/components/ui/tooltip"
 import { StructureViewer } from "@/components/structure-viewer"
 import { BuildNameDialog } from "@/components/build-history"
 import {
@@ -37,7 +38,13 @@ import type {
 import { listBuildRecords, recordBuild, renameSession, type BuildRecord } from "@/lib/buildRecords"
 import { openHistoryPanel } from "@/lib/historyPanel"
 import { distinctForms, formLabel, groupScaffoldsByRoute, materialFormLabels } from "@/lib/derive"
-import { DIRECTION_STATUS_LABEL, iconFor, WEIGHT_TIER_LABEL } from "@/lib/display"
+import {
+  DIRECTION_STATUS_LABEL,
+  iconFor,
+  pipelineStatusLabel,
+  WEIGHT_TIER_LABEL,
+} from "@/lib/display"
+import { GLOSSARY, VERDICT_GLOSSARY } from "@/lib/glossary"
 import { formatScore, verdictSkin } from "@/lib/score"
 import { useAsync } from "@/lib/useAsync"
 import { cn } from "@/lib/utils"
@@ -1333,6 +1340,7 @@ function ResultStep({
               <p className="text-sm text-gray-500 mt-1 leading-relaxed">
                 {route.name} · {route.barrier_label} · immunogenicity gate ≤{" "}
                 {route.screening.immunogenicity_threshold.toFixed(2)}
+                <InfoTip content={GLOSSARY.immunogenicity_gate} className="ml-1 align-middle" />
                 {linker && (
                   <>
                     {" · linker "}
@@ -1432,7 +1440,10 @@ function ResultStep({
         <p className="text-sm font-medium text-primary-900">
           {items.length} of {data?.total ?? 0} candidate{data?.total === 1 ? "" : "s"}
         </p>
-        <span className="text-xs text-gray-400">ranked by composite, {route.name} profile</span>
+        <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+          ranked by composite, {route.name} profile
+          <InfoTip content={GLOSSARY.composite} />
+        </span>
       </div>
 
       <div className="space-y-2">
@@ -1458,9 +1469,12 @@ function ResultStep({
                       {item.direction_label}
                     </Badge>
                     {item.status !== "passed" && (
-                      <Badge variant="warning" className="text-[10px]">
-                        {item.status}
-                      </Badge>
+                      <span className="inline-flex items-center gap-1">
+                        <Badge variant="warning" className="text-[10px]">
+                          {pipelineStatusLabel(item.status)}
+                        </Badge>
+                        <InfoTip content={GLOSSARY.pipeline_status} />
+                      </span>
                     )}
                   </div>
 
@@ -1491,10 +1505,13 @@ function ResultStep({
                   </div>
 
                   <div className="flex items-center gap-3 flex-wrap mt-1.5">
-                    <div className={cn("flex items-center gap-1.5 text-[11px]", skin.text)}>
-                      <span className={cn("w-1.5 h-1.5 rounded-full", skin.dot)} />
-                      {skin.label}
-                    </div>
+                  <div className={cn("flex items-center gap-1.5 text-[11px]", skin.text)}>
+                    <span className={cn("w-1.5 h-1.5 rounded-full", skin.dot)} />
+                    {skin.label}
+                    <InfoTip
+                      content={GLOSSARY[VERDICT_GLOSSARY[item.safety_verdict ?? "indeterminate"]]}
+                    />
+                  </div>
                     <span className="text-[11px] text-gray-400">
                       peptide {item.peptide_length} aa
                       {item.fused_length !== null && (
@@ -1507,7 +1524,10 @@ function ResultStep({
 
                 <div className="flex items-center gap-3">
                   <div className="text-center">
-                    <div className="text-xs text-gray-400">Composite</div>
+                    <div className="inline-flex items-center justify-center gap-1 text-xs text-gray-400">
+                      Composite
+                      <InfoTip content={GLOSSARY.composite} />
+                    </div>
                     <div className="text-lg font-bold font-mono text-accent-600">
                       {formatScore(item.composite)}
                     </div>

@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/ui/error-state"
 import { ListSkeleton } from "@/components/ui/loading-state"
 import { Notice } from "@/components/ui/notice"
 import { Skeleton } from "@/components/ui/skeleton"
+import { InfoTip } from "@/components/ui/tooltip"
 import { AnalysisBlocks, SafetyGateList, ToolScoreGrid } from "@/components/construct-panels"
 import { ExpressionBlock } from "@/components/scaffold-expression"
 import { StructureViewer } from "@/components/structure-viewer"
@@ -49,6 +50,8 @@ import type {
 } from "@/api/types"
 import { ApiError } from "@/api/client"
 import { formLabel, materialFormLabels } from "@/lib/derive"
+import { pipelineStatusLabel } from "@/lib/display"
+import { FUNCTIONAL_SCORE_NOTES, GLOSSARY, VERDICT_GLOSSARY } from "@/lib/glossary"
 import { formatScore, verdictSkin } from "@/lib/score"
 import { analyseSequence } from "@/lib/sequence"
 import { useAsync, useAsyncAction } from "@/lib/useAsync"
@@ -373,10 +376,14 @@ export default function ResultsPage() {
                 <Badge variant={skin.badge} className="text-xs">
                   {skin.label}
                 </Badge>
+                <InfoTip content={GLOSSARY[VERDICT_GLOSSARY[detail.safety.verdict]]} />
                 {detail.status !== "passed" && (
-                  <Badge variant="warning" className="text-xs">
-                    Pipeline status {detail.status}
-                  </Badge>
+                  <span className="inline-flex items-center gap-1">
+                    <Badge variant="warning" className="text-xs">
+                      {pipelineStatusLabel(detail.status)}
+                    </Badge>
+                    <InfoTip content={GLOSSARY.pipeline_status} />
+                  </span>
                 )}
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 font-mono truncate">
@@ -398,7 +405,10 @@ export default function ResultsPage() {
             </div>
 
             <div className="text-left sm:text-right flex-shrink-0">
-              <p className="text-xs text-gray-400">Developability score · {activeRouteName}</p>
+              <p className="inline-flex items-center gap-1 text-xs text-gray-400">
+                Developability score · {activeRouteName}
+                <InfoTip content={GLOSSARY.developability} />
+              </p>
               <p className="text-5xl font-extrabold gradient-accent-text font-mono leading-none mt-1">
                 {formatScore(detail.scores.composite)}
               </p>
@@ -512,6 +522,7 @@ export default function ResultsPage() {
                 <StatRow
                   label={`Developability · ${activeRouteName}`}
                   value={formatScore(detail.scores.composite)}
+                  note={GLOSSARY.composite}
                   highlight
                 />
 
@@ -527,10 +538,18 @@ export default function ResultsPage() {
                   tone={detail.backbone_binding === "placeholder" ? "danger" : "ok"}
                 />
                 <StatRow label="Linker" value={detail.linker?.name ?? "-"} />
-                <StatRow label="Safety gates" value={skin.label} tone={skin.dot === "bg-accent-500" ? "ok" : "danger"} />
+                <StatRow
+                  label="Safety gates"
+                  value={skin.label}
+                  note={GLOSSARY[VERDICT_GLOSSARY[detail.safety.verdict]]}
+                  tone={skin.dot === "bg-accent-500" ? "ok" : "danger"}
+                />
 
                 <div className="pt-2 border-t border-gray-100">
-                  <p className="text-xs text-gray-400 mb-1">Screened under</p>
+                  <p className="inline-flex items-center gap-1 text-xs text-gray-400 mb-1">
+                    Screening profile
+                    <InfoTip content={GLOSSARY.route_profile} />
+                  </p>
                   <select
                     value={routeId ?? route?.id ?? ""}
                     onChange={(event) => setRoute(event.target.value)}
@@ -925,9 +944,23 @@ function ConstructTab({
               label="Winsor-weighted developability"
               value={formatScore(detail.scores.composite)}
               tone="neutral"
+              note={GLOSSARY.composite}
               footnote={`0-1 comparison score for ${activeRouteName}. Higher scores indicate stronger combined developability signals under this route's weights.`}
             />
-            {functionTiles.map(item => <ScoreTile key={item.id} label={`${item.label} prediction`} value={formatScore(item.value)} tone="neutral" footnote={item.tool} />)}
+            {functionTiles.map(item => (
+              <ScoreTile
+                key={item.id}
+                label={`${item.label} prediction`}
+                value={formatScore(item.value)}
+                tone="neutral"
+                note={
+                  item.id === detail.direction
+                    ? FUNCTIONAL_SCORE_NOTES[detail.functional_score_key]
+                    : undefined
+                }
+                footnote={item.tool}
+              />
+            ))}
             <ScoreTile
               label="Aggregation A3v"
               value={formatScore(aggregation)}
@@ -1058,8 +1091,18 @@ function ConstructTab({
                   <th className="py-2 pr-3 font-medium text-right">Penetration</th>
                   <th className="py-2 pr-3 font-medium text-right">Solubility</th>
                   <th className="py-2 pr-3 font-medium text-right">Thermal</th>
-                  <th className="py-2 pr-3 font-medium text-right">Composite</th>
-                  <th className="py-2 font-medium text-right">Immuno gate</th>
+                  <th className="py-2 pr-3 font-medium text-right">
+                    <span className="inline-flex items-center gap-1">
+                      Composite
+                      <InfoTip content={GLOSSARY.composite} />
+                    </span>
+                  </th>
+                  <th className="py-2 font-medium text-right">
+                    <span className="inline-flex items-center gap-1">
+                      Immuno gate
+                      <InfoTip content={GLOSSARY.immunogenicity_gate} />
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1815,11 +1858,14 @@ function ScoreTile({
   label,
   value,
   tone,
+  note,
   footnote,
 }: {
   label: string
   value: string
   tone: "ok" | "warn" | "danger" | "neutral"
+  /** What the number is, for a reader outside the project. */
+  note?: string
   footnote: string
 }) {
   const colour =
@@ -1833,7 +1879,10 @@ function ScoreTile({
 
   return (
     <div className="p-4 rounded-lg border border-gray-200 bg-white">
-      <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
+      <p className="text-xs text-gray-400 uppercase tracking-wide inline-flex items-center gap-1">
+        {label}
+        {note && <InfoTip content={note} />}
+      </p>
       <p className={cn("text-2xl font-bold font-mono mt-1", colour)}>{value}</p>
       <p className="text-[11px] text-gray-400 mt-0.5">{footnote}</p>
     </div>
@@ -1843,17 +1892,23 @@ function ScoreTile({
 function StatRow({
   label,
   value,
+  note,
   highlight,
   tone,
 }: {
   label: string
   value: string
+  /** What the label means, for a reader outside the project. */
+  note?: string
   highlight?: boolean
   tone?: "ok" | "danger"
 }) {
   return (
     <div className="flex items-center justify-between gap-3 text-sm">
-      <span className="text-gray-500 flex-shrink-0">{label}</span>
+      <span className="text-gray-500 flex-shrink-0 inline-flex items-center gap-1">
+        {label}
+        {note && <InfoTip content={note} />}
+      </span>
       <span
         className={cn(
           "font-medium font-mono text-xs text-right break-words",

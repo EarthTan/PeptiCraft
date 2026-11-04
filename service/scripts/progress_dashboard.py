@@ -4,16 +4,20 @@
         --manifest ../exports/PeptiCraft-OmegaFold-Pack-20261102/manifest.csv \
         --folds ~/pepticraft-structures \
         --state ~/.pepticraft-upload-state.json \
-        --out ~/pepticraft-progress.html
+        --out ~/pepticraft-progress.html \
+        --machine "宿舍 Ubuntu|ubuntu-tailscale|8:00–23:00|/home/a/p1.fasta,/home/a/p2.fasta|/home/a/folds/pdb" \
+        --machine "工作站|dku-tailscale|7×24|/home/b/p1.fasta|/home/b/folds/pdb"
 
 The batch runs for months, so "how far along is it" is not answerable by a percentage alone.
 Two figures disagree and both are true: the count of finished structures, and the machine time
 they cost. Short chains finish in seconds and long ones in twenty minutes, so the count runs
 far ahead of the clock. The page states both and lets the reader see why they differ.
 
-Everything it reads is local: the manifest for the tiers and lengths, the staging directory for
-what has been folded, and the upload record for what the store holds. No network call, so the
-page can be rewritten on a schedule whether or not the store is reachable.
+The totals come from the manifest, the staging directory and the upload record, all local, so
+a rewrite costs nothing and cannot fail. The per-machine panel is different: only the machine
+knows how far its own share has got, so each one is asked over a short ssh call. A machine
+that does not answer is reported as out of reach rather than assumed idle, and the rest of the
+page is written regardless.
 """
 
 from __future__ import annotations
@@ -21,6 +25,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import shlex
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -94,6 +100,147 @@ def summarise(tiers, folded) -> dict:
     }
 
 
+PROBE = """
+pdb=%(pdb)s
+have=/tmp/pc_have.$$
+ls "$pdb" 2>/dev/null | sed 's/\\.pdb$//' | sort -u > "$have"
+total=0
+done=0
+for f in %(fastas)s; do
+  n=$(grep -c '^>' "$f" 2>/dev/null)
+  [ -z "$n" ] && n=0
+  d=$(grep '^>' "$f" 2>/dev/null | cut -c2- | cut -d' ' -f1 | sort -u | comm -12 - "$have" | wc -l)
+  total=$((total + n))
+  done=$((done + d))
+done
+recent=$(find "$pdb" -name '*.pdb' -newermt '-1 hour' 2>/dev/null | wc -l)
+gpu=$(nvidia-smi --query-gpu=name,utilization.gpu --format=csv,noheader,nounits 2>/dev/null | head -1)
+up=$(docker ps --format '{{.Names}}' 2>/dev/null | tr '\\n' ',')
+rm -f "$have"
+echo "total=$total"
+echo "done=$done"
+echo "recent=$recent"
+echo "gpu=$gpu"
+echo "up=$up"
+"""
+
+
+def parse_machine(spec: str) -> dict:
+    """`name|host|window|fasta,fasta|pdb dir` -> the fields the page needs.
+
+    The share each machine was given is fixed when the work is split, so the page reads that
+    split from the command line rather than inferring it. A machine's progress is then just
+    how much of its own list it has written.
+    """
+    parts = spec.split("|")
+    if len(parts) != 5:
+        raise ValueError(
+            f"a machine reads name|host|window|fastas|pdb, not {spec!r}"
+        )
+    name, host, window, fastas, pdb = parts
+    return {
+        "name": name.strip(),
+        "host": host.strip(),
+        "window": window.strip(),
+        "fastas": [part.strip() for part in fastas.split(",") if part.strip()],
+        "pdb": pdb.strip(),
+    }
+
+
+def probe_machine(machine: dict, timeout: float = 90.0) -> dict:
+    """Ask one machine how far its share has got. A machine that cannot answer says so."""
+    script = PROBE % {
+        "pdb": shlex.quote(machine["pdb"]),
+        "fastas": " ".join(shlex.quote(path) for path in machine["fastas"]),
+    }
+    status = dict(machine, reachable=False, total=0, done=0, recent=0, gpu="", running=False)
+
+    try:
+        finished = subprocess.run(
+            [
+                "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
+                "-o", "ServerAliveInterval=5",
+                machine["host"], "bash -s",
+            ],
+            input=script, capture_output=True, text=True, timeout=timeout,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return status
+
+    if finished.returncode != 0:
+        return status
+
+    status["reachable"] = True
+    for line in finished.stdout.splitlines():
+        key, _, value = line.strip().partition("=")
+        if key in ("total", "done", "recent"):
+            status[key] = int(value) if value.isdigit() else 0
+        elif key == "gpu":
+            status["gpu"] = value.strip()
+        elif key == "up":
+            # The batch runner is the container that means work is happening. The prediction
+            # service sits loaded and idle between batches, so its presence says nothing.
+            status["running"] = "runner" in value
+
+    return status
+
+
+def short_gpu(label: str) -> str:
+    """`NVIDIA GeForce RTX 5060 Laptop GPU, 100` -> `RTX 5060 Laptop GPU`.
+
+    The vendor prefix and the utilisation are said once each elsewhere; the card only needs
+    enough to identify the hardware.
+    """
+    name = label.rsplit(",", 1)[0].strip()
+    for prefix in ("NVIDIA GeForce ", "NVIDIA "):
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return name
+
+
+def render_machines(machines: list[dict]) -> str:
+    """One card per machine: what it was given, how much of it is done, whether it is awake."""
+    if not machines:
+        return ""
+
+    cards = []
+    for machine in machines:
+        share = machine["done"] / machine["total"] if machine["total"] else 0.0
+        colour = "var(--teal)" if machine["running"] else "var(--faint)"
+        state = "运行中" if machine["running"] else "已停"
+        state_class = "on" if machine["running"] else "off"
+
+        if not machine["reachable"]:
+            state, state_class, colour = "失联", "off", "var(--faint)"
+            foot_left = "无法连接"
+            foot_right = ""
+        else:
+            foot_left = f'{machine["done"]:,} / {machine["total"]:,} 条 · {share * 100:.1f}%'
+            foot_right = f'近一小时 {machine["recent"]:,} 条'
+
+        subtitles = [machine["window"]]
+        if machine["gpu"]:
+            subtitles.append(short_gpu(machine["gpu"]))
+
+        cards.append(
+            f"""<div class="machine">
+      <div class="machine-head">
+        <span class="machine-name">{machine["name"]}</span>
+        <span class="state {state_class}">{state}</span>
+      </div>
+      <div class="machine-sub">{" · ".join(subtitles)}</div>
+      <div class="track thin"><div class="fill thin" style="width:{share * 100:.2f}%;background:{colour}"></div></div>
+      <div class="machine-foot"><span>{foot_left}</span><span>{foot_right}</span></div>
+    </div>"""
+        )
+
+    return f"""  <h2>两台机器</h2>
+  <div class="machines">
+    {"".join(cards)}
+  </div>
+"""
+
+
 def bar(fraction: float, colour: str, minimum: int = 0) -> str:
     width = max(fraction * 100, 0.0)
     floor = f"min-width:{minimum}px;" if minimum and width < 100 else ""
@@ -111,8 +258,9 @@ def card(label: str, value: str, note: str) -> str:
     )
 
 
-def render(stats: dict, published: int, generated: datetime, machines: str = "一台机器 7×24",
+def render(stats: dict, published: int, generated: datetime, machines: list[dict] | None = None,
            hours_per_day: float = 24.0) -> str:
+    machines = machines or []
     per_tier = stats["per_tier"]
     count_share = stats["done"] / stats["total"] if stats["total"] else 0.0
     total_hours = stats["hours_done"] + stats["hours_left"]
@@ -127,6 +275,7 @@ def render(stats: dict, published: int, generated: datetime, machines: str = "�
     total_days = stats["hours_left"] / hours_per_day
     phase_one_date = generated + timedelta(days=phase_one_days)
     total_date = generated + timedelta(days=total_days)
+    machine_panel = render_machines(machines)
 
     def num(value: int) -> str:
         return f"{value:,}"
@@ -181,6 +330,18 @@ h2 {{ font-size:14px; font-weight:500; margin:32px 0 12px; }}
 .phase-title {{ font-size:13px; font-weight:500; }}
 .phase-date {{ font-size:12px; color:var(--muted); white-space:nowrap; }}
 .phase-meta {{ display:flex; gap:28px; font-size:12px; color:var(--muted); margin-top:12px; }}
+.machines {{ display:grid; gap:10px; }}
+.machine {{ border:0.5px solid var(--line); border-radius:10px; padding:15px 18px; }}
+.machine-head {{ display:flex; justify-content:space-between; align-items:baseline; gap:16px; }}
+.machine-name {{ font-size:13px; font-weight:500; }}
+.machine-sub {{ font-size:12px; color:var(--faint); margin:2px 0 11px; }}
+.machine-foot {{ display:flex; justify-content:space-between; gap:16px; font-size:12px; color:var(--muted); margin-top:8px; }}
+.state {{ font-size:11px; padding:1px 7px; border-radius:9px; white-space:nowrap; }}
+.state.on {{ color:var(--teal); background:rgba(29,158,117,.12); }}
+.state.off {{ color:var(--faint); background:rgba(0,0,0,.055); }}
+@media (prefers-color-scheme: dark) {{
+  .state.off {{ background:rgba(255,255,255,.08); }}
+}}
 footer {{ margin-top:32px; font-size:12px; color:var(--faint); line-height:1.7; }}
 </style>
 </head>
@@ -193,7 +354,7 @@ footer {{ margin-top:32px; font-size:12px; color:var(--faint); line-height:1.7; 
     {card("已完成结构", num(stats["done"]), f'共 {num(stats["total"])} 条')}
     {card("已用机时", f'{stats["hours_done"]:.1f} 小时', f"全程约 {num(round(total_hours))} 小时")}
     {card("剩余机时", num(round(stats["hours_left"])) + " 小时", f"约 {total_days:.0f} 天")}
-    {card("全部完成", day(total_date), machines)}
+    {card("全部完成", day(total_date), f'{len(machines)} 台机器并行' if machines else "单机")}
   </div>
 
   <h2>两条进度条</h2>
@@ -239,6 +400,7 @@ footer {{ margin-top:32px; font-size:12px; color:var(--faint); line-height:1.7; 
     <div class="track thin"><div class="fill thin" style="width:{tier3_share * 100:.2f}%;background:var(--blue)"></div></div>
   </div>
 
+{machine_panel}
   <footer>
     机时由实测点拟合的长度幂律估算，单条误差中位约 9%，累计预计日期随进度滚动。<br>
     云端结构桶已发布 {num(published)} 条，每半小时与本地同步一次。条数以本机为准。
@@ -255,21 +417,24 @@ def main() -> int:
     parser.add_argument("--folds", required=True, type=Path)
     parser.add_argument("--state", type=Path, default=None)
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--machine", action="append", default=[], metavar="SPEC",
+                        help="name|host|window|fastas|pdb — one per folding machine, repeated. "
+                             "The window is free text (\"8:00–23:00\") because it is a promise "
+                             "about the room rather than something to compute from.")
     parser.add_argument("--hours-per-day", type=float, default=24.0,
                         help="machine time the batch actually gets per day; two machines "
                              "that share the work and one that only runs in the daytime "
                              "both come out as a single figure here")
-    parser.add_argument("--machines", default="一台机器 7×24",
-                        help="how the capacity is made up, shown under the finish date")
     args = parser.parse_args()
 
     tiers = read_manifest(args.manifest)
     folded = count_folded(args.folds)
     published = count_published(args.state) if args.state else len(folded)
+    machines = [probe_machine(parse_machine(spec)) for spec in args.machine]
 
     stats = summarise(tiers, folded)
     page = render(stats, published, datetime.now(),
-                  machines=args.machines, hours_per_day=args.hours_per_day)
+                  machines=machines, hours_per_day=args.hours_per_day)
     args.out.write_text(page, encoding="utf-8")
 
     print(

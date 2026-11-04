@@ -172,7 +172,13 @@ await act(async () => {
 // ---------------------------------------------------------------------------
 
 console.log('\n=== Step 1: the route is chosen and the scaffold pool follows it ===')
-await waitFor(() => buttonContaining('Next: Function Direction') || buttons().length > 4, 'step 1')
+// The route cards appear only once the reference data has arrived, so the wait is on the
+// cards themselves. A looser condition (any four buttons) is satisfied by the header before
+// the library lands, and the assertions below then read an empty page.
+await waitFor(
+  () => routes.every((route) => (host.textContent ?? '').includes(route.name)),
+  'the route cards',
+)
 
 check(
   'every declared route is offered',

@@ -176,7 +176,7 @@ async function waitFor(predicate, label, timeoutMs = 8000) {
 const buttons = () => [...host.querySelectorAll('button')]
 const buttonContaining = (text) => buttons().find((b) => (b.textContent ?? '').includes(text))
 const text = () => (host.textContent ?? '')
-const searchInput = () => host.querySelector('input[aria-label="Search peptides"]')
+const searchInput = () => host.querySelector('input[aria-label="Search constructs"]')
 const rowsInDom = () => host.querySelectorAll('[data-construct-id]').length
 
 await act(async () => {
@@ -227,7 +227,7 @@ const field = await (async () => {
   const found = await waitFor(() => Boolean(searchInput()), 'the search field')
   return found ? searchInput() : null
 })()
-check('the peptide tab offers a search field', Boolean(field))
+check('the construct tab offers a search field', Boolean(field))
 
 if (field) {
   const before = allRows.total

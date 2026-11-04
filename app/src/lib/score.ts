@@ -7,7 +7,7 @@
  *
  *   A missing value is not a failing value. Every score is nullable, and a null renders as
  *   "Not assessed". The previous interface substituted 0 for anything it lacked, which the
- *   tool table then read back as a real score of zero and printed with a FAIL badge —
+ *   tool table then read back as a real score of zero and printed with a FAIL badge -
  *   immunogenicity was shown as a hard failure for 379 of 496 constructs on which the
  *   predictor had never run.
  *
@@ -49,7 +49,7 @@ export function verdictTextColour(verdict: ScoreVerdict): string {
   return "text-primary-700"
 }
 
-/** Bar colour for a score. A score with no verdict — unassessed, or a ranking signal — gets
+/** Bar colour for a score. A score with no verdict - unassessed, or a ranking signal - gets
  *  the neutral track rather than the clearing green. */
 export function verdictBarColour(verdict: ScoreVerdict): string {
   if (verdict === "FAIL") return "bg-red-400"
@@ -64,12 +64,12 @@ export function verdictBarColour(verdict: ScoreVerdict): string {
  * A score at the given precision, or an em dash when the predictor did not cover this peptide.
  *
  * A measured value that rounds to nothing at that precision is shown with significant digits
- * instead. pLM4CPPs returns values like 2.98e-05, which printed as "0.00" — the same
+ * instead. pLM4CPPs returns values like 2.98e-05, which printed as "0.00" - the same
  * collapsing of two different states that the interface is careful to avoid between an
  * unassessed metric and one that scored zero.
  */
 export function formatScore(value: number | null | undefined, digits = 2): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—"
+  if (value === null || value === undefined || Number.isNaN(value)) return "-"
   const rounded = value.toFixed(digits)
   if (value !== 0 && Number(rounded) === 0) return value.toPrecision(2)
   return rounded
@@ -181,7 +181,7 @@ export function vetoSummary(safety: SafetyVerdict): string {
   return "All assessed gates clear"
 }
 
-/** "A", "A and B", "A, B and C" — so a two-item list is not printed with a bare comma. */
+/** "A", "A and B", "A, B and C" - so a two-item list is not printed with a bare comma. */
 export function joinNames(names: string[]): string {
   if (names.length === 0) return ""
   if (names.length === 1) return names[0]

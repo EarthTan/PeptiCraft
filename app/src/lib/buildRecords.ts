@@ -9,7 +9,7 @@
  * Automatic, not on demand
  * ------------------------
  * Every build that reaches its results is recorded. A record belongs to the build that was
- * started from the Builder's entry point — its session — and within that session it is keyed
+ * started from the Builder's entry point - its session - and within that session it is keyed
  * by the four choices that produced it. Running the same combination again in the same
  * session updates the record's figures and its last-built time instead of adding a
  * near-duplicate beside it; `runs` counts those repetitions. A new session always starts a
@@ -121,7 +121,7 @@ export type RecordOutcome =
 /**
  * What makes two runs within one build the same run.
  *
- * The four choices that drive the result — route, directions, scaffold, linker — and
+ * The four choices that drive the result - route, directions, scaffold, linker - and
  * nothing else. `limit` is left out because it slices a finished ranking rather than
  * changing it, and `offset` never reaches a record. Directions are sorted so that choosing
  * the same pair in the other order does not produce a second entry.
@@ -321,7 +321,7 @@ function toCandidate(item: BuiltConstruct): SavedCandidate {
  * adding a second one: the figures and the snapshot move to the new run, `built_at`
  * advances, and `runs` counts the repetitions. A combination built in a later session is a
  * different build under a different name, so it becomes its own record. The title is taken
- * at creation only — a name a reader chose is not something a later run gets to overwrite.
+ * at creation only - a name a reader chose is not something a later run gets to overwrite.
  */
 export function recordBuild(input: RecordBuildInput): RecordOutcome {
   const kept = input.candidates.slice(0, MAX_CANDIDATES)
@@ -373,7 +373,7 @@ export function recordBuild(input: RecordBuildInput): RecordOutcome {
  * Rename every record made in one build.
  *
  * A build's name is asked for once, but it can be changed while the build is on screen, and
- * the records already made under it are the same build — a header saying one thing while the
+ * the records already made under it are the same build - a header saying one thing while the
  * history says another would be a disagreement about which build is which. Returns the
  * updated list, or null when nothing changed or the write failed.
  */

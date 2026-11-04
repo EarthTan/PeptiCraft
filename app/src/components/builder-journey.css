@@ -1,0 +1,36 @@
+.builder-journey { background: #fff; border-bottom: 1px solid #e2e8f0; }
+.builder-journey-inner { max-width: 900px; margin: auto; padding: 16px 28px 14px; }
+.journey-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; list-style: none; }
+.journey-track { display: flex; justify-content: center; position: relative; height: 34px; align-items: flex-start; }
+.journey-step:not(:last-child) .journey-track::after { content: ''; position: absolute; top: 13px; left: calc(50% + 14px); width: calc(100% - 28px); height: 2px; background: #edf1f5; }
+.journey-step.is-complete .journey-track::after { background: #20a87c; }
+.journey-dot { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: #f1f5f9; color: #94a3b8; }
+.is-complete .journey-dot { background: #20a87c; color: #fff; }
+.is-current .journey-dot { background: #0c4a6e; color: #fff; }
+.journey-label { display: block; width: 100%; padding: 0; border: 0; background: transparent; text-align: center; color: #94a3b8; }
+.journey-label > strong { font-size: 11px; font-weight: 400; }
+.is-complete button.journey-label { cursor: pointer; }
+.is-complete button.journey-label:hover { color: #137052; }
+.is-current .journey-label { color: #0c4a6e; }
+.assembly-preview { margin: 14px auto 0; max-width: 640px; padding: 10px 18px 12px; border-radius: 12px; background: #f6f8fb; }
+.assembly-route { text-align: center; font-size: 11px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; }
+.assembly-route.is-filled { color: #0c4a6e; }
+.assembly-parts { display: grid; grid-template-columns: 1fr minmax(65px,.6fr) 1fr; align-items: center; max-width: 540px; margin: auto; }
+.assembly-part { min-height: 48px; padding: 7px 12px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 2px; border: 1px dashed #cbd5e1; color: #7b899b; background: #fff; text-align: center; }
+.assembly-part > span { font-size: 10px; }
+.assembly-part > strong { font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.assembly-scaffold.is-filled { background: #e0eddd; color: #315344; border: 1px solid #bdd5b6; }
+.assembly-peptide.is-filled { background: #e6eff6; color: #0c4a6e; border: 1px solid #b9d0e0; }
+.assembly-linker { position: relative; text-align: center; padding-top: 16px; display: flex; align-items: center; flex-direction: column; gap: 1px; color: #94a3b8; }
+.assembly-linker > span:not(.assembly-linker-line) { font-size: 10px; }
+.assembly-linker strong { font: 500 10px/1.3 'Fira Code', monospace; overflow-wrap: anywhere; padding-inline: 3px; }
+.assembly-linker-line { position: absolute; left: 0; right: 0; top: 7px; border-top: 2px dotted #c6ccdc; }
+.assembly-linker.is-filled { color: #137052; }
+.assembly-linker.is-filled .assembly-linker-line { border-color: #37aa87; }
+@media (max-width: 640px) {
+  .builder-journey-inner { padding: 14px 16px; }
+  .assembly-preview { padding: 8px 10px 10px; margin-top: 12px; }
+  .assembly-parts { grid-template-columns: 1fr 55px 1fr; }
+  .assembly-part { padding: 6px; }
+  .assembly-part > strong { font-size: 10px; }
+}

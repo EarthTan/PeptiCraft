@@ -16,8 +16,8 @@ import { cn } from "@/lib/utils"
  * is therefore of the peptide and the linker's own geometry, and the confidence figures are
  * shown beside it rather than left for the reader to infer from the picture.
  *
- * The colour is pLDDT — the predictor's per-residue confidence, which the coordinate file
- * carries in its B-factor column — on the scale AlphaFold uses: deep blue for confident
+ * The colour is pLDDT - the predictor's per-residue confidence, which the coordinate file
+ * carries in its B-factor column - on the scale AlphaFold uses: deep blue for confident
  * residues, yellow for uncertain ones, orange for disordered ones.
  */
 
@@ -79,7 +79,7 @@ const PLDDT_SCHEME = {
 const PEPTIDE_COLOR = "#c026d3"
 
 function confidenceLabel(value: number | null): string {
-  if (value === null || value === undefined) return "—"
+  if (value === null || value === undefined) return "-"
   return `${(value * 100).toFixed(0)}%`
 }
 
@@ -100,6 +100,7 @@ export function StructureViewer({
   linkerId: string | null
 }) {
   const [state, setState] = useState<LoadState>({ kind: "idle" })
+  const [attempt, setAttempt] = useState(0)
   const [highlightPeptide, setHighlightPeptide] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<ThreeDmolViewer | null>(null)
@@ -133,7 +134,7 @@ export function StructureViewer({
     return () => {
       cancelled = true
     }
-  }, [constructId, scaffoldId, linkerId])
+  }, [constructId, scaffoldId, linkerId, attempt])
 
   // The ready state, pulled apart so the effects below can depend on plain values.
   const ready = state.kind === "ready" ? state : null
@@ -250,8 +251,8 @@ export function StructureViewer({
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-gray-500">
-          No structure has been predicted for this scaffold, linker and peptide combination yet.
-          The batch runs on the workstation and publishes each result as it is finished.
+          No published model matches this exact construct, scaffold and linker combination yet.
+          Other combinations may already have models.
         </CardContent>
       </Card>
     )
@@ -266,7 +267,7 @@ export function StructureViewer({
             Predicted structure
           </CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-gray-500">{state.message}</CardContent>
+        <CardContent className="text-sm text-gray-500"><p>Unable to load the structure data: {state.message}</p><Button variant="outline" size="sm" className="mt-3" onClick={() => setAttempt(value => value + 1)}>Retry</Button></CardContent>
       </Card>
     )
   }

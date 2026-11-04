@@ -3,7 +3,7 @@
  *
  * The pages were synchronous before this rewrite: each one imported a static module and read
  * from it. Real data arrives asynchronously, so every page needs the same three states and
- * the same retry affordance. Two hooks cover all of it — `useAsync` for something a page
+ * the same retry affordance. Two hooks cover all of it - `useAsync` for something a page
  * needs on mount, `useAsyncAction` for something a click triggers.
  *
  * Staleness is handled explicitly in both. A page whose filter changes twice in quick

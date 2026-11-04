@@ -1,3 +1,4 @@
+import { EvidenceBadge, EvidenceGuide } from "@/components/evidence-badge"
 import { useCallback, type ReactNode } from "react"
 import { Link, useParams } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
@@ -28,7 +29,7 @@ import { useAsync } from "@/lib/useAsync"
  * Scaffold detail.
  *
  * Two things this page does that its predecessor could not. It names the fields the interface
- * declares but the source dataset does not carry — `unavailable_fields` comes from the
+ * declares but the source dataset does not carry - `unavailable_fields` comes from the
  * service, so a reader can tell an empty block apart from a broken one. And it renders the
  * patent variant sequences and the experiments that back the evidence label, both of which
  * live in the imported table and were previously shown as counts without their content.
@@ -122,9 +123,7 @@ export default function ScaffoldDetailPage() {
                 </Badge>
               )}
               {detail.max_evidence && (
-                <Badge variant="accent" className="text-xs">
-                  Evidence {detail.max_evidence}
-                </Badge>
+                <EvidenceBadge level={detail.max_evidence} />
               )}
               <Link to="/builder?new=1">
                 <Button variant="gradient" size="sm">
@@ -145,7 +144,7 @@ export default function ScaffoldDetailPage() {
         {detail.unavailable_fields.length > 0 && (
           <Notice tone="caution" title="Fields the source dataset does not carry">
             The entry declares {detail.unavailable_fields.join(", ")}. The scaffold dataset has
-            no column for these, so they are reported as absent rather than left blank — an
+            no column for these, so they are reported as absent rather than left blank - an
             empty card would not say whether the value is missing or the page is broken.
           </Notice>
         )}
@@ -235,6 +234,7 @@ export default function ScaffoldDetailPage() {
               <h2 className="text-base font-semibold text-primary-900 mb-1">
                 Patent sequence variants
               </h2>
+              <EvidenceGuide />
               <p className="text-xs text-gray-400 mb-4">
                 {detail.sequences.length} sequence{detail.sequences.length > 1 ? "s" : ""} in this
                 cluster. The longest is treated as the representative when a construct is
@@ -250,9 +250,7 @@ export default function ScaffoldDetailPage() {
                           {variant.sequence_id}
                         </span>
                         {variant.evidence_level && (
-                          <Badge variant="outline" className="text-[10px] ml-2">
-                            {variant.evidence_level}
-                          </Badge>
+                          <EvidenceBadge level={variant.evidence_level} />
                         )}
                         {variant.length === longest && (
                           <Badge variant="accent" className="text-[10px] ml-2">
@@ -432,7 +430,7 @@ export default function ScaffoldDetailPage() {
                 Highest evidence
               </span>
               <Badge variant="accent" className="text-xs">
-                {detail.max_evidence ?? "—"}
+                {detail.max_evidence ?? "-"}
               </Badge>
             </div>
 

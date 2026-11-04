@@ -1,3 +1,4 @@
+import { englishDisplay } from "../lib/english-display"
 /**
  * The single HTTP entry point for the platform.
  *
@@ -15,17 +16,17 @@
  * Static first. The platform is served as files in production and, by default, in development
  * too: `npm run dev` sets `VITE_STATIC=1`, so the export answers before anything goes out and
  * the frontend runs with no service started beside it. `npm run dev:api` leaves the flag unset
- * and goes to the service instead, which is the mode for work that has to see current data —
+ * and goes to the service instead, which is the mode for work that has to see current data -
  * a static read shows the snapshot the export was made from, not the database as it stands.
  *
- * The lookup happens before the request so the two paths cannot disagree about a shape — they
+ * The lookup happens before the request so the two paths cannot disagree about a shape - they
  * are the same functions' output, one read from a file. A GET that the export does not cover
  * falls through to the network. The exchange is one-way on purpose: a request the export
  * *does* cover is answered from the file and never reaches the service.
  *
  * A covered path whose record is missing is the one case that does not fall through. Falling
  * through would send it to a service that a static deployment does not have, and the request
- * would land on the SPA fallback and come back as HTML — reported to the reader as a malformed
+ * would land on the SPA fallback and come back as HTML - reported to the reader as a malformed
  * response instead of as a missing record. The export is the authority for the paths it holds,
  * absence included, so this raises `not_found` directly.
  */
@@ -117,7 +118,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   // Static first, in a build that has no service. A path the export does not cover falls
   // through, which is the normal answer for the chat POST and for any endpoint added after the
-  // export was made. A path it does cover is answered here either way — with the record, or
+  // export was made. A path it does cover is answered here either way - with the record, or
   // with a not-found when the record is not in the snapshot.
   if (method === "GET" && staticEnabled()) {
     const { bare, params } = splitPath(path)
@@ -137,7 +138,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
             "since. Re-running the export refreshes it.",
         })
       }
-      return served.payload as T
+      return englishDisplay(served.payload) as T
     }
   }
 
@@ -176,7 +177,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   try {
-    return (await response.json()) as T
+    return englishDisplay(await response.json()) as T
   } catch (cause) {
     throw new ApiError("invalid_response", "The API returned a body that is not JSON.", {
       status: response.status,

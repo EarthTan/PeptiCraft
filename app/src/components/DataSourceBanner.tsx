@@ -2,7 +2,7 @@
  * A standing statement of which source answered the page.
  *
  * There are two ways every number on the site can become sample data. The service can fall
- * back to the bundled SQLite fixture when the remote Postgres instance is unreachable — that
+ * back to the bundled SQLite fixture when the remote Postgres instance is unreachable - that
  * fallback is what keeps the interface on screen while the far end is down, and it is the one
  * situation in a live service where every number shown is sample data. And a static
  * deployment can be built from an export that was itself made from the fixture, which is the
@@ -10,7 +10,7 @@
  *
  * The fixture holds four hand-made constructs, not the 496 the pipeline produced. A page that
  * renders it without saying so is indistinguishable from a page reporting real results, so
- * the banner is placed in the layout rather than inside a page — it applies to every route,
+ * the banner is placed in the layout rather than inside a page - it applies to every route,
  * including the ones a reader lands on directly from a shared link.
  *
  * The health check is polled rather than fetched once. Reachability can change while the tab
@@ -31,8 +31,8 @@ const POLL_MS = 30_000
  * Two different situations put sample data on the page and they need different sentences.
  * A live service that could not reach the database and fell back to the fixture is a
  * condition that can change while the tab is open, so it names the host it failed to reach
- * and offers a retry. A static export made from the fixture cannot change at all — the files
- * are what they are — so it says that instead, and the retry button would be a lie.
+ * and offers a retry. A static export made from the fixture cannot change at all - the files
+ * are what they are - so it says that instead, and the retry button would be a lie.
  */
 function describe(health: HealthResponse): { offline: boolean; staticExport: boolean } {
   const { backend, fallback_reason: reason } = health.database

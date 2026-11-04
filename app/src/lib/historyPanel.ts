@@ -1,7 +1,7 @@
 /**
  * Whether the build history is on screen.
  *
- * The panel is asked for from two places that share no page — the clock in the top bar,
+ * The panel is asked for from two places that share no page - the clock in the top bar,
  * which is part of the layout every page sits inside, and the results step, which is deep in
  * the Builder. Its open state therefore cannot belong to either of them, and mounting two
  * copies would give the application two panels to keep in step. This module is the little

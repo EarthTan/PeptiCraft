@@ -8,12 +8,11 @@ import type { ScaffoldExpression } from "@/api/types"
  * The value is the source's, not ours: the scaffold sheet states a host, the vector the patent
  * records, the vector it recommends, and the basis for that recommendation, one set per patent
  * sequence. Nothing here is derived from the peptide, so the block sits beside the assembly
- * rather than inside the score panels — it says what to build the construct in, not how good
+ * rather than inside the score panels - it says what to build the construct in, not how good
  * the construct is.
  *
- * The strings stay in the language the source wrote them in. `无明确推荐` and `宿主 DE3 状态
- * 需确认` are conclusions with a scope, and a translation that reads `no recommendation` and
- * `confirm the host` would look like an editorial note rather than a finding.
+ * Curated source prose is translated at the API display boundary. Keep sequence-specific
+ * qualifications when presenting host and vector recommendations.
  */
 export function ExpressionBlock({
   expression,
@@ -37,7 +36,7 @@ export function ExpressionBlock({
         {rows.map(([label, value]) => (
           <div key={label} className="flex gap-3">
             <dt className="text-gray-400 flex-shrink-0 w-40">{label}</dt>
-            <dd className="text-gray-700 leading-relaxed break-words">{value ?? "—"}</dd>
+            <dd className="text-gray-700 leading-relaxed break-words">{value ?? "-"}</dd>
           </div>
         ))}
       </dl>
@@ -57,7 +56,7 @@ export function ExpressionBlock({
             className="text-[11px] text-primary-600 hover:text-primary-800 inline-flex items-center gap-1"
           >
             <ExternalLink className="w-3 h-3" />
-            Expression source
+            Check source data
           </a>
         )}
         {variantLabel && expression.sequence_id && (

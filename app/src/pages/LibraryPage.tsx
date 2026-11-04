@@ -1,5 +1,7 @@
+import { EvidenceBadge, EvidenceGuide } from "@/components/evidence-badge"
+import { SearchWithHistory } from "@/components/search-with-history"
 import { useCallback, useState, type ReactNode } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,7 +24,6 @@ import {
   FlaskConical,
   Layers,
   Link2,
-  Search,
 } from "lucide-react"
 import {
   fetchConstruct,
@@ -56,7 +57,14 @@ import { cn } from "@/lib/utils"
 const DEFAULT_TAB = "peptides" as const
 
 export default function LibraryPage() {
-  const [mainTab, setMainTab] = useState<string>(DEFAULT_TAB)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get("tab")
+  const mainTab = requestedTab === "scaffold" || requestedTab === "linker" ? requestedTab : DEFAULT_TAB
+  const setMainTab = (tab: string) => {
+    const next = new URLSearchParams(searchParams)
+    next.set("tab", tab)
+    setSearchParams(next)
+  }
 
   const load = useCallback(async () => {
     const [reference, scaffolds, linkers, firstPage] = await Promise.all([
@@ -71,7 +79,7 @@ export default function LibraryPage() {
   const { data, loading, error, reload } = useAsync(load, [])
 
   const tabs = [
-    { id: "peptides", label: "Peptides", icon: Dna, count: data?.constructTotal ?? null },
+    { id: "peptides", label: "Constructs", icon: Dna, count: data?.constructTotal ?? null },
     { id: "scaffold", label: "Scaffold", icon: Layers, count: data?.scaffolds.length ?? null },
     { id: "linker", label: "Linker", icon: Link2, count: data?.linkers.length ?? null },
   ]
@@ -87,7 +95,7 @@ export default function LibraryPage() {
               </Badge>
               <h1 className="text-2xl sm:text-3xl font-bold text-primary-900">Library</h1>
               <p className="text-sm text-gray-500 mt-1">
-                Peptides, scaffolds and linkers — every entry read from the project database
+                Constructs, scaffolds and linkers - every entry read from the project database
               </p>
             </div>
             <Link to="/builder?new=1">
@@ -100,7 +108,7 @@ export default function LibraryPage() {
         </div>
       </section>
 
-      <section className="border-b border-gray-200 bg-white sticky top-0 z-10">
+      <section className="border-b border-gray-200 bg-white sticky top-16 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex gap-1 overflow-x-auto">
             {tabs.map((tab) => {
@@ -199,14 +207,10 @@ function PeptidesPanel({
   const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  // The typed value and the committed one are separate, so a request is not issued per
-  // keystroke against a table of twenty million rows. The committed value advances on Enter
-  // or on the field losing focus, which is also what makes the input usable with a keyboard.
-  const [term, setTerm] = useState("")
-  const commitSearch = useCallback(() => {
+  const commitSearch = useCallback((term: string) => {
     setPage(0)
-    setSearch(term.trim())
-  }, [term])
+    setSearch(term)
+  }, [])
 
   const routes = reference?.routes ?? []
   const effectiveRoute = routeId ?? routes[0]?.id ?? null
@@ -237,7 +241,7 @@ function PeptidesPanel({
   const rows = data?.items ?? []
   const total = data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  // A filter change can leave the reader past the last page — the third page of a four-row
+  // A filter change can leave the reader past the last page - the third page of a four-row
   // fixture does not exist. Clamping here rather than in an effect keeps the correction in
   // the same render as the page it applies to, so no intermediate frame shows a stale number.
   const currentPage = Math.min(page, pageCount - 1)
@@ -304,33 +308,7 @@ function PeptidesPanel({
           </div>
 
           <div className="flex flex-wrap items-center gap-3 pt-1">
-            <div className="relative flex-1 min-w-[15rem] max-w-md">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              <input
-                type="text"
-                value={term}
-                onChange={(event) => setTerm(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") commitSearch()
-                }}
-                onBlur={commitSearch}
-                placeholder="Peptide sequence, source or accession"
-                aria-label="Search peptides"
-                className="w-full pl-8 pr-16 py-1.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-200"
-              />
-              {term && (
-                <button
-                  onClick={() => {
-                    setTerm("")
-                    setSearch("")
-                    setPage(0)
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 hover:text-gray-600 cursor-pointer"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
+            <SearchWithHistory onCommit={commitSearch} />
 
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-gray-400">Sort:</span>
@@ -360,7 +338,7 @@ function PeptidesPanel({
             profile: immunogenicity gate{" "}
             {routes
               .find((route) => route.id === effectiveRoute)
-              ?.screening.immunogenicity_threshold.toFixed(2) ?? "—"}
+              ?.screening.immunogenicity_threshold.toFixed(2) ?? "-"}
             , and that route's weighting for penetration, solubility and thermal stability. The
             same construct scores differently under another route.
           </p>
@@ -432,7 +410,7 @@ function PeptidesPanel({
                   Previous
                 </Button>
                 <span className="text-xs text-gray-400">
-                  {currentPage * PAGE_SIZE + 1}–
+                  {currentPage * PAGE_SIZE + 1}-
                   {Math.min(total, (currentPage + 1) * PAGE_SIZE)} of {total.toLocaleString()}
                 </span>
                 <Button
@@ -563,7 +541,7 @@ function ConstructRow({
                   <span className="text-amber-600">unassigned (placeholder binding)</span>
                 ) : (
                   <span className="text-gray-600">
-                    {construct.backbone_name ?? "—"}
+                    {construct.backbone_name ?? "-"}
                     <span className="ml-1 text-gray-400">
                       ({construct.backbone_binding})
                     </span>
@@ -571,7 +549,7 @@ function ConstructRow({
                 )}
               </span>
               <span>·</span>
-              <span>Linker: {construct.linker_name ?? "—"}</span>
+              <span>Linker: {construct.linker_name ?? "-"}</span>
             </div>
           </div>
 
@@ -749,9 +727,10 @@ function ScaffoldPanel({
             ))}
           </div>
           <p className="text-xs text-gray-400 mt-2">
-            {filtered.length} scaffold{filtered.length === 1 ? "" : "s"} — open any card for
+            {filtered.length} scaffold{filtered.length === 1 ? "" : "s"} - open any card for
             patent variants, applicant and the experiments behind its evidence label.
           </p>
+          <EvidenceGuide />
         </div>
       </section>
 
@@ -775,9 +754,7 @@ function ScaffoldPanel({
                           </Badge>
                         )}
                         {scaffold.max_evidence && (
-                          <Badge variant="accent" className="text-xs">
-                            {scaffold.max_evidence}
-                          </Badge>
+                          <EvidenceBadge level={scaffold.max_evidence} />
                         )}
                         {!scaffold.has_sequence && (
                           <Badge variant="warning" className="text-xs">

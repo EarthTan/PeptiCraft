@@ -46,7 +46,7 @@
  *
  * Fallback
  * --------
- * If a file is missing — an export that predates a feature, or a partial export — the request
+ * If a file is missing - an export that predates a feature, or a partial export - the request
  * falls through to the service. A deployment that sets `VITE_API_BASE` therefore keeps
  * working against a live API, and one that serves only static files degrades to whatever data
  * it does have rather than to a blank page.
@@ -55,7 +55,7 @@
 /** Where the export lives, relative to the site root. `public/` is copied verbatim by Vite. */
 function dataBase(): string {
   // `import.meta.env` is replaced at build time by Vite, and is undefined when this module is
-  // loaded outside a bundle — by the static export check, or by a script that wants the same
+  // loaded outside a bundle - by the static export check, or by a script that wants the same
   // lookup logic. The default is the path Vite serves `public/data` at, so both agree.
   const env = (import.meta as { env?: Record<string, string | undefined> }).env
   const raw = env?.VITE_DATA_BASE ?? "/data"
@@ -68,7 +68,7 @@ function dataBase(): string {
  * The export is the only source in a build served as files, and it is the source in development
  * as well: `npm run dev` sets `VITE_STATIC=1`, so the frontend runs on its own with no service
  * beside it. `npm run dev:api` leaves the flag unset, and there the request goes over the Vite
- * proxy to the service — which is the mode to use when the answer has to reflect the database
+ * proxy to the service - which is the mode to use when the answer has to reflect the database
  * as it stands rather than the snapshot an export was made from. `VITE_STATIC` overrides in
  * either direction, so a build that means to serve files from an export can say so explicitly.
  */
@@ -81,7 +81,7 @@ export function staticEnabled(): boolean {
   if (env.VITE_STATIC === "1") return true
   // Only a bare invocation reaches this far: an npm script has already answered above. A build
   // that names an API has a service to answer it, so the service answers. Without this rule an
-  // export left in `public/data` would shadow the API on a deployment that has one — silently,
+  // export left in `public/data` would shadow the API on a deployment that has one - silently,
   // since the export's own `health.json` would report the result and the banner would have
   // nothing to say.
   if (env.VITE_API_BASE) return false
@@ -105,7 +105,7 @@ function manifest(): Promise<StaticManifest | null> {
     })
       .then((r) => (r.ok ? (r.json() as Promise<StaticManifest>) : null))
       .catch((error) => {
-        // A deployment with no export is an ordinary state, not a failure — the caller
+        // A deployment with no export is an ordinary state, not a failure - the caller
         // falls back to the service. But a malformed manifest is a bug in the export, and it
         // is logged rather than swallowed so it does not present as "no static data".
         if (error instanceof Error && error.name !== "AbortError") {
@@ -158,7 +158,7 @@ function pathSafe(identifier: string): string {
  * The exporter writes one file per non-empty subset of the four directions, keyed by the
  * member names sorted and joined with `+`, so the key is a property of the set rather than of
  * the order it was asked for. The sort here is the default one, which orders ASCII by code
- * point on both sides — the exporter sorts the same list in Python.
+ * point on both sides - the exporter sorts the same list in Python.
  */
 function directionsKey(directions: string[]): string {
   return [...new Set(directions)].sort().join("+")
@@ -216,7 +216,7 @@ let routeTablesPromise: Promise<void> | null = null
 /**
  * Load the per-route composite and verdict tables, once, whoever asks first.
  *
- * A detail page can be the first request in a session — a shared link to one construct — so
+ * A detail page can be the first request in a session - a shared link to one construct - so
  * these cannot be a side effect of loading the list, or a route switch on a directly-linked
  * page would silently keep the default route's composite and verdict.
  */
@@ -307,8 +307,8 @@ function applyExportedRoute(detail: Record<string, unknown>, routeId: string): R
  *
  * The exported summary carries the composite for the first declared route, because that is
  * what the service produces when no route is named. The list page lets the reader switch
- * routes, and the composite and the safety verdict both move when they do — the
- * immunogenicity gate is the route's threshold — so those two fields are read from the
+ * routes, and the composite and the safety verdict both move when they do - the
+ * immunogenicity gate is the route's threshold - so those two fields are read from the
  * per-route tables rather than left at their defaults.
  */
 function applyRoute(row: ConstructRow, routeId: string | null): Record<string, unknown> {
@@ -351,7 +351,7 @@ async function constructList(params: URLSearchParams): Promise<unknown | null> {
   if (status) rows = rows.filter((r) => r.status === status)
   if (search) {
     rows = rows.filter((r) => {
-      // The four columns the service searches, each matched on its own — the service writes
+      // The four columns the service searches, each matched on its own - the service writes
       // `lower(col) LIKE ...` four times and ORs the results, so this is the same predicate.
       // The columns were previously joined into one string, which had two faults: a column the
       // export did not carry rendered as the literal text "undefined", so searching for that
@@ -404,8 +404,8 @@ async function constructList(params: URLSearchParams): Promise<unknown | null> {
  * than the returned page, which is the distinction the contract draws and the reason the tally
  * is copied rather than recomputed here.
  *
- * One file per direction set, not one per route. The service ranks a set as a set — the order
- * depends on every member, through the route's weights — so a two-direction request cannot be
+ * One file per direction set, not one per route. The service ranks a set as a set - the order
+ * depends on every member, through the route's weights - so a two-direction request cannot be
  * answered by slicing a four-direction file, and merging the single-direction files here would
  * put the ordering rule in TypeScript. The exporter writes every subset for that reason.
  */
@@ -437,7 +437,7 @@ async function build(params: URLSearchParams): Promise<unknown | null> {
   const routeRecipes = recipes?.routes?.[routeId]
 
   // Resolved once, not per row. Naming a scaffold or a linker is a decision about the whole
-  // build — every candidate is assembled from the same two parts — and the service reports the
+  // build - every candidate is assembled from the same two parts - and the service reports the
   // named pair in the same places: the top-level `scaffold` and `linker`, and each row's
   // `linker_name`. A linker named without a scaffold still reaches the rows, which a build that
   // only looked at the assembled result would drop.
@@ -458,7 +458,7 @@ async function build(params: URLSearchParams): Promise<unknown | null> {
         ...(item as Record<string, unknown>),
         backbone_id: scaffoldId ?? (item as Record<string, unknown>).backbone_id,
         // The scaffold's own short name, which is what the service puts in this field when it
-        // assembles a request-time scaffold — not the id, which is what the identifier is for.
+        // assembles a request-time scaffold - not the id, which is what the identifier is for.
         backbone_name: built.name,
         backbone_binding: "inferred",
         full_sequence: built.sequence,
@@ -494,7 +494,7 @@ async function build(params: URLSearchParams): Promise<unknown | null> {
  * prints `scaffold.short_name`, the summary card prints it again and takes the linker's name
  * from `linker.name`, the eligible-scaffold list highlights the entry whose id equals
  * `scaffold.id`, and the linker tab is rendered from `linker` alone. Emitting only the names
- * and the segments — which is what this module did — left every one of those reading a null,
+ * and the segments - which is what this module did - left every one of those reading a null,
  * so a page showed `scaffold unassigned` and the stored linker directly above a fused sequence
  * that had just been assembled from the scaffold and linker the reader picked.
  *
@@ -661,7 +661,7 @@ async function assemble(
   const peptide = construct?.peptide_sequence ?? ""
 
   // Which linker is in the middle. The service's rule, from `assemble_row`: the one the request
-  // named, or — when it named none — the one the construct's own row records. A detail page can
+  // named, or - when it named none - the one the construct's own row records. A detail page can
   // be opened as `?scaffold_id=…` with no linker, and this is not a labelling detail: the
   // stored linker's residues sit between the scaffold and the peptide, so dropping it emits a
   // fusion several residues shorter than the service's and the same URL shows two different
@@ -724,7 +724,7 @@ interface Handled {
    * The two are different answers and the caller acts on them differently: the first is a
    * not-found, the second is a fall-through to the service. Without the distinction both arrive
    * as `null` and the caller sends a missing record to a service that, in a static deployment,
-   * is not there — the request then reaches the SPA fallback and the reader is told the
+   * is not there - the request then reaches the SPA fallback and the reader is told the
    * response was malformed instead of that the record does not exist.
    */
   keyed?: boolean
@@ -860,7 +860,7 @@ async function handle(request: StaticRequest): Promise<Handled | null> {
  * export answered, and the record is not in it" are acted on differently: the first falls
  * through to the service, the second is a not-found. A single nullable payload cannot tell
  * them apart, and a caller that conflates them sends a missing record to a service that a
- * static deployment does not have — where the request reaches the SPA fallback and the reader
+ * static deployment does not have - where the request reaches the SPA fallback and the reader
  * is told the response was malformed rather than that the record does not exist.
  */
 export interface StaticResult {
@@ -902,7 +902,7 @@ export async function serveStaticResult(
 /**
  * The payload, or null to let the caller fall back.
  *
- * The three-state answer read one way, for callers that want only the data — the check script
+ * The three-state answer read one way, for callers that want only the data - the check script
  * drives every path through it. A POST is never served, and neither is a path the export does
  * not cover.
  */
@@ -920,7 +920,7 @@ export async function serveStatic(
  *
  * Mirrors what the service does with `?scaffold=` and `?linker_id=`: the scaffold named by the
  * reader wins over the stored binding and is reported as `inferred`, because the row does not
- * record that pairing. With neither named, the stored binding stands — a real scaffold on a
+ * record that pairing. With neither named, the stored binding stands - a real scaffold on a
  * backfilled row, a marker string on one that is still a placeholder, in which case no
  * sequence is emitted and the interface shows the segments it has without inventing the one
  * it does not.
@@ -935,7 +935,7 @@ export async function applyAssemblyTargets(
 
   // The scaffold and the linker are resolved independently, which is what the service does. A
   // request that names only a linker still has that linker reported against the record, and a
-  // request that names only a scaffold keeps the linker the construct's own row records — the
+  // request that names only a scaffold keeps the linker the construct's own row records - the
   // rows are what carry it, and the response has to say which of the two happened.
   const [assembled, linkerView] = await Promise.all([
     scaffoldId ? assemble(id, scaffoldId, linkerId) : Promise.resolve(null),
@@ -963,7 +963,7 @@ export async function applyAssemblyTargets(
           assembled_sequence_available: true,
           segments: assembled.segments,
           // The two objects every surface reads. `linker` here is the one the sequence in
-          // `full_sequence` was actually built with — the named one, or the stored one when the
+          // `full_sequence` was actually built with - the named one, or the stored one when the
           // request named none.
           scaffold: assembled.scaffold,
           linker: assembled.linker,

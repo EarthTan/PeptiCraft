@@ -11,13 +11,11 @@ import { ErrorState } from "@/components/ui/error-state"
 import { CardGridSkeleton, ListSkeleton } from "@/components/ui/loading-state"
 import { CollapsibleNotice, Notice } from "@/components/ui/notice"
 import { InfoTip } from "@/components/ui/tooltip"
-import { StructureViewer } from "@/components/structure-viewer"
 import { BuildNameDialog } from "@/components/build-history"
 import {
   AlertTriangle,
   ArrowRight,
   Bot,
-  Box,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -27,7 +25,6 @@ import {
   ShieldAlert,
 } from "lucide-react"
 import { fetchBuild, fetchLinkers, fetchReference, fetchScaffolds } from "@/api"
-import { structureEnabled } from "@/api/structure"
 import type {
   BuildCounts,
   DeliveryRoute,
@@ -35,6 +32,7 @@ import type {
   LinkerView,
   MaterialForm,
   ScaffoldSummary,
+  ThresholdReference,
 } from "@/api/types"
 import { listBuildRecords, recordBuild, renameSession, type BuildRecord } from "@/lib/buildRecords"
 import { openHistoryPanel } from "@/lib/historyPanel"
@@ -104,6 +102,53 @@ interface BuilderSession extends BuildIdentity {
   direction: string[]
   scaffold_id: string
   linker_id: string
+  thresholds: BuilderThresholds
+}
+
+/**
+ * The screening thresholds the reader set.
+ *
+ * The thresholds narrow the candidate set before it is ranked. They can only remove
+ * candidates: the library holds twenty million peptides and the candidate set is what the
+ * pipeline already screened, so no threshold here brings a new peptide in.
+ *
+ * A direction is in `functional_floor` when its floor is switched on. Nothing is set by
+ * default, so a build that sets no threshold ranks exactly what it always ranked.
+ */
+interface BuilderThresholds {
+  functional_floor: Record<string, number>
+  max_allergenicity: number | null
+  min_peptide_length: number | null
+  max_peptide_length: number | null
+  per_direction_limit: number | null
+}
+
+/** Read the thresholds out of a stored session, ignoring anything unreadable. */
+function readStoredThresholds(raw: unknown): BuilderThresholds {
+  const empty: BuilderThresholds = {
+    functional_floor: {},
+    max_allergenicity: null,
+    min_peptide_length: null,
+    max_peptide_length: null,
+    per_direction_limit: null,
+  }
+  if (!raw || typeof raw !== "object") return empty
+  const stored = raw as Partial<BuilderThresholds>
+  const floor: Record<string, number> = {}
+  if (stored.functional_floor && typeof stored.functional_floor === "object") {
+    for (const [direction, value] of Object.entries(stored.functional_floor)) {
+      if (typeof value === "number" && Number.isFinite(value)) floor[direction] = value
+    }
+  }
+  const numberOrNull = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value) ? value : null
+  return {
+    functional_floor: floor,
+    max_allergenicity: numberOrNull(stored.max_allergenicity),
+    min_peptide_length: numberOrNull(stored.min_peptide_length),
+    max_peptide_length: numberOrNull(stored.max_peptide_length),
+    per_direction_limit: numberOrNull(stored.per_direction_limit),
+  }
 }
 
 function newSessionId(): string {
@@ -131,6 +176,13 @@ function newSession(): BuilderSession {
     direction: [],
     scaffold_id: "",
     linker_id: "",
+    thresholds: {
+      functional_floor: {},
+      max_allergenicity: null,
+      min_peptide_length: null,
+      max_peptide_length: null,
+      per_direction_limit: null,
+    },
   }
 }
 
@@ -151,6 +203,7 @@ function readSession(): BuilderSession | null {
       direction: Array.isArray(parsed.direction) ? parsed.direction.filter((id) => typeof id === "string") : [],
       scaffold_id: typeof parsed.scaffold_id === "string" ? parsed.scaffold_id : "",
       linker_id: typeof parsed.linker_id === "string" ? parsed.linker_id : "",
+      thresholds: readStoredThresholds(parsed.thresholds),
     }
   } catch {
     return null
@@ -193,6 +246,9 @@ export default function BuilderPage() {
   const [directionIds, setDirectionIds] = useState<string[]>(boot.session.direction)
   const [scaffoldId, setScaffoldId] = useState(boot.session.scaffold_id)
   const [linkerId, setLinkerId] = useState(boot.session.linker_id)
+  const [thresholds, setThresholds] = useState<BuilderThresholds>(
+    boot.session.thresholds ?? newSession().thresholds,
+  )
   const [formFilter, setFormFilter] = useState<MaterialForm | "all">("all")
 
   // Step 4 carries two long passages about how the linker order is decided and what choosing
@@ -275,6 +331,7 @@ export default function BuilderPage() {
     setDirectionIds([])
     setScaffoldId("")
     setLinkerId("")
+    setThresholds(newSession().thresholds)
     setFormFilter("all")
     setNameOpen(true)
   }, [])
@@ -290,8 +347,9 @@ export default function BuilderPage() {
       direction: directionIds,
       scaffold_id: scaffoldId,
       linker_id: linkerId,
+      thresholds,
     })
-  }, [session, step, routeId, directionIds, scaffoldId, linkerId])
+  }, [session, step, routeId, directionIds, scaffoldId, linkerId, thresholds])
 
   // The address is read once for the two requests it can carry, and both are taken out of
   // it afterwards: a reload repeats neither a new build nor a record that was reopened.
@@ -511,6 +569,15 @@ export default function BuilderPage() {
               ))}
             </div>
 
+            {directionIds.length > 0 && (
+              <ThresholdPanel
+                thresholds={thresholds}
+                onChange={setThresholds}
+                directions={directions.filter((direction) => directionIds.includes(direction.id))}
+                reference={reference.thresholds ?? null}
+              />
+            )}
+
             {canProceed(2) && (
               <div className="mt-6 flex justify-end">
                 <Button variant="gradient" size="lg" onClick={() => setStep(3)}>
@@ -729,6 +796,7 @@ export default function BuilderPage() {
             route={routeObj}
             directionIds={directionIds}
             directions={directions}
+            thresholds={thresholds}
             scaffold={selectedScaffold}
             linker={selectedLinker}
             onBack={() => setStep(4)}
@@ -971,6 +1039,283 @@ function RouteStep({
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 2
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 2 — screening thresholds
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The screening thresholds, folded into the step that chooses the functions.
+ *
+ * They are not a step of their own because they are not another decision: a threshold narrows
+ * the candidates the chosen functions already produced, and it changes nothing about the
+ * scaffold, the linker or the sequence. A step of their own would put a filter in the middle
+ * of a flow that assembles.
+ *
+ * Each threshold shows the value its own predictor declares, so nobody is asked to guess what
+ * a meaningful number looks like. Nothing is set until it is switched on, so a build that
+ * leaves the panel alone ranks exactly what it always ranked.
+ */
+function ThresholdPanel({
+  thresholds,
+  onChange,
+  directions,
+  reference,
+}: {
+  thresholds: BuilderThresholds
+  onChange: (next: BuilderThresholds) => void
+  /** The functions the reader is holding. A floor is offered per function. */
+  directions: FunctionDirection[]
+  reference: ThresholdReference | null
+}) {
+  const [open, setOpen] = useState(false)
+  const functionalReference = reference?.functional_score ?? {}
+  const allergenicityReference = reference?.allergenicity
+  const lengthReference = reference?.peptide_length
+
+  const set = <K extends keyof BuilderThresholds>(
+    key: K,
+    value: BuilderThresholds[K],
+  ) => onChange({ ...thresholds, [key]: value })
+
+  /** Switch one direction's score floor on or off, keeping its value either way. */
+  const toggleFloor = (direction: string, on: boolean) => {
+    const floor = { ...thresholds.functional_floor }
+    if (on) {
+      const declared = functionalReference[direction]?.declared_boundary ?? 0
+      floor[direction] = floor[direction] ?? declared
+    } else {
+      delete floor[direction]
+    }
+    set("functional_floor", floor)
+  }
+
+  const floorDirections = directions.filter((direction) => functionalReference[direction.id])
+  const rankingOnly = directions.filter(
+    (direction) => functionalReference[direction.id]?.floor_applies === false,
+  )
+  const setCount =
+    Object.keys(thresholds.functional_floor).length +
+    (thresholds.max_allergenicity !== null ? 1 : 0) +
+    (thresholds.min_peptide_length !== null || thresholds.max_peptide_length !== null ? 1 : 0) +
+    (thresholds.per_direction_limit !== null ? 1 : 0)
+
+  return (
+    <div className="mt-4 rounded-xl border border-gray-200 bg-surface-alt/50">
+      <div className="flex items-center gap-1 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+          aria-expanded={open}
+          data-panel="thresholds"
+          className="flex items-center gap-2 flex-1 text-left cursor-pointer"
+        >
+          <ChevronDown
+            className={cn("w-4 h-4 text-gray-400 transition-transform duration-200", open && "rotate-180")}
+          />
+          <span className="text-sm font-medium text-primary-900">Screening thresholds</span>
+          <span className="text-xs text-gray-500">
+            {setCount === 0 ? "none set" : `${setCount} set`}
+          </span>
+        </button>
+        <InfoTip content={GLOSSARY.screening_thresholds} />
+      </div>
+
+      {open && (
+        <div className="px-4 pb-4 space-y-4">
+          <p className="text-xs text-gray-500 leading-relaxed">
+            These narrow the candidates before they are ranked. They can only remove candidates:
+            the peptide library holds twenty million sequences and the candidates are the ones
+            the pipeline has already screened.
+          </p>
+
+          {/* Score floor, one per function whose score is a probability. */}
+          {floorDirections.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-gray-700 mb-2">Activity score floor</p>
+              <div className="space-y-2">
+                {floorDirections.map((direction) => {
+                  const entry = functionalReference[direction.id]
+                  const value = thresholds.functional_floor[direction.id]
+                  const on = value !== undefined
+                  const pool = direction.counts?.top ?? 0
+                  return (
+                    <label
+                      key={direction.id}
+                      className="flex flex-wrap items-center gap-2 text-xs text-gray-600"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={(event) => toggleFloor(direction.id, event.target.checked)}
+                        className="accent-primary-500"
+                      />
+                      <span className="font-medium text-gray-700">{direction.name}</span>
+                      {on && (
+                        <input
+                          type="number"
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          value={value}
+                          onChange={(event) =>
+                            set("functional_floor", {
+                              ...thresholds.functional_floor,
+                              [direction.id]: Number(event.target.value),
+                            })
+                          }
+                          aria-label={`${direction.name} activity score floor`}
+                          className="w-20 h-8 rounded-lg border border-gray-200 bg-white px-2 font-mono focus:outline-none focus:ring-2 focus:ring-primary-400"
+                        />
+                      )}
+                      <span className="text-gray-400">
+                        {entry?.declared_boundary !== null && entry?.declared_boundary !== undefined
+                          ? `boundary ${entry.declared_boundary.toFixed(2)}`
+                          : "no boundary declared"}
+                        {` · ${pool} candidates`}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              {rankingOnly.length > 0 && (
+                <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
+                  {rankingOnly.map((direction) => direction.name).join(" and ")}{" "}
+                  {rankingOnly.length === 1 ? "is" : "are"} ranked by a score that orders
+                  candidates rather than measuring activity, so no floor applies to
+                  {rankingOnly.length === 1 ? " it" : " them"}. Use the per-direction cap instead.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Allergenicity ceiling. */}
+          <div>
+            <p className="text-xs font-medium text-gray-700 mb-2">Allergenicity ceiling</p>
+            <label className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={thresholds.max_allergenicity !== null}
+                onChange={(event) =>
+                  set(
+                    "max_allergenicity",
+                    event.target.checked
+                      ? (allergenicityReference?.boundary ?? 0.3)
+                      : null,
+                  )
+                }
+                className="accent-primary-500"
+              />
+              {thresholds.max_allergenicity !== null && (
+                <input
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={thresholds.max_allergenicity}
+                  onChange={(event) => set("max_allergenicity", Number(event.target.value))}
+                  aria-label="Allergenicity ceiling"
+                  className="w-20 h-8 rounded-lg border border-gray-200 bg-white px-2 font-mono focus:outline-none focus:ring-2 focus:ring-primary-400"
+                />
+              )}
+              <span className="text-gray-400">
+                {allergenicityReference?.tool ?? "AlgPred2"}
+                {allergenicityReference ? ` · boundary ${allergenicityReference.boundary.toFixed(2)}` : ""}
+                {" · the lower the value the safer the peptide"}
+              </span>
+            </label>
+          </div>
+
+          {/* Peptide length range. */}
+          <div>
+            <p className="text-xs font-medium text-gray-700 mb-2">Peptide length</p>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+              <input
+                type="number"
+                min={1}
+                max={lengthReference?.max ?? 30}
+                placeholder={String(lengthReference?.min ?? 1)}
+                value={thresholds.min_peptide_length ?? ""}
+                onChange={(event) =>
+                  set(
+                    "min_peptide_length",
+                    event.target.value === "" ? null : Number(event.target.value),
+                  )
+                }
+                aria-label="Shortest peptide to keep"
+                className="w-20 h-8 rounded-lg border border-gray-200 bg-white px-2 font-mono focus:outline-none focus:ring-2 focus:ring-primary-400"
+              />
+              <span className="text-gray-400">to</span>
+              <input
+                type="number"
+                min={lengthReference?.min ?? 1}
+                max={lengthReference?.max ?? 30}
+                placeholder={String(lengthReference?.max ?? 30)}
+                value={thresholds.max_peptide_length ?? ""}
+                onChange={(event) =>
+                  set(
+                    "max_peptide_length",
+                    event.target.value === "" ? null : Number(event.target.value),
+                  )
+                }
+                aria-label="Longest peptide to keep"
+                className="w-20 h-8 rounded-lg border border-gray-200 bg-white px-2 font-mono focus:outline-none focus:ring-2 focus:ring-primary-400"
+              />
+              <span className="text-gray-400">residues · empty means no limit</span>
+            </div>
+          </div>
+
+          {/* Per-direction cap. */}
+          <div>
+            <p className="text-xs font-medium text-gray-700 mb-2">Candidates per function</p>
+            <label className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={thresholds.per_direction_limit !== null}
+                onChange={(event) =>
+                  set("per_direction_limit", event.target.checked ? 10 : null)
+                }
+                className="accent-primary-500"
+              />
+              {thresholds.per_direction_limit !== null && (
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={thresholds.per_direction_limit}
+                  onChange={(event) => set("per_direction_limit", Number(event.target.value))}
+                  aria-label="Candidates each function contributes"
+                  className="w-20 h-8 rounded-lg border border-gray-200 bg-white px-2 font-mono focus:outline-none focus:ring-2 focus:ring-primary-400"
+                />
+              )}
+              <span className="text-gray-400">
+                counted within each function&apos;s own order
+              </span>
+            </label>
+          </div>
+
+          {setCount > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                onChange({
+                  functional_floor: {},
+                  max_allergenicity: null,
+                  min_peptide_length: null,
+                  max_peptide_length: null,
+                  per_direction_limit: null,
+                })
+              }
+              className="text-xs text-primary-600 hover:text-primary-800 cursor-pointer"
+            >
+              Clear all thresholds
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function DirectionOption({
   direction,
@@ -1224,6 +1569,7 @@ function ResultStep({
   route,
   directionIds,
   directions,
+  thresholds,
   scaffold,
   linker,
   onBack,
@@ -1236,6 +1582,8 @@ function ResultStep({
   route: DeliveryRoute
   directionIds: string[]
   directions: FunctionDirection[]
+  /** The screening thresholds the reader set in step 2. */
+  thresholds: BuilderThresholds
   scaffold: ScaffoldSummary | null
   linker: LinkerView | null
   onBack: () => void
@@ -1260,22 +1608,34 @@ function ResultStep({
       scaffold_id: scaffold?.id ?? null,
       linker_id: linker?.id ?? null,
       limit: RESULT_LIMIT,
+      min_functional_score: thresholds.functional_floor,
+      max_allergenicity: thresholds.max_allergenicity,
+      min_peptide_length: thresholds.min_peptide_length,
+      max_peptide_length: thresholds.max_peptide_length,
+      per_direction_limit: thresholds.per_direction_limit,
     }
     const result = await fetchBuild(params)
     return { params, result }
-  }, [directionIds, route.id, scaffold?.id, linker?.id])
+  }, [directionIds, route.id, scaffold?.id, linker?.id, thresholds])
 
-  const build = useAsync(load, [directionIds, route.id, scaffold?.id, linker?.id])
+  const build = useAsync(load, [directionIds, route.id, scaffold?.id, linker?.id, thresholds])
   const data = build.data?.result ?? null
   const loading = build.loading
   const error = build.error
   const reload = build.reload
 
-  /** The candidate whose predicted structure is on screen, if any. */
-  const [structureFor, setStructureFor] = useState<string | null>(null)
-
   const items = data?.items ?? []
   const counts = data?.counts ?? null
+
+  /** What the thresholds the reader set did to the candidate set. */
+  const thresholdReport = data?.thresholds ?? null
+  const thresholdRemoved =
+    (thresholdReport?.removed ?? 0) + (thresholdReport?.removed_by_cap ?? 0)
+  const thresholdSetCount =
+    Object.keys(thresholds.functional_floor).length +
+    (thresholds.max_allergenicity !== null ? 1 : 0) +
+    (thresholds.min_peptide_length !== null || thresholds.max_peptide_length !== null ? 1 : 0) +
+    (thresholds.per_direction_limit !== null ? 1 : 0)
 
   const selectedNames = directions
     .filter((direction) => directionIds.includes(direction.id))
@@ -1417,6 +1777,42 @@ function ResultStep({
                     counts.without_composite === 1 ? "it sits" : "they sit"
                   } at the end of the ranking rather than counting as a zero.`}
               </p>
+
+              {thresholdReport && thresholdSetCount > 0 && (
+                <div className="mt-3 rounded-lg border border-gray-200 bg-surface-alt p-3">
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    The screening thresholds removed {thresholdRemoved} candidate
+                    {thresholdRemoved === 1 ? "" : "s"} before the ranking was cut.
+                    {thresholdReport.removed_by_cap > 0 &&
+                      ` ${thresholdReport.removed_by_cap} of them by the per-function cap.`}
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {thresholdReport.directions.map((outcome) => (
+                      <li key={outcome.direction} className="text-[11px] text-gray-500">
+                        {outcome.direction}: {outcome.kept} of {outcome.pool} candidate
+                        {outcome.pool === 1 ? "" : "s"} kept
+                        {outcome.removed_by_threshold > 0 &&
+                          `, ${outcome.removed_by_threshold} below the thresholds`}
+                        {outcome.removed_by_cap > 0 &&
+                          `, ${outcome.removed_by_cap} over the cap`}
+                        {outcome.unassessed > 0 &&
+                          `, ${outcome.unassessed} the thresholds could not judge`}
+                        {outcome.note && `. ${outcome.note}`}
+                      </li>
+                    ))}
+                  </ul>
+                  {thresholdReport.directions.some(
+                    (outcome) =>
+                      outcome.pool > 0 && outcome.kept / outcome.pool < 0.1,
+                  ) && (
+                    <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
+                      That is a narrow set. Loosening one of the thresholds brings the rest
+                      back, and the candidates that fall are often the ones that move together
+                      on the same predictor.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="mt-4 pt-3 border-t border-accent-100 flex items-center justify-between gap-3 flex-wrap">
                 {recordError ? (
@@ -1580,29 +1976,8 @@ function ResultStep({
                       Details
                     </Button>
                   </Link>
-                  {scaffold && linker && structureEnabled() && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setStructureFor((current) => (current === item.id ? null : item.id))
-                      }
-                    >
-                      <Box className="w-4 h-4" />
-                      3D
-                    </Button>
-                  )}
                 </div>
               </div>
-              {structureFor === item.id && scaffold && linker && (
-                <div className="px-4 pb-4">
-                  <StructureViewer
-                    constructId={item.id}
-                    scaffoldId={scaffold.id}
-                    linkerId={linker.id}
-                  />
-                </div>
-              )}
             </Card>
           )
         })}

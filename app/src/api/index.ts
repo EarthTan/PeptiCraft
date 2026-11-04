@@ -191,6 +191,17 @@ export interface BuildQuery {
   linker_id?: string | null
   limit?: number
   offset?: number
+  /** A floor on a direction's functional score, written `direction:value`. Sent as one
+   *  repeated parameter carrying every floor, because the service reads them as pairs. */
+  min_functional_score?: Record<string, number> | null
+  /** A ceiling on the AlgPred2 allergenicity score. */
+  max_allergenicity?: number | null
+  /** The shortest peptide to keep, in residues. */
+  min_peptide_length?: number | null
+  /** The longest peptide to keep, in residues. */
+  max_peptide_length?: number | null
+  /** How many candidates each direction contributes, counted within its own ranking. */
+  per_direction_limit?: number | null
 }
 
 /** Rank the candidates for a route, a scaffold and a linker, assembling each candidate's
@@ -200,16 +211,28 @@ export interface BuildQuery {
  *  them, so it is the one call that returns a fused sequence per candidate. The directions go
  *  out as a repeated parameter rather than a joined string, because a direction id is
  *  free-form text and any separator the ids could contain would merge two requests into one.
+ *
+ *  Thresholds narrow the candidate set. They can only remove candidates: the library holds
+ *  twenty million peptides and the candidate set is what the pipeline already screened.
  */
 export function fetchBuild(query: BuildQuery): Promise<BuildResult> {
   const search = new URLSearchParams()
   for (const direction of query.direction) search.append("direction", direction)
+  const floors = query.min_functional_score
+  if (floors) {
+    const pairs = Object.entries(floors).map(([direction, value]) => `${direction}:${value}`)
+    if (pairs.length > 0) search.append("min_functional_score", pairs.join(","))
+  }
   for (const [key, value] of Object.entries({
     route_id: query.route_id,
     scaffold_id: query.scaffold_id,
     linker_id: query.linker_id,
     limit: query.limit,
     offset: query.offset,
+    max_allergenicity: query.max_allergenicity,
+    min_peptide_length: query.min_peptide_length,
+    max_peptide_length: query.max_peptide_length,
+    per_direction_limit: query.per_direction_limit,
   })) {
     if (value === null || value === undefined || value === "") continue
     search.set(key, String(value))

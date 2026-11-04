@@ -422,6 +422,216 @@ async function constructList(params: URLSearchParams): Promise<unknown | null> {
  * answered by slicing a four-direction file, and merging the single-direction files here would
  * put the ordering rule in TypeScript. The exporter writes every subset for that reason.
  */
+// ── Screening thresholds ────────────────────────────────────────────────────
+//
+// The Builder's thresholds are applied by the service: it ranks the candidates and then
+// removes the ones the thresholds rule out. A deployment serves files, so the same rules are
+// applied here, over the exported ranking.
+//
+// The rules are the service's, in the same order, because a threshold that removed a
+// different set of candidates in the two places would make the deployment answer a question
+// the service does not. `verify/static-export-check.mjs` runs the same thresholded request
+// against both and compares the answers, which is what keeps the two from drifting.
+
+interface StaticThresholds {
+  functionalFloor: Record<string, number>
+  maxAllergenicity: number | null
+  minPeptideLength: number | null
+  maxPeptideLength: number | null
+  perDirectionLimit: number | null
+}
+
+/** The exported candidate row, as far as a threshold can see it. */
+interface ThresholdRow {
+  direction: string
+  functional_score?: number | null
+  semantics?: string
+  peptide_length?: number | null
+  allergenicity?: number | null
+  composite?: number | null
+  safety_verdict?: string | null
+}
+
+/**
+ * Read the thresholds from the query, the way the service reads them.
+ *
+ * The score floors arrive as `direction:value` pairs. A pair that cannot be read is skipped
+ * rather than guessed at: the service rejects it, and a deployment that guessed would answer
+ * a different question from the one that was asked.
+ */
+function readThresholds(params: URLSearchParams): StaticThresholds {
+  const functionalFloor: Record<string, number> = {}
+  for (const entry of params.getAll("min_functional_score")) {
+    for (const part of entry.split(",")) {
+      const text = part.trim()
+      if (!text) continue
+      const separator = text.indexOf(":")
+      if (separator < 0) continue
+      const direction = text.slice(0, separator).trim()
+      const value = Number(text.slice(separator + 1).trim())
+      if (direction && Number.isFinite(value)) functionalFloor[direction] = value
+    }
+  }
+
+  const number = (key: string): number | null => {
+    const raw = one(params, key)
+    if (raw === null) return null
+    const value = Number(raw)
+    return Number.isFinite(value) ? value : null
+  }
+  const integer = (key: string): number | null => {
+    const value = number(key)
+    return value === null ? null : Math.trunc(value)
+  }
+
+  return {
+    functionalFloor,
+    maxAllergenicity: number("max_allergenicity"),
+    minPeptideLength: integer("min_peptide_length"),
+    maxPeptideLength: integer("max_peptide_length"),
+    perDirectionLimit: integer("per_direction_limit"),
+  }
+}
+
+/** The service's verdict tally over the candidates that survived the thresholds. */
+function tallyVerdicts(rows: ThresholdRow[]): Record<string, number> {
+  const tally: Record<string, number> = {
+    clear: 0,
+    borderline: 0,
+    vetoed: 0,
+    indeterminate: 0,
+  }
+  let withoutComposite = 0
+  for (const row of rows) {
+    const verdict = row.safety_verdict
+    tally[verdict && verdict in tally ? verdict : "indeterminate"] += 1
+    if (row.composite === null || row.composite === undefined) withoutComposite += 1
+  }
+  return { ...tally, ranked: rows.length, without_composite: withoutComposite }
+}
+
+/**
+ * Apply the thresholds to an exported ranking.
+ *
+ * A value the threshold would compare that the pipeline never measured does not exclude the
+ * candidate: `null` means "not assessed", and a threshold cannot rule on what was never
+ * assessed. The count of those rows is reported rather than folded into the removal.
+ */
+function applyThresholds(
+  rows: ThresholdRow[],
+  thresholds: StaticThresholds,
+  directions: string[],
+  floorApplies: Record<string, boolean>,
+  note: Record<string, string>,
+): {
+  items: ThresholdRow[]
+  thresholds: Record<string, unknown>
+  counts: Record<string, number>
+  totals: Record<string, number>
+  total: number
+} {
+  const removedByDirection: Record<string, number> = {}
+  const unassessedByDirection: Record<string, number> = {}
+  const kept: ThresholdRow[] = []
+
+  for (const row of rows) {
+    const direction = row.direction
+    const floor = thresholds.functionalFloor[direction]
+    let rejected = false
+    let unassessed = 0
+
+    if (floor !== undefined && floorApplies[direction] !== false) {
+      const value = row.functional_score
+      if (value === null || value === undefined) unassessed += 1
+      else if (value < floor) rejected = true
+    }
+    if (!rejected && thresholds.maxAllergenicity !== null) {
+      const value = row.allergenicity
+      if (value === null || value === undefined) unassessed += 1
+      else if (value > thresholds.maxAllergenicity) rejected = true
+    }
+    if (!rejected && (thresholds.minPeptideLength !== null || thresholds.maxPeptideLength !== null)) {
+      const value = row.peptide_length
+      if (value === null || value === undefined) unassessed += 1
+      else if (
+        (thresholds.minPeptideLength !== null && value < thresholds.minPeptideLength) ||
+        (thresholds.maxPeptideLength !== null && value > thresholds.maxPeptideLength)
+      ) {
+        rejected = true
+      }
+    }
+
+    if (rejected) {
+      removedByDirection[direction] = (removedByDirection[direction] ?? 0) + 1
+      continue
+    }
+    if (unassessed > 0) {
+      unassessedByDirection[direction] = (unassessedByDirection[direction] ?? 0) + 1
+    }
+    kept.push(row)
+  }
+
+  // The cap runs after the ranking, because "the first N of a direction" only means something
+  // once the direction's own order exists.
+  const removedByCap: Record<string, number> = {}
+  let capped = kept
+  if (thresholds.perDirectionLimit !== null) {
+    const seen: Record<string, number> = {}
+    const survivors: ThresholdRow[] = []
+    for (const row of kept) {
+      const count = seen[row.direction] ?? 0
+      if (count >= thresholds.perDirectionLimit) {
+        removedByCap[row.direction] = (removedByCap[row.direction] ?? 0) + 1
+        continue
+      }
+      seen[row.direction] = count + 1
+      survivors.push(row)
+    }
+    capped = survivors
+  }
+
+  const poolByDirection: Record<string, number> = {}
+  for (const row of rows) poolByDirection[row.direction] = (poolByDirection[row.direction] ?? 0) + 1
+  const keptByDirection: Record<string, number> = {}
+  for (const row of capped) keptByDirection[row.direction] = (keptByDirection[row.direction] ?? 0) + 1
+
+  const outcomes = directions.map((direction) => {
+    const floor = thresholds.functionalFloor[direction]
+    const applied = floor !== undefined && floorApplies[direction] !== false
+    return {
+      direction,
+      pool: poolByDirection[direction] ?? 0,
+      kept: keptByDirection[direction] ?? 0,
+      removed_by_threshold: removedByDirection[direction] ?? 0,
+      removed_by_cap: removedByCap[direction] ?? 0,
+      unassessed: unassessedByDirection[direction] ?? 0,
+      functional_score_floor: floor ?? null,
+      functional_score_floor_applied: applied,
+      note: floor !== undefined && !applied ? (note[direction] ?? null) : null,
+    }
+  })
+
+  const totals: Record<string, number> = {}
+  for (const direction of directions) totals[direction] = keptByDirection[direction] ?? 0
+
+  return {
+    items: capped,
+    counts: tallyVerdicts(capped),
+    totals,
+    total: capped.length,
+    thresholds: {
+      functional_score_floor: thresholds.functionalFloor,
+      max_allergenicity: thresholds.maxAllergenicity,
+      min_peptide_length: thresholds.minPeptideLength,
+      max_peptide_length: thresholds.maxPeptideLength,
+      per_direction_limit: thresholds.perDirectionLimit,
+      removed: Object.values(removedByDirection).reduce((sum, n) => sum + n, 0),
+      removed_by_cap: Object.values(removedByCap).reduce((sum, n) => sum + n, 0),
+      directions: outcomes,
+    },
+  }
+}
+
 async function build(params: URLSearchParams): Promise<unknown | null> {
   const routeId = one(params, "route_id")
   const directions = params.getAll("direction").flatMap((d) => d.split(",")).filter(Boolean)
@@ -434,7 +644,45 @@ async function build(params: URLSearchParams): Promise<unknown | null> {
 
   const limit = Number(one(params, "limit") ?? 50)
   const offset = Number(one(params, "offset") ?? 0)
-  const items = (result.items as unknown[]) ?? []
+  const exported = (result.items as unknown[]) ?? []
+
+  // The thresholds narrow the candidate set before the page is cut from it, and the tally
+  // then describes what survived them rather than the whole exported set.
+  const thresholds = readThresholds(params)
+  let items = exported
+  let narrowed: Record<string, unknown> = {}
+  const anyThreshold =
+    Object.keys(thresholds.functionalFloor).length > 0 ||
+    thresholds.maxAllergenicity !== null ||
+    thresholds.minPeptideLength !== null ||
+    thresholds.maxPeptideLength !== null ||
+    thresholds.perDirectionLimit !== null
+  if (anyThreshold) {
+    const bundle = await meta()
+    const reference = (bundle?.thresholds ?? {}) as {
+      functional_score?: Record<string, { floor_applies?: boolean; note?: string }>
+    }
+    const floorApplies: Record<string, boolean> = {}
+    const notes: Record<string, string> = {}
+    for (const [direction, entry] of Object.entries(reference.functional_score ?? {})) {
+      floorApplies[direction] = entry.floor_applies !== false
+      if (entry.note) notes[direction] = entry.note
+    }
+    const applied = applyThresholds(
+      exported as ThresholdRow[],
+      thresholds,
+      directions,
+      floorApplies,
+      notes,
+    )
+    items = applied.items
+    narrowed = {
+      counts: applied.counts,
+      totals: applied.totals,
+      total: applied.total,
+      thresholds: applied.thresholds,
+    }
+  }
   const page = items.slice(offset, offset + limit)
 
   // The reader's pairing, when they chose one. The ranking itself is the service's and is used
@@ -443,7 +691,7 @@ async function build(params: URLSearchParams): Promise<unknown | null> {
   const scaffoldId = one(params, "scaffold_id")
   const linkerId = one(params, "linker_id")
   if (!scaffoldId && !linkerId) {
-    return { ...result, directions, items: page, limit, offset }
+    return { ...result, ...narrowed, directions, items: page, limit, offset }
   }
 
   const recipes = await loadJson<AssemblyRecipes>("assembly.json")
@@ -485,6 +733,7 @@ async function build(params: URLSearchParams): Promise<unknown | null> {
 
   return {
     ...result,
+    ...narrowed,
     directions,
     items: assembled,
     limit,

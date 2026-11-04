@@ -39,9 +39,16 @@ from __future__ import annotations
 import logging
 from typing import Any, Iterable, Sequence
 
-from ..models.build import BuildCounts, BuildResult, BuiltConstruct
+from ..models.build import (
+    BuildCounts,
+    BuildResult,
+    BuildThresholds,
+    BuiltConstruct,
+    DirectionThresholdOutcome,
+)
 from ..repositories import constructs as constructs_repo, scaffolds as scaffolds_repo
 from . import constructs as construct_service, reference, scoring
+from . import thresholds as thresholds_service
 
 log = logging.getLogger("pepticraft.build")
 
@@ -164,6 +171,91 @@ def _counts(candidates: Sequence[_Candidate]) -> BuildCounts:
     return BuildCounts(ranked=len(candidates), without_composite=without_composite, **tally)
 
 
+def _apply_thresholds(
+    candidates: Sequence[_Candidate],
+    thresholds: thresholds_service.Thresholds,
+    directions: Sequence[str],
+) -> tuple[list[_Candidate], BuildThresholds]:
+    """Filter the candidate set and cap what each direction contributes.
+
+    The filter runs before the ranking, which is the same result either way — a threshold
+    does not depend on a candidate's position — but it keeps the ranking over exactly the
+    rows that survived, so the per-direction cap below counts the right rows.
+
+    The cap runs after the ranking, because "the first N of a direction" is only meaningful
+    once the direction's own order exists.
+    """
+    pool_by_direction: dict[str, int] = {}
+    removed_by_direction: dict[str, int] = {}
+    unassessed_by_direction: dict[str, int] = {}
+    kept: list[_Candidate] = []
+
+    for candidate in candidates:
+        direction = candidate.row["direction"]
+        pool_by_direction[direction] = pool_by_direction.get(direction, 0) + 1
+        reason = thresholds_service.rejection_reason(candidate, thresholds)
+        if reason is not None:
+            removed_by_direction[direction] = removed_by_direction.get(direction, 0) + 1
+            continue
+        unassessed = thresholds_service.unassessed_count(candidate, thresholds)
+        if unassessed:
+            unassessed_by_direction[direction] = (
+                unassessed_by_direction.get(direction, 0) + 1
+            )
+        kept.append(candidate)
+
+    removed_by_cap: dict[str, int] = {}
+    if thresholds.per_direction_limit is not None:
+        seen: dict[str, int] = {}
+        capped: list[_Candidate] = []
+        for candidate in kept:
+            direction = candidate.row["direction"]
+            count = seen.get(direction, 0)
+            if count >= thresholds.per_direction_limit:
+                removed_by_cap[direction] = removed_by_cap.get(direction, 0) + 1
+                continue
+            seen[direction] = count + 1
+            capped.append(candidate)
+        kept = capped
+
+    outcomes: list[DirectionThresholdOutcome] = []
+    for direction in directions:
+        floor = thresholds.functional_floor.get(direction)
+        applied = floor is not None and thresholds_service.floor_applies(direction)
+        note = None
+        if floor is not None and not applied:
+            note = (
+                "This direction's score orders candidates rather than measuring activity, "
+                "so a floor on it has no meaning and was not applied. Use the per-direction "
+                "cap instead."
+            )
+        outcomes.append(
+            DirectionThresholdOutcome(
+                direction=direction,
+                pool=pool_by_direction.get(direction, 0),
+                kept=sum(1 for c in kept if c.row["direction"] == direction),
+                removed_by_threshold=removed_by_direction.get(direction, 0),
+                removed_by_cap=removed_by_cap.get(direction, 0),
+                unassessed=unassessed_by_direction.get(direction, 0),
+                functional_score_floor=floor,
+                functional_score_floor_applied=applied,
+                note=note,
+            )
+        )
+
+    report = BuildThresholds(
+        functional_score_floor=dict(thresholds.functional_floor),
+        max_allergenicity=thresholds.max_allergenicity,
+        min_peptide_length=thresholds.min_peptide_length,
+        max_peptide_length=thresholds.max_peptide_length,
+        per_direction_limit=thresholds.per_direction_limit,
+        removed=sum(removed_by_direction.values()),
+        removed_by_cap=sum(removed_by_cap.values()),
+        directions=outcomes,
+    )
+    return kept, report
+
+
 def _built(
     candidate: _Candidate, *, targets: construct_service.AssemblyTargets
 ) -> BuiltConstruct:
@@ -193,6 +285,7 @@ def _built(
         semantics=a.semantics,
         composite=a.scores.composite,
         safety_verdict=a.safety.verdict,
+        allergenicity=a.supplementary.allergenicity,
         backbone_binding=assembled_row.binding,
         full_sequence=assembled_row.full_sequence,
         fused_length=len(assembled_row.full_sequence) if assembled_row.full_sequence else None,
@@ -209,22 +302,25 @@ def build_candidates(
     linker_id: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    thresholds: thresholds_service.Thresholds | None = None,
 ) -> BuildResult:
     """Assemble the candidates for one (route, scaffold, linker) combination.
 
     `route_id` must be a declared route and every direction must be a declared direction; the
     router validates both before calling, so this function treats them as known. The two
     assembly targets are resolved here, once, rather than inside the per-row assembly.
+
+    `thresholds` narrows the candidate set before the ranking is sliced. The default set
+    filters nothing, so a build that asks for none ranks exactly what it always ranked.
     """
     ordered_directions = _dedupe(directions)
     targets = construct_service.resolve_targets(scaffold_id=scaffold_id, linker_id=linker_id)
+    thresholds = thresholds or thresholds_service.Thresholds()
 
     rows_by_direction: dict[str, list[dict[str, Any]]] = {}
-    totals: dict[str, int] = {}
     for direction in ordered_directions:
-        rows, total = _candidate_rows(direction)
+        rows, _total = _candidate_rows(direction)
         rows_by_direction[direction] = rows
-        totals[direction] = total
 
     all_rows = [row for direction in ordered_directions for row in rows_by_direction[direction]]
 
@@ -243,8 +339,15 @@ def build_candidates(
     ]
     candidates.sort(key=_rank_key)
 
-    page = candidates[offset: offset + limit]
+    kept, threshold_report = _apply_thresholds(candidates, thresholds, ordered_directions)
+
+    page = kept[offset: offset + limit]
     items = [_built(candidate, targets=targets) for candidate in page]
+
+    kept_totals = {direction: 0 for direction in ordered_directions}
+    for candidate in kept:
+        direction = candidate.row["direction"]
+        kept_totals[direction] = kept_totals.get(direction, 0) + 1
 
     route = reference.ROUTES_BY_ID[route_id]
     scaffold_view = (
@@ -266,15 +369,18 @@ def build_candidates(
         ),
         scope_note=BUILD_SCOPE_NOTE,
         directions=ordered_directions,
-        totals=totals,
-        total=sum(totals.values()),
-        counts=_counts(candidates),
+        totals=kept_totals,
+        total=sum(kept_totals.values()),
+        counts=_counts(kept),
+        thresholds=threshold_report,
         items=items,
         limit=limit,
         offset=offset,
     )
     log.info(
-        "build: route=%s directions=%s scaffold=%s linker=%s ranked=%d returned=%d",
-        route_id, ordered_directions, scaffold_id, linker_id, len(candidates), len(items),
+        "build: route=%s directions=%s scaffold=%s linker=%s ranked=%d returned=%d "
+        "thresholds_removed=%d",
+        route_id, ordered_directions, scaffold_id, linker_id, len(kept), len(items),
+        threshold_report.removed,
     )
     return result

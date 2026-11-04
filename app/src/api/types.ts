@@ -283,6 +283,8 @@ export interface BuildResult {
   totals: Record<string, number>
   total: number
   counts: BuildCounts
+  /** The screening thresholds the build ran under and what each of them removed. */
+  thresholds: BuildThresholds
   items: BuiltConstruct[]
   limit: number
   offset: number
@@ -389,6 +391,72 @@ export interface ReferenceData {
   evidence_levels: EvidenceLevelOption[]
   material_forms: MaterialFormOption[]
   categories: ScaffoldCategoryView[]
+  /** The screening thresholds a build can be run under. Read from the same place the service
+   *  enforces them, so the starting values the interface offers and the values the service
+   *  applies cannot drift apart. */
+  thresholds: ThresholdReference
+}
+
+/** What one direction's thresholds did to its own candidates. */
+export interface DirectionThresholdOutcome {
+  direction: string
+  /** Candidates this direction held before any threshold was applied. */
+  pool: number
+  /** Candidates this direction contributes after every threshold, including the cap. */
+  kept: number
+  removed_by_threshold: number
+  removed_by_cap: number
+  /** Candidates a threshold could not judge, because the value was never measured. Kept
+   *  rather than dropped. */
+  unassessed: number
+  functional_score_floor: number | null
+  /** Whether the floor was applied. False on a direction whose score orders candidates rather
+   *  than measuring activity, where a floor has no meaning. */
+  functional_score_floor_applied: boolean
+  note: string | null
+}
+
+export interface BuildThresholds {
+  functional_score_floor: Record<string, number>
+  max_allergenicity: number | null
+  min_peptide_length: number | null
+  max_peptide_length: number | null
+  per_direction_limit: number | null
+  /** Candidates the thresholds ruled out, before the per-direction cap. */
+  removed: number
+  /** Candidates the per-direction cap ruled out. */
+  removed_by_cap: number
+  directions: DirectionThresholdOutcome[]
+}
+
+/** The threshold reference the interface reads before any build has run. */
+export interface ThresholdReference {
+  functional_score: Record<
+    string,
+    {
+      tool: string
+      tool_key: string
+      semantics: string
+      /** Whether a score floor means anything on this direction. */
+      floor_applies: boolean
+      /** The boundary the predictor declares, where it declares one. */
+      declared_boundary: number | null
+      higher_is_better: boolean
+      note: string
+    }
+  >
+  allergenicity: {
+    tool: string
+    boundary: number
+    higher_is_better: boolean
+    note: string
+  }
+  peptide_length: {
+    min: number
+    max: number
+    note: string
+  }
+  per_direction_limit: { note: string }
 }
 
 // ── Scaffolds ───────────────────────────────────────────────────────────────

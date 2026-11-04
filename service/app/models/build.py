@@ -66,6 +66,12 @@ class BuiltConstruct(ConstructSummary):
         description="The same three-part breakdown the construct detail page renders, so a "
         "candidate can show its assembly without a second request.",
     )
+    allergenicity: float | None = Field(
+        default=None,
+        description="The AlgPred2 allergenicity score. It is carried on the row because it is "
+        "one of the values a screening threshold compares, and a threshold can only be applied "
+        "where the number it compares is present.",
+    )
 
 
 class BuildCounts(BaseModel):
@@ -89,6 +95,78 @@ class BuildCounts(BaseModel):
         "rather than treated as zero, and they are the rows to look at when a direction "
         "returns fewer usable rankings than it has candidates.",
     )
+
+
+class DirectionThresholdOutcome(BaseModel):
+    """What one direction's thresholds did to its own candidates.
+
+    Reported per direction rather than as one total, because a threshold set on one
+    direction cannot affect another: the score floors are per direction by construction, and
+    the peptide length and allergenicity ceilings happen to be the same everywhere but are
+    still counted where they land.
+    """
+
+    direction: str
+    pool: int = Field(
+        description="Candidates this direction held before any threshold was applied."
+    )
+    kept: int = Field(
+        description="Candidates this direction contributes after every threshold, including "
+        "the per-direction cap."
+    )
+    removed_by_threshold: int = Field(
+        default=0,
+        description="Candidates a threshold ruled out.",
+    )
+    removed_by_cap: int = Field(
+        default=0,
+        description="Candidates the per-direction cap ruled out.",
+    )
+    unassessed: int = Field(
+        default=0,
+        description="Candidates a threshold could not judge, because the value it would have "
+        "compared was not measured. They are kept rather than dropped.",
+    )
+    functional_score_floor: float | None = Field(
+        default=None,
+        description="The score floor that was asked for on this direction.",
+    )
+    functional_score_floor_applied: bool = Field(
+        default=False,
+        description="Whether the floor was applied. False when the direction's score is a "
+        "ranking signal rather than a probability, in which case the floor was not applied "
+        "and the request says so.",
+    )
+    note: str | None = Field(
+        default=None,
+        description="Why a requested threshold was not applied, when it was not.",
+    )
+
+
+class BuildThresholds(BaseModel):
+    """The screening thresholds the build ran under, and what they removed.
+
+    Absent thresholds are null rather than zero, so a response says "no allergenicity
+    ceiling was set" instead of "the ceiling was zero", which would exclude every candidate.
+    """
+
+    functional_score_floor: dict[str, float] = Field(
+        default_factory=dict,
+        description="The score floor asked for on each direction.",
+    )
+    max_allergenicity: float | None = None
+    min_peptide_length: int | None = None
+    max_peptide_length: int | None = None
+    per_direction_limit: int | None = None
+    removed: int = Field(
+        default=0,
+        description="Candidates the thresholds ruled out, before the per-direction cap.",
+    )
+    removed_by_cap: int = Field(
+        default=0,
+        description="Candidates the per-direction cap ruled out.",
+    )
+    directions: list[DirectionThresholdOutcome] = Field(default_factory=list)
 
 
 class BuildResult(BaseModel):
@@ -125,12 +203,19 @@ class BuildResult(BaseModel):
     )
     directions: list[str] = Field(description="The directions the build covered, in order.")
     totals: dict[str, int] = Field(
-        description="Candidates matched per direction, before `limit`. A requested direction "
-        "with no stored candidate appears here as 0 rather than being omitted, so a caller "
-        "can tell 'nothing stored' from 'not asked for'."
+        description="Candidates matched per direction, before `limit`. With no threshold set "
+        "this is the direction's whole candidate set; with thresholds it is what survived "
+        "them, and `thresholds.directions` carries the pool each direction started from. A "
+        "requested direction with no stored candidate appears here as 0 rather than being "
+        "omitted, so a caller can tell 'nothing stored' from 'not asked for'."
     )
     total: int = Field(description="Sum of `totals`: the size of the ranking that was sliced.")
     counts: BuildCounts
+    thresholds: BuildThresholds = Field(
+        default_factory=BuildThresholds,
+        description="The screening thresholds the build ran under and what each of them "
+        "removed. With no threshold set this reports that nothing was ruled out.",
+    )
     items: list[BuiltConstruct]
     limit: int
     offset: int

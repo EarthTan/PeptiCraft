@@ -16,6 +16,7 @@ from ..models.catalog import (
 from ..repositories import catalog as catalog_repo
 from ..repositories import scaffolds as scaffolds_repo
 from ..services import reference
+from ..services import thresholds as thresholds_service
 
 router = APIRouter(tags=["meta"])
 
@@ -101,6 +102,7 @@ def _build_reference_data() -> ReferenceData:
         tools=[ToolDefinition(**t.model_dump()) for t in reference.TOOLS],
         evidence_levels=reference.EVIDENCE_LEVELS,
         material_forms=reference.MATERIAL_FORM_OPTIONS,
+        thresholds=thresholds_service.reference(),
         categories=[
             ScaffoldCategoryView(
                 id=cat,

@@ -403,7 +403,7 @@ def assemble_scores(
                 group="function",
                 assessed=value is not None,
                 semantics=semantics,
-                applied_threshold=_functional_threshold(func_key),
+                applied_threshold=functional_threshold(func_key),
                 is_veto_gate=False,
             )
             continue
@@ -470,8 +470,13 @@ _FUNCTIONAL_TOOL_MEASURES = {
 _FUNCTIONAL_THRESHOLD_CACHE: dict[str, AppliedThreshold | None] = {}
 
 
-def _functional_threshold(func_key: str) -> AppliedThreshold | None:
-    """The predictor's own activity boundary, where it declares one."""
+def functional_threshold(func_key: str) -> AppliedThreshold | None:
+    """The predictor's own activity boundary, where it declares one.
+
+    Public because the threshold reference the interface reads before any build has run has
+    to quote the same boundary the build applies, and a copy of the table would be one more
+    place for the two to disagree.
+    """
     if func_key in _FUNCTIONAL_THRESHOLD_CACHE:
         return _FUNCTIONAL_THRESHOLD_CACHE[func_key]
     spec = {

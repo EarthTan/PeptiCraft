@@ -10,6 +10,8 @@ was quoted in generated prose while `toolMetadata` had no threshold field for it
 """
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from .common import BarrierTier, EvidenceLevel, MaterialForm, WeightTier
@@ -150,3 +152,11 @@ class ReferenceData(BaseModel):
     evidence_levels: list[dict[str, str]]
     material_forms: list[MaterialFormOption]
     categories: list[ScaffoldCategoryView]
+    thresholds: dict[str, Any] = Field(
+        default_factory=dict,
+        description="The screening thresholds a build can be run under: the score floor each "
+        "direction accepts, the allergenicity ceiling, the peptide length range and the "
+        "per-direction cap. Read from the same place the thresholds are enforced, so the "
+        "starting values the interface offers and the values the service applies cannot "
+        "drift apart.",
+    )

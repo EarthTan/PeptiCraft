@@ -651,6 +651,161 @@ console.log('\nthe Builder ranking')
   )
 }
 
+console.log('\nthe screening thresholds, applied to an exported ranking')
+{
+  const staticMod = await loadAppModule('api/static.ts')
+  const route = 'topical-film'
+
+  // The exported rows carry the values the thresholds compare, so the rules can be checked
+  // against the data the service itself produced rather than against a number written here.
+  // The whole candidate set, not a page of it: the thresholds are compared against the
+  // rows they are supposed to have kept, and a page would make every comparison wrong.
+  const whole = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({ direction: 'antioxidant', route_id: route, limit: '500' }),
+  )
+  const rows = whole.items
+  check('the whole candidate set is on hand', rows.length === whole.total, `${rows.length} of ${whole.total}`)
+
+  const floor = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antioxidant',
+      route_id: route,
+      limit: '500',
+      min_functional_score: 'antioxidant:0.5',
+    }),
+  )
+  const expected = rows.filter((r) => (r.functional_score ?? 0) >= 0.5)
+  check(
+    'a score floor keeps exactly the rows above it',
+    floor.total === expected.length &&
+      floor.items.every((r) => (r.functional_score ?? 0) >= 0.5),
+    `${floor.total} against ${expected.length}`,
+  )
+  check(
+    'the report says what the floor removed',
+    floor.thresholds?.removed === whole.total - expected.length &&
+      floor.thresholds?.directions?.[0]?.pool === whole.total &&
+      floor.thresholds?.directions?.[0]?.kept === expected.length,
+    JSON.stringify(floor.thresholds?.directions?.[0]),
+  )
+  check(
+    'the tally describes the survivors rather than the whole set',
+    floor.counts?.ranked === expected.length,
+    `${floor.counts?.ranked} against ${expected.length}`,
+  )
+  check(
+    'the tally sums to the survivors',
+    floor.counts?.clear + floor.counts?.borderline + floor.counts?.vetoed +
+      floor.counts?.indeterminate === floor.counts?.ranked,
+  )
+
+  const ceiling = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antioxidant',
+      route_id: route,
+      limit: '500',
+      max_allergenicity: '0.3',
+    }),
+  )
+  const safe = rows.filter((r) => r.allergenicity !== null && r.allergenicity !== undefined &&
+    r.allergenicity <= 0.3)
+  check(
+    'an allergenicity ceiling keeps exactly the rows below it',
+    ceiling.total === safe.length &&
+      ceiling.items.every((r) => r.allergenicity <= 0.3),
+    `${ceiling.total} against ${safe.length}`,
+  )
+
+  const ranged = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antioxidant',
+      route_id: route,
+      limit: '500',
+      min_peptide_length: '15',
+      max_peptide_length: '25',
+    }),
+  )
+  const inRange = rows.filter((r) => r.peptide_length >= 15 && r.peptide_length <= 25)
+  check(
+    'a length range keeps exactly the rows inside it',
+    ranged.total === inRange.length &&
+      ranged.items.every((r) => r.peptide_length >= 15 && r.peptide_length <= 25),
+    `${ranged.total} against ${inRange.length}`,
+  )
+
+  const both = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antioxidant,antibacterial',
+      route_id: route,
+      limit: '500',
+    }),
+  )
+  const capped = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antioxidant,antibacterial',
+      route_id: route,
+      limit: '500',
+      per_direction_limit: '3',
+    }),
+  )
+  const perDirection = {}
+  for (const row of capped.items) perDirection[row.direction] = (perDirection[row.direction] ?? 0) + 1
+  check(
+    'the per-direction cap counts within each direction',
+    Object.values(perDirection).every((n) => n <= 3) &&
+      capped.thresholds?.removed_by_cap > 0,
+    JSON.stringify(perDirection),
+  )
+  check(
+    'the cap takes the head of each direction, not an arbitrary slice',
+    capped.items
+      .filter((r) => r.direction === 'antibacterial')
+      .every((r) => {
+        const head = both.items.filter((x) => x.direction === 'antibacterial').slice(0, 3)
+        return head.some((h) => h.id === r.id)
+      }),
+  )
+
+  // A floor on a direction whose score orders candidates rather than measuring activity is
+  // not applied. The service reports it as not applied; the static layer must do the same,
+  // because a threshold that quietly did nothing would read as one that did.
+  const rankingOnly = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antimelanin',
+      route_id: route,
+      limit: '500',
+      min_functional_score: 'antimelanin:0.99',
+    }),
+  )
+  const outcome = rankingOnly.thresholds?.directions?.[0]
+  check(
+    'a floor on a ranking-only direction is reported as not applied',
+    outcome?.functional_score_floor_applied === false,
+    JSON.stringify(outcome),
+  )
+  check(
+    'the report says why it was not applied',
+    typeof outcome?.note === 'string' && outcome.note.length > 0,
+    outcome?.note,
+  )
+  const melanin = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({ direction: 'antimelanin', route_id: route, limit: '500' }),
+  )
+  check(
+    'the candidates are all still there',
+    rankingOnly.total === melanin.total,
+    `${rankingOnly.total} against ${melanin.total}`,
+  )
+}
+
 console.log('\nassembly: the one thing the static layer computes')
 {
   const staticMod = await loadAppModule('api/static.ts')

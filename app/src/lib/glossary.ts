@@ -30,6 +30,7 @@ export type GlossaryKey =
   | "veto_gate"
   | "multi_function"
   | "control_arm"
+  | "screening_thresholds"
 
 export const GLOSSARY: Record<GlossaryKey, string> = {
   composite:
@@ -109,6 +110,11 @@ export const GLOSSARY: Record<GlossaryKey, string> = {
     "A negative control. These rows carry real scores, but the pipeline wrote them to give a " +
     "comparison baseline rather than to be candidates, so they are not part of the screened " +
     "set. The Builder ranks the candidate arm only.",
+
+  screening_thresholds:
+    "Limits applied to the candidates before they are ranked. They can only remove " +
+    "candidates: the peptide library holds twenty million sequences and the candidates are " +
+    "the ones the pipeline has already screened, so no threshold here brings a new peptide in.",
 }
 
 /** The explanation that belongs to each safety verdict. */

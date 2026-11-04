@@ -1090,7 +1090,12 @@ function ThresholdPanel({
     set("functional_floor", floor)
   }
 
-  const floorDirections = directions.filter((direction) => functionalReference[direction.id])
+  // A floor is offered only where the direction's score measures activity. The two
+  // ranking-only directions are named in the note below instead, because a control that
+  // does nothing would read as one that does.
+  const floorDirections = directions.filter(
+    (direction) => functionalReference[direction.id]?.floor_applies !== false,
+  )
   const rankingOnly = directions.filter(
     (direction) => functionalReference[direction.id]?.floor_applies === false,
   )
@@ -1178,15 +1183,17 @@ function ThresholdPanel({
                   )
                 })}
               </div>
-              {rankingOnly.length > 0 && (
-                <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
-                  {rankingOnly.map((direction) => direction.name).join(" and ")}{" "}
-                  {rankingOnly.length === 1 ? "is" : "are"} ranked by a score that orders
-                  candidates rather than measuring activity, so no floor applies to
-                  {rankingOnly.length === 1 ? " it" : " them"}. Use the per-direction cap instead.
-                </p>
-              )}
             </div>
+          )}
+
+          {rankingOnly.length > 0 && (
+            <p className="text-[11px] text-gray-400 leading-relaxed">
+              {rankingOnly.map((direction) => direction.name).join(" and ")}{" "}
+              {rankingOnly.length === 1 ? "is" : "are"} ranked by a score that orders
+              candidates rather than measuring activity, so no floor applies to
+              {rankingOnly.length === 1 ? " it" : " them"}. Use the candidates per function cap
+              instead.
+            </p>
           )}
 
           {/* Allergenicity ceiling. */}

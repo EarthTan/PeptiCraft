@@ -109,6 +109,89 @@
   }
 }
 
+/* A dial for a number. The fill is a percentage carried on `--fill` and the accent on
+   `--accent`, so one control serves every threshold and every function's own colour. */
+.knob {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.25rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.knob::-webkit-slider-runnable-track {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) calc(var(--fill) * 1%),
+    #e2e8f0 calc(var(--fill) * 1%),
+    #e2e8f0 100%
+  );
+}
+
+.knob::-moz-range-track {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) calc(var(--fill) * 1%),
+    #e2e8f0 calc(var(--fill) * 1%),
+    #e2e8f0 100%
+  );
+}
+
+.knob::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -0.3125rem;
+  height: 1rem;
+  width: 1rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 3px rgb(8 47 73 / 25%);
+  transition: transform 120ms ease;
+}
+
+.knob::-moz-range-thumb {
+  height: 1rem;
+  width: 1rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 3px rgb(8 47 73 / 25%);
+}
+
+.knob:hover::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+
+.knob:active::-webkit-slider-thumb {
+  transform: scale(1.02);
+}
+
+.knob:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgb(2 132 199 / 25%);
+}
+
+/* A number the reader can type into, without the browser's own stepper arrows. */
+.num-field {
+  -moz-appearance: textfield;
+  appearance: textfield;
+  font-variant-numeric: tabular-nums;
+}
+
+.num-field::-webkit-outer-spin-button,
+.num-field::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

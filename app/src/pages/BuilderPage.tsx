@@ -2,6 +2,7 @@ import { sequenceColor, sequenceWeight } from "@/lib/sequence-colors"
 import { BuilderJourney } from "@/components/builder-journey"
 import { EvidenceLegend } from "@/components/evidence-badge"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -13,6 +14,7 @@ import { CollapsibleNotice, Notice } from "@/components/ui/notice"
 import { InfoTip } from "@/components/ui/tooltip"
 import { BuildNameDialog } from "@/components/build-history"
 import {
+  Activity,
   AlertTriangle,
   ArrowRight,
   Bot,
@@ -22,8 +24,11 @@ import {
   Eye,
   FlaskConical,
   History,
+  Layers,
+  Ruler,
   ShieldAlert,
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { fetchBuild, fetchLinkers, fetchReference, fetchScaffolds } from "@/api"
 import type {
   BuildCounts,
@@ -1045,6 +1050,162 @@ function RouteStep({
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * A switch that looks like a switch.
+ */
+function KnobSwitch({
+  on,
+  onChange,
+  label,
+}: {
+  on: boolean
+  onChange: (next: boolean) => void
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={() => onChange(!on)}
+      className={cn(
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 cursor-pointer",
+        on ? "bg-primary-500" : "bg-gray-300",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-4 w-4 items-center justify-center rounded-full bg-white shadow-sm transition-transform duration-200",
+          on ? "translate-x-[1rem]" : "translate-x-[0.125rem]",
+        )}
+      />
+    </button>
+  )
+}
+
+/**
+ * A number with a dial beside it.
+ *
+ * The dial gives the scale and the field lets an exact value be typed, which matters because
+ * the boundaries the predictors declare are not round numbers. Both write the same value, so
+ * neither is the one that is authoritative.
+ */
+function Dial({
+  value,
+  min,
+  max,
+  step,
+  accent,
+  onChange,
+  label,
+}: {
+  value: number
+  min: number
+  max: number
+  step: number
+  accent: string
+  onChange: (next: number) => void
+  label: string
+}) {
+  const fill = max > min ? ((value - min) / (max - min)) * 100 : 0
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        aria-label={`${label} dial`}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="knob min-w-[7rem] flex-1"
+        style={{ "--fill": fill, "--accent": accent } as CSSProperties}
+      />
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        aria-label={label}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="num-field h-9 w-[4.5rem] shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 text-center font-mono text-sm tabular-nums text-primary-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200"
+      />
+    </div>
+  )
+}
+
+/**
+ * One threshold, as a card of its own.
+ *
+ * The icon carries the threshold's colour and the card takes that colour when the threshold
+ * is on, so which thresholds are in force is readable without reading any of them.
+ *
+ * A threshold that governs several things at once carries no switch of its own: each of the
+ * things it governs has a switch, and a second switch over them would only be able to lie
+ * about the ones in between.
+ */
+function ThresholdBlock({
+  icon: Icon,
+  accent,
+  title,
+  hint,
+  active,
+  badge,
+  toggle,
+  reveal = "whenActive",
+  children,
+}: {
+  icon: LucideIcon
+  accent: string
+  title: string
+  hint: string
+  /** Whether the threshold is in force. Decides whether the card is filled or bare. */
+  active: boolean
+  /** A short note on the right, beside the switch. */
+  badge?: string
+  /** The card's own switch, absent when the threshold governs several things separately. */
+  toggle?: { on: boolean; onChange: (next: boolean) => void; label: string }
+  /** Whether the card's contents are shown. */
+  reveal?: "whenActive" | "always"
+  children?: ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border transition-all duration-200",
+        active ? "border-gray-200 bg-white shadow-sm" : "border-gray-200 bg-white/50",
+      )}
+    >
+      <div className="flex items-center gap-3 px-4 py-3">
+        <span
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+            active ? "text-white shadow-sm" : "bg-gray-100 text-gray-400",
+          )}
+          style={active ? { backgroundColor: accent } : undefined}
+        >
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-primary-900">{title}</p>
+          <p className="text-xs text-gray-500">{hint}</p>
+        </div>
+        {badge && (
+          <span className="shrink-0 text-xs tabular-nums text-gray-400">{badge}</span>
+        )}
+        {toggle && (
+          <KnobSwitch on={toggle.on} onChange={toggle.onChange} label={toggle.label} />
+        )}
+      </div>
+      {(active || reveal === "always") && children ? (
+        <div className="border-t border-gray-100 px-4 py-3">{children}</div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
  * The screening thresholds, folded into the step that chooses the functions.
  *
  * They are not a step of their own because they are not another decision: a threshold narrows
@@ -1099,27 +1260,44 @@ function ThresholdPanel({
   const rankingOnly = directions.filter(
     (direction) => functionalReference[direction.id]?.floor_applies === false,
   )
+  const floorsOn = floorDirections.filter(
+    (direction) => thresholds.functional_floor[direction.id] !== undefined,
+  )
+
   const setCount =
     Object.keys(thresholds.functional_floor).length +
     (thresholds.max_allergenicity !== null ? 1 : 0) +
     (thresholds.min_peptide_length !== null || thresholds.max_peptide_length !== null ? 1 : 0) +
     (thresholds.per_direction_limit !== null ? 1 : 0)
 
+  const lengthOn =
+    thresholds.min_peptide_length !== null || thresholds.max_peptide_length !== null
+
   return (
-    <div className="mt-4 rounded-xl border border-gray-200 bg-surface-alt/50">
-      <div className="flex items-center gap-1 px-4 py-3">
+    <div className="mt-4 rounded-2xl border border-gray-200 bg-surface-alt/60 shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-3">
         <button
           type="button"
           onClick={() => setOpen((current) => !current)}
           aria-expanded={open}
           data-panel="thresholds"
-          className="flex items-center gap-2 flex-1 text-left cursor-pointer"
+          className="flex flex-1 cursor-pointer items-center gap-2.5 text-left"
         >
           <ChevronDown
-            className={cn("w-4 h-4 text-gray-400 transition-transform duration-200", open && "rotate-180")}
+            className={cn(
+              "h-4 w-4 text-gray-400 transition-transform duration-200",
+              open && "rotate-180",
+            )}
           />
-          <span className="text-sm font-medium text-primary-900">Screening thresholds</span>
-          <span className="text-xs text-gray-500">
+          <span className="text-sm font-semibold text-primary-900">Screening thresholds</span>
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[11px] font-medium",
+              setCount === 0
+                ? "bg-gray-200 text-gray-500"
+                : "bg-primary-100 text-primary-700",
+            )}
+          >
             {setCount === 0 ? "none set" : `${setCount} set`}
           </span>
         </button>
@@ -1127,67 +1305,85 @@ function ThresholdPanel({
       </div>
 
       {open && (
-        <div className="px-4 pb-4 space-y-4">
-          <p className="text-xs text-gray-500 leading-relaxed">
+        <div className="space-y-3 px-4 pb-4">
+          <p className="text-xs leading-relaxed text-gray-500">
             These narrow the candidates before they are ranked. They can only remove candidates:
-            the peptide library holds twenty million sequences and the candidates are the ones
-            the pipeline has already screened.
+            the peptide library holds twenty million sequences and these act on the ones the
+            pipeline has already screened.
           </p>
 
-          {/* Score floor, one per function whose score is a probability. */}
+          {/* Score floor, one per function whose score is a probability. The block has no
+              switch of its own: each function below carries one, and a switch over all of
+              them could not say which of them were on. */}
           {floorDirections.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-gray-700 mb-2">Activity score floor</p>
-              <div className="space-y-2">
+            <ThresholdBlock
+              icon={Activity}
+              accent="#0ea5e9"
+              title="Activity score floor"
+              hint="The lowest score a candidate may have"
+              active={floorsOn.length > 0}
+              reveal="always"
+              badge={
+                floorsOn.length > 0
+                  ? `${floorsOn.length} of ${floorDirections.length} set`
+                  : undefined
+              }
+            >
+              <div className="space-y-1">
                 {floorDirections.map((direction) => {
                   const entry = functionalReference[direction.id]
                   const value = thresholds.functional_floor[direction.id]
                   const on = value !== undefined
                   const pool = direction.counts?.top ?? 0
+                  const accent = direction.color ?? "#0ea5e9"
                   return (
-                    <label
+                    <div
                       key={direction.id}
-                      className="flex flex-wrap items-center gap-2 text-xs text-gray-600"
+                      className="flex flex-wrap items-center gap-x-3 gap-y-2 py-1.5"
                     >
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        onChange={(event) => toggleFloor(direction.id, event.target.checked)}
-                        className="accent-primary-500"
+                      <KnobSwitch
+                        on={on}
+                        onChange={(next) => toggleFloor(direction.id, next)}
+                        label={`${direction.name} activity score floor`}
                       />
-                      <span className="font-medium text-gray-700">{direction.name}</span>
-                      {on && (
-                        <input
-                          type="number"
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          value={value}
-                          onChange={(event) =>
-                            set("functional_floor", {
-                              ...thresholds.functional_floor,
-                              [direction.id]: Number(event.target.value),
-                            })
-                          }
-                          aria-label={`${direction.name} activity score floor`}
-                          className="w-20 h-8 rounded-lg border border-gray-200 bg-white px-2 font-mono focus:outline-none focus:ring-2 focus:ring-primary-400"
-                        />
-                      )}
-                      <span className="text-gray-400">
+                      <span className="w-32 shrink-0 text-sm font-medium text-primary-900">
+                        {direction.name}
+                      </span>
+                      <div className="w-full max-w-md">
+                        {on ? (
+                          <Dial
+                            value={value}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            accent={accent}
+                            label={`${direction.name} activity score floor`}
+                            onChange={(next) =>
+                              set("functional_floor", {
+                                ...thresholds.functional_floor,
+                                [direction.id]: next,
+                              })
+                            }
+                          />
+                        ) : (
+                          <span className="text-xs text-gray-400">not set</span>
+                        )}
+                      </div>
+                      <span className="w-56 shrink-0 text-right text-xs tabular-nums text-gray-400">
                         {entry?.declared_boundary !== null && entry?.declared_boundary !== undefined
                           ? `boundary ${entry.declared_boundary.toFixed(2)}`
                           : "no boundary declared"}
                         {` · ${pool} candidates`}
                       </span>
-                    </label>
+                    </div>
                   )
                 })}
               </div>
-            </div>
+            </ThresholdBlock>
           )}
 
           {rankingOnly.length > 0 && (
-            <p className="text-[11px] text-gray-400 leading-relaxed">
+            <p className="px-1 text-[11px] leading-relaxed text-gray-400">
               {rankingOnly.map((direction) => direction.name).join(" and ")}{" "}
               {rankingOnly.length === 1 ? "is" : "are"} ranked by a score that orders
               candidates rather than measuring activity, so no floor applies to
@@ -1197,49 +1393,70 @@ function ThresholdPanel({
           )}
 
           {/* Allergenicity ceiling. */}
-          <div>
-            <p className="text-xs font-medium text-gray-700 mb-2">Allergenicity ceiling</p>
-            <label className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
-              <input
-                type="checkbox"
-                checked={thresholds.max_allergenicity !== null}
-                onChange={(event) =>
-                  set(
-                    "max_allergenicity",
-                    event.target.checked
-                      ? (allergenicityReference?.boundary ?? 0.3)
-                      : null,
-                  )
-                }
-                className="accent-primary-500"
-              />
-              {thresholds.max_allergenicity !== null && (
-                <input
-                  type="number"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={thresholds.max_allergenicity}
-                  onChange={(event) => set("max_allergenicity", Number(event.target.value))}
-                  aria-label="Allergenicity ceiling"
-                  className="w-20 h-8 rounded-lg border border-gray-200 bg-white px-2 font-mono focus:outline-none focus:ring-2 focus:ring-primary-400"
-                />
-              )}
-              <span className="text-gray-400">
-                {allergenicityReference?.tool ?? "AlgPred2"}
-                {allergenicityReference ? ` · boundary ${allergenicityReference.boundary.toFixed(2)}` : ""}
-                {" · the lower the value the safer the peptide"}
-              </span>
-            </label>
-          </div>
+          <ThresholdBlock
+            icon={ShieldAlert}
+            accent="#f59e0b"
+            title="Allergenicity ceiling"
+            hint={`${allergenicityReference?.tool ?? "AlgPred2"} · the lower the value the safer the peptide`}
+            active={thresholds.max_allergenicity !== null}
+            badge={
+              allergenicityReference
+                ? `boundary ${allergenicityReference.boundary.toFixed(2)}`
+                : undefined
+            }
+            toggle={{
+              on: thresholds.max_allergenicity !== null,
+              onChange: (next) =>
+                set("max_allergenicity", next ? (allergenicityReference?.boundary ?? 0.3) : null),
+              label: "Allergenicity ceiling",
+            }}
+          >
+            {thresholds.max_allergenicity !== null && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                {/* A dial of a fixed width, so it reads as one control rather than as a
+                    rule stretched across the panel. */}
+                <div className="w-full max-w-md">
+                  <Dial
+                    value={thresholds.max_allergenicity}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    accent="#f59e0b"
+                    label="Allergenicity ceiling"
+                    onChange={(next) => set("max_allergenicity", next)}
+                  />
+                </div>
+              </div>
+            )}
+          </ThresholdBlock>
 
           {/* Peptide length range. */}
-          <div>
-            <p className="text-xs font-medium text-gray-700 mb-2">Peptide length</p>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+          <ThresholdBlock
+            icon={Ruler}
+            accent="#8b5cf6"
+            title="Peptide length"
+            hint="Residues of the peptide on its own, before the scaffold and the linker"
+            active={lengthOn}
+            badge={
+              lengthReference
+                ? `${lengthReference.min}–${lengthReference.max} aa in the library`
+                : undefined
+            }
+            toggle={{
+              on: lengthOn,
+              onChange: (next) =>
+                onChange({
+                  ...thresholds,
+                  min_peptide_length: next ? (lengthReference?.min ?? 1) : null,
+                  max_peptide_length: next ? (lengthReference?.max ?? 30) : null,
+                }),
+              label: "Peptide length",
+            }}
+          >
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="number"
-                min={1}
+                min={lengthReference?.min ?? 1}
                 max={lengthReference?.max ?? 30}
                 placeholder={String(lengthReference?.min ?? 1)}
                 value={thresholds.min_peptide_length ?? ""}
@@ -1250,9 +1467,9 @@ function ThresholdPanel({
                   )
                 }
                 aria-label="Shortest peptide to keep"
-                className="w-20 h-8 rounded-lg border border-gray-200 bg-white px-2 font-mono focus:outline-none focus:ring-2 focus:ring-primary-400"
+                className="num-field h-9 w-[4.5rem] rounded-lg border border-gray-200 bg-white px-2.5 text-center font-mono text-sm tabular-nums text-primary-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200"
               />
-              <span className="text-gray-400">to</span>
+              <span className="text-xs text-gray-400">to</span>
               <input
                 type="number"
                 min={lengthReference?.min ?? 1}
@@ -1266,25 +1483,27 @@ function ThresholdPanel({
                   )
                 }
                 aria-label="Longest peptide to keep"
-                className="w-20 h-8 rounded-lg border border-gray-200 bg-white px-2 font-mono focus:outline-none focus:ring-2 focus:ring-primary-400"
+                className="num-field h-9 w-[4.5rem] rounded-lg border border-gray-200 bg-white px-2.5 text-center font-mono text-sm tabular-nums text-primary-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200"
               />
-              <span className="text-gray-400">residues · empty means no limit</span>
+              <span className="text-xs text-gray-400">residues</span>
             </div>
-          </div>
+          </ThresholdBlock>
 
           {/* Per-direction cap. */}
-          <div>
-            <p className="text-xs font-medium text-gray-700 mb-2">Candidates per function</p>
-            <label className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
-              <input
-                type="checkbox"
-                checked={thresholds.per_direction_limit !== null}
-                onChange={(event) =>
-                  set("per_direction_limit", event.target.checked ? 10 : null)
-                }
-                className="accent-primary-500"
-              />
-              {thresholds.per_direction_limit !== null && (
+          <ThresholdBlock
+            icon={Layers}
+            accent="#10b981"
+            title="Candidates per function"
+            hint="How many each function contributes to the ranking"
+            active={thresholds.per_direction_limit !== null}
+            toggle={{
+              on: thresholds.per_direction_limit !== null,
+              onChange: (next) => set("per_direction_limit", next ? 10 : null),
+              label: "Candidates per function",
+            }}
+          >
+            {thresholds.per_direction_limit !== null && (
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="number"
                   min={1}
@@ -1292,31 +1511,33 @@ function ThresholdPanel({
                   value={thresholds.per_direction_limit}
                   onChange={(event) => set("per_direction_limit", Number(event.target.value))}
                   aria-label="Candidates each function contributes"
-                  className="w-20 h-8 rounded-lg border border-gray-200 bg-white px-2 font-mono focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  className="num-field h-9 w-[4.5rem] rounded-lg border border-gray-200 bg-white px-2.5 text-center font-mono text-sm tabular-nums text-primary-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200"
                 />
-              )}
-              <span className="text-gray-400">
-                counted within each function&apos;s own order
-              </span>
-            </label>
-          </div>
+                <span className="text-xs text-gray-400">
+                  counted within each function&apos;s own order
+                </span>
+              </div>
+            )}
+          </ThresholdBlock>
 
           {setCount > 0 && (
-            <button
-              type="button"
-              onClick={() =>
-                onChange({
-                  functional_floor: {},
-                  max_allergenicity: null,
-                  min_peptide_length: null,
-                  max_peptide_length: null,
-                  per_direction_limit: null,
-                })
-              }
-              className="text-xs text-primary-600 hover:text-primary-800 cursor-pointer"
-            >
-              Clear all thresholds
-            </button>
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() =>
+                  onChange({
+                    functional_floor: {},
+                    max_allergenicity: null,
+                    min_peptide_length: null,
+                    max_peptide_length: null,
+                    per_direction_limit: null,
+                  })
+                }
+                className="cursor-pointer rounded-lg px-2.5 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-800"
+              >
+                Clear all thresholds
+              </button>
+            </div>
           )}
         </div>
       )}

@@ -12,7 +12,8 @@
     "verify:chat": "node verify/chat-check.mjs",
     "verify:dev-chat": "node verify/dev-chat-check.mjs",
     "verify:static": "node verify/static-export-check.mjs",
-    "verify:markdown": "node verify/markdown-check.mjs"
+    "verify:markdown": "node verify/markdown-check.mjs",
+    "verify:thresholds": "node verify/threshold-panel-check.mjs"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.20",
@@ -42,6 +43,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
     "oxlint": "^1.75.0",
+    "playwright": "^1.64.1",
     "typescript": "~6.0.2",
     "vite": "^8.2.0"
   }

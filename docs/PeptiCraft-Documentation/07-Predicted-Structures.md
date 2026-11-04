@@ -96,10 +96,10 @@ upload is incremental: a file already stored at the same size is not sent again.
 uploaded last, so an interrupted run leaves the bucket describing a set of structures that are
 all present rather than pointing at coordinates that have not arrived.
 
-`service/scripts/sync_structures.py` is the loop around it: it copies the finished coordinate
+`~/pepticraft-sync/sync_structures.py` is the loop around it: it copies the finished coordinate
 files across from the workstation, rebuilds the index and uploads, and repeats. A launch agent
 (`com.pepticraft.structure-sync`) runs it every thirty minutes, so a structure appears on the
-site as soon as it exists rather than at the end of the run. The scripts and the manifest sit in
+site as soon as it exists rather than at the end of the run. The script and the manifest sit in
 `~/pepticraft-sync` rather than in the repository, because a launch agent runs outside the
 desktop session's privacy grants and cannot reach `~/Documents`; the agent's plist also sets the
 proxy explicitly, since the session's environment variables are not inherited.

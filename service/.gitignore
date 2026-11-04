@@ -7,3 +7,15 @@ __pycache__/
 # The local fallback database is generated from local/fixture_local.sql on demand.
 local/*.sqlite3
 local/*.sqlite3-journal
+
+# Scripts that drive the folding run on the machines: the daily schedule, the split of work
+# between two of them, the progress page, and the loop that pulls finished coordinates across
+# and uploads them. They act on this workstation and on the folding machines rather than on
+# the site, so they are operations tooling and not project content.
+scripts/daycycle.sh
+scripts/split_fold_work.py
+scripts/progress_dashboard.py
+scripts/sync_structures.py
+
+# Its test, for the same reason: it imports a script that is no longer in the repository.
+tests/test_progress_dashboard.py

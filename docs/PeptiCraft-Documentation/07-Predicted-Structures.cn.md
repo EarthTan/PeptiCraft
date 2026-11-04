@@ -52,7 +52,7 @@ structure_lookup.json             construct_id|骨架|连接片段 → structure
 
 发布由 `service/scripts/publish_structures.py` 完成：先用 `service/scripts/build_structure_index.py` 重建索引（索引每次都从磁盘现状重建，因此跑批未结束时也能发布已完成的子集），再把桶里尚无的文件传上去。它走的是 HTTP API，用的是 wrangler 已经持有的 OAuth 令牌，不另需 R2 API token。上传是增量的：桶里已有且大小相同的文件不再重传。索引最后上传，因此中途被打断时，桶里描述的一定是一组全都到位的结构，而不是指向尚未到达的坐标。
 
-`service/scripts/sync_structures.py` 是包在外面的循环：从工作站拷贝已完成的坐标文件，重建索引，上传，然后重复。launch agent（`com.pepticraft.structure-sync`）每三十分钟跑一次，因此结构一算完就出现在站点上，而不是等整批跑完。脚本与清单放在 `~/pepticraft-sync` 而非仓库里——launch agent 运行在桌面会话的隐私授权之外，读不到 `~/Documents`；agent 的 plist 里也显式写了代理，因为会话的环境变量不会被继承。
+`~/pepticraft-sync/sync_structures.py` 是包在外面的循环：从工作站拷贝已完成的坐标文件，重建索引，上传，然后重复。launch agent（`com.pepticraft.structure-sync`）每三十分钟跑一次，因此结构一算完就出现在站点上，而不是等整批跑完。脚本与清单放在 `~/pepticraft-sync` 而非仓库里——launch agent 运行在桌面会话的隐私授权之外，读不到 `~/Documents`；agent 的 plist 里也显式写了代理，因为会话的环境变量不会被继承。
 
 ## 怎么呈现
 

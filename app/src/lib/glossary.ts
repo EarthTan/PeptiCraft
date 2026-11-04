@@ -28,6 +28,8 @@ export type GlossaryKey =
   | "route_gate"
   | "soft_signal"
   | "veto_gate"
+  | "multi_function"
+  | "control_arm"
 
 export const GLOSSARY: Record<GlossaryKey, string> = {
   composite:
@@ -96,6 +98,17 @@ export const GLOSSARY: Record<GlossaryKey, string> = {
   veto_gate:
     "A failure on this gate eliminates the candidate from the set. The three gates that can " +
     "eliminate are toxicity, haemolysis and immunogenicity.",
+
+  multi_function:
+    "More than one function can be held at once. The rows are then grouped by function and " +
+    "each group is ranked on its own, because the composite is normalised inside each " +
+    "function's own candidate pool. Two rows from different functions cannot be compared by " +
+    "their composite, and the # badge is each row's rank inside its own function.",
+
+  control_arm:
+    "A negative control. These rows carry real scores, but the pipeline wrote them to give a " +
+    "comparison baseline rather than to be candidates, so they are not part of the screened " +
+    "set. The Builder ranks the candidate arm only.",
 }
 
 /** The explanation that belongs to each safety verdict. */

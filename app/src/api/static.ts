@@ -335,7 +335,11 @@ async function constructList(params: URLSearchParams): Promise<unknown | null> {
     await ensureRouteTables()
   }
 
-  const direction = one(params, "direction")
+  const directions = params
+    .getAll("direction")
+    .flatMap((d) => d.split(","))
+    .map((d) => d.trim())
+    .filter(Boolean)
   const channel = one(params, "channel")
   const status = one(params, "status")
   // Trimmed like the service's own router, which strips the term before it reaches the query.
@@ -346,7 +350,9 @@ async function constructList(params: URLSearchParams): Promise<unknown | null> {
   const routeId = one(params, "route_id")
 
   let rows = allRows
-  if (direction) rows = rows.filter((r) => r.direction === direction)
+  // More than one direction may be held at once, so the filter is a membership test rather
+  // than an equality test.
+  if (directions.length > 0) rows = rows.filter((r) => directions.includes(r.direction))
   if (channel) rows = rows.filter((r) => r.channel === channel)
   if (status) rows = rows.filter((r) => r.status === status)
   if (search) {
@@ -376,10 +382,17 @@ async function constructList(params: URLSearchParams): Promise<unknown | null> {
   } else if (order === "peptide_id") {
     sorted.sort((a, b) => a.id.localeCompare(b.id))
   } else {
-    // The pipeline's own ordering within each direction and channel: rank ascending, with the
-    // rows that carry no rank after the ones that do, and the id as the final tiebreak so two
-    // requests over the same data cannot disagree about the order.
+    // The service's own ordering, reproduced: the rows are grouped by direction, each
+    // direction's top channel comes before its negative-control arm, and within a channel
+    // they follow the pipeline's rank with the rows that carry none last.
+    //
+    // The grouping matters once more than one direction is held at a time: without it the
+    // directions interleave by rank and the list stops reading as one block per direction.
+    // The direction comparison is by code point, which is the order the database returns the
+    // rows in, so the two agree on which block comes first.
     sorted.sort((a, b) => {
+      if (a.direction !== b.direction) return a.direction < b.direction ? -1 : 1
+      if (a.channel !== b.channel) return a.channel > b.channel ? -1 : 1
       const ra = a.rank ?? Number.MAX_SAFE_INTEGER
       const rb = b.rank ?? Number.MAX_SAFE_INTEGER
       return ra - rb || a.id.localeCompare(b.id)

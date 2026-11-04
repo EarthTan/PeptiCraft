@@ -108,7 +108,7 @@ def _dedupe(values: Iterable[str]) -> list[str]:
 def _candidate_rows(direction: str) -> tuple[list[dict[str, Any]], int]:
     """Every candidate the direction holds, and the stored count it came from."""
     rows, total = constructs_repo.list_constructs(
-        direction=direction,
+        directions=[direction],
         channel=CANDIDATE_CHANNEL,
         limit=CANDIDATE_CEILING,
         offset=0,

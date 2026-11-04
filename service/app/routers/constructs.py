@@ -49,6 +49,23 @@ def _validate_route(route_id: str | None) -> None:
         )
 
 
+def _split_directions(raw: list[str] | None) -> list[str]:
+    """Normalise the direction parameters into a list of ids.
+
+    Both spellings are accepted, as on the Builder endpoint: the parameter may be repeated
+    or one value may carry several ids separated by commas. The order they arrive in is kept
+    and duplicates are dropped, so a request that names the same direction twice filters the
+    same way as one that names it once.
+    """
+    values: list[str] = []
+    for entry in raw or []:
+        for part in entry.split(","):
+            name = part.strip()
+            if name and name not in values:
+                values.append(name)
+    return values
+
+
 def _validate_assembly(scaffold_id: str | None, linker_id: str | None) -> None:
     if scaffold_id is not None and scaffolds_repo.get_scaffold(scaffold_id) is None:
         raise HTTPException(status_code=404, detail=f"scaffold {scaffold_id!r} not found")
@@ -58,7 +75,13 @@ def _validate_assembly(scaffold_id: str | None, linker_id: str | None) -> None:
 
 @router.get("", response_model=ConstructPage)
 def list_constructs(
-    direction: str | None = Query(default=None, description="Stored direction value."),
+    direction: list[str] | None = Query(
+        default=None,
+        description="Stored direction values. The parameter may be repeated - "
+        "`?direction=antioxidant&direction=antibacterial` - to hold more than one function at "
+        "a time, or one value may carry several separated by commas. Omit it to list every "
+        "direction.",
+    ),
     channel: Literal["top", "bottom"] | None = Query(default=None),
     status: Literal["passed", "failed_safety", "failed_score", "WIP"] | None = Query(default=None),
     route_id: str | None = Query(
@@ -87,19 +110,26 @@ def list_constructs(
     `channel=bottom` returns the negative-control arm. Those rows are real and carry real
     scores, but they exist to give a comparison baseline rather than to be candidates, so a
     caller that wants candidates should filter on `channel=top`.
+
+    More than one direction may be held at once. The rows keep the pipeline's own ordering,
+    which groups them by direction and puts each direction's top channel before its
+    negative-control arm; the composite on each row is normalised within that row's own
+    direction, so the numbers of two directions are not comparable with one another.
     """
     _validate_route(route_id)
-    if direction is not None and direction not in reference.DIRECTIONS_BY_ID:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"unknown direction {direction!r}; expected one of "
-                f"{', '.join(reference.DIRECTIONS_BY_ID)}"
-            ),
-        )
+    directions = _split_directions(direction)
+    for name in directions:
+        if name not in reference.DIRECTIONS_BY_ID:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"unknown direction {name!r}; expected one of "
+                    f"{', '.join(reference.DIRECTIONS_BY_ID)}"
+                ),
+            )
 
     rows, total = repo.list_constructs(
-        direction=direction, channel=channel, status=status,
+        directions=directions, channel=channel, status=status,
         search=search.strip() if search else None,
         order=order,
         limit=limit, offset=offset,

@@ -255,6 +255,7 @@ console.log('\nconstruct list: filters, search, ordering, pagination')
 {
   const staticMod = await loadAppModule('api/static.ts')
   const call = (q) => staticMod.serveStatic('GET', '/api/constructs', new URLSearchParams(q))
+  const callWith = (params) => staticMod.serveStatic('GET', '/api/constructs', params)
 
   const all = await call({ limit: '500' })
   check('every construct is listed', all.total >= 4, all.total)
@@ -269,6 +270,49 @@ console.log('\nconstruct list: filters, search, ordering, pagination')
     single.total <= all.total && single.items.every((r) => r.direction === single.items[0].direction),
     `${single.total} of ${all.total}`,
   )
+
+  // More than one function at a time. The parameter may be repeated or may carry several ids
+  // in one value, and the two spellings have to select the same rows — otherwise the same
+  // selection would list different constructs in development and in the deployment.
+  const firstDirection = all.items[0].direction
+  const secondDirection = all.items.find((r) => r.direction !== firstDirection)?.direction
+  if (secondDirection) {
+    const comma = await call({ direction: `${firstDirection},${secondDirection}`, limit: '500' })
+    const repeatedParams = new URLSearchParams({ limit: '500' })
+    repeatedParams.append('direction', firstDirection)
+    repeatedParams.append('direction', secondDirection)
+    const repeated = await callWith(repeatedParams)
+    const held = new Set([firstDirection, secondDirection])
+
+    check(
+      'two directions select the rows of both',
+      comma.total === repeated.total &&
+        comma.items.length === repeated.items.length &&
+        comma.items.every((r) => held.has(r.direction)) &&
+        comma.items.length === comma.total,
+      `${comma.total} rows for ${[...held].join(' + ')}`,
+    )
+    check(
+      'the repeated and the comma-separated spellings select the same rows',
+      comma.total === repeated.total &&
+        comma.items.map((r) => r.id).join() === repeated.items.map((r) => r.id).join(),
+      `${comma.total} vs ${repeated.total}`,
+    )
+    check(
+      'holding two directions returns more rows than holding one',
+      comma.total > single.total,
+      `${comma.total} against ${single.total}`,
+    )
+    check(
+      'naming a direction twice does not double the rows',
+      (await callWith((() => {
+        const params = new URLSearchParams({ limit: '500' })
+        params.append('direction', firstDirection)
+        params.append('direction', firstDirection)
+        return params
+      })())).total === single.total,
+    )
+  }
 
   const seq = all.items[0].peptide_sequence
   const needle = seq.slice(1, 4)
@@ -347,12 +391,37 @@ console.log('\nconstruct list: filters, search, ordering, pagination')
     lengths.join(','),
   )
 
+  // The service orders by direction, then puts each direction's top channel before its
+  // negative-control arm, then by the pipeline's rank. The static layer has to reproduce that
+  // rule rather than a rule of its own: a list that ranked globally would interleave the
+  // directions, which is exactly what stops a reader comparing one function's block with
+  // another's.
   const byRank = await call({ order: 'rank', limit: '500' })
-  const ranks = byRank.items.filter((r) => r.rank !== null).map((r) => r.rank)
+  const blocks = []
+  for (const row of byRank.items) {
+    const key = `${row.direction}/${row.channel}`
+    const current = blocks[blocks.length - 1]
+    if (!current || current.key !== key) blocks.push({ key, ranks: [] })
+    blocks[blocks.length - 1].ranks.push(row.rank)
+  }
   check(
-    'ordering by rank is ascending',
-    ranks.every((n, i) => i === 0 || ranks[i - 1] <= n),
-    ranks.join(','),
+    'each direction and channel forms one contiguous block',
+    new Set(blocks.map((block) => block.key)).size === blocks.length,
+    blocks.map((block) => block.key).join(' '),
+  )
+  check(
+    'the ranks ascend inside every block',
+    blocks.every((block) =>
+      block.ranks.every((n, i) => i === 0 || block.ranks[i - 1] <= n),
+    ),
+  )
+  check(
+    'a direction keeps its top channel above its control arm',
+    blocks.every((block, i) => {
+      const earlier = blocks.slice(0, i).find((b) => b.key.startsWith(`${block.key.split('/')[0]}/`))
+      return !earlier || earlier.key.endsWith('/top')
+    }),
+    blocks.map((block) => block.key).join(' '),
   )
 
   const page0 = await call({ limit: '1', offset: '0' })

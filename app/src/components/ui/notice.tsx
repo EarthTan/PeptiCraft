@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { AlertTriangle, Info, TriangleAlert } from "lucide-react"
+import { AlertTriangle, ChevronRight, Info, TriangleAlert } from "lucide-react"
 
 import { GLOSSARY } from "@/lib/glossary"
 import { cn } from "@/lib/utils"
@@ -66,6 +66,46 @@ export function Notice({
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * The same statement, folded away until it is asked for.
+ *
+ * A notice that travels with a block of results can crowd it out: three paragraphs of
+ * qualification above a list of candidates push the candidates below the fold. Folding the
+ * notice keeps the qualification attached to what it qualifies while leaving the results
+ * visible, and the title alone still says what the note is about, so nothing is hidden
+ * behind an unlabelled control.
+ */
+export function CollapsibleNotice({
+  tone = "caution",
+  title,
+  children,
+  className,
+}: {
+  tone?: NoticeTone
+  title: string
+  children?: ReactNode
+  className?: string
+}) {
+  const skin = TONE[tone]
+  const Icon = skin.Icon
+
+  return (
+    <details className={cn("group rounded-lg border", skin.wrap, className)}>
+      <summary className="flex items-center gap-2.5 cursor-pointer list-none p-3 [&::-webkit-details-marker]:hidden">
+        <Icon className={cn("w-4 h-4 flex-shrink-0", skin.icon)} />
+        <span className={cn("text-xs font-semibold flex-1 min-w-0", skin.title)}>{title}</span>
+        <ChevronRight className={cn(
+          "w-4 h-4 flex-shrink-0 transition-transform group-open:rotate-90",
+          skin.icon,
+        )} />
+      </summary>
+      {children && (
+        <div className={cn("px-3 pb-3 ml-[26px] text-xs leading-relaxed", skin.body)}>{children}</div>
+      )}
+    </details>
   )
 }
 

@@ -425,7 +425,7 @@ def _direction_peers(direction: str, limit: int = 5, route_id: str | None = None
     from ..repositories import constructs as repo
     from . import constructs as construct_service
 
-    rows, _ = repo.list_constructs(direction=direction, channel="top", limit=500, offset=0)
+    rows, _ = repo.list_constructs(directions=[direction], channel="top", limit=500, offset=0)
     if not rows:
         return []
     enriched = construct_service.load_enrichment(rows)

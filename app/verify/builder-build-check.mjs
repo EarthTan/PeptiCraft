@@ -248,6 +248,11 @@ check(
   linkers.every((linker) => (host.textContent ?? '').includes(linker.name)),
   `${linkers.length} entries in the library`,
 )
+// The step's two notes about the linker sit behind one control, so the check opens it before
+// it reads what is behind it. A note that is folded away is still there, but the assertion
+// is about the note existing, not about it being in view.
+const learnMore = buttonContaining('Learn More')
+if (learnMore) await click(learnMore, 'the Learn More control')
 check(
   'the step states that the linker does not filter the candidates either',
   (host.textContent ?? '').includes('not a filter'),

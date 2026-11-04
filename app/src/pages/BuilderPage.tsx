@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ErrorState } from "@/components/ui/error-state"
 import { CardGridSkeleton, ListSkeleton } from "@/components/ui/loading-state"
-import { Notice } from "@/components/ui/notice"
+import { CollapsibleNotice, Notice } from "@/components/ui/notice"
 import { InfoTip } from "@/components/ui/tooltip"
 import { StructureViewer } from "@/components/structure-viewer"
 import { BuildNameDialog } from "@/components/build-history"
@@ -19,6 +19,7 @@ import {
   Bot,
   Box,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Eye,
   FlaskConical,
@@ -193,6 +194,11 @@ export default function BuilderPage() {
   const [scaffoldId, setScaffoldId] = useState(boot.session.scaffold_id)
   const [linkerId, setLinkerId] = useState(boot.session.linker_id)
   const [formFilter, setFormFilter] = useState<MaterialForm | "all">("all")
+
+  // Step 4 carries two long passages about how the linker order is decided and what choosing
+  // one does not change. Both are true and both are qualifications rather than instructions,
+  // so they sit behind a single control the reader opens when the reasoning is wanted.
+  const [linkerNotesOpen, setLinkerNotesOpen] = useState(false)
 
   // The name of the build in progress. Every build that reaches its results is recorded
   // under it, so it is asked for before the choices are made rather than after them.
@@ -640,28 +646,49 @@ export default function BuilderPage() {
               library's recommendation order, most suitable first, and the entry the reader does
               not change is the one at the top.
             </p>
-            <p className="text-xs text-gray-400 mb-4 max-w-3xl leading-relaxed">
-              The order follows one argument rather than a measurement: a short functional
-              peptide has to stay reachable on the outside of a large structural protein, so
-              flexible Gly-Ser linkers come first - they hold the peptide clear without occluding
-              it and without disturbing the scaffold's own assembly - and the rigid α-helical and
-              proline entries come last, because fixing the geometry is a specialist answer
-              rather than a default. Every entry states why it sits where it does when it is
-              selected. No experiment in the pipeline compared two linkers on one fusion, so the
-              order is a judgement about assembly, not a claim about activity.
-            </p>
 
-            <Notice
-              tone="caution"
-              title="The linker is an assembly target, not a filter"
-              className="mb-4"
+            <button
+              type="button"
+              onClick={() => setLinkerNotesOpen((open) => !open)}
+              aria-expanded={linkerNotesOpen}
+              className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-800 cursor-pointer"
             >
-              Every stored construct records the same sample-table entry, which the assembly
-              script attached as the first available row rather than chose. Choosing here
-              therefore does not narrow the candidate list below, and it changes no score. What
-              it changes is the sequence each candidate is built into on the next step, and the
-              fused length reported beside it.
-            </Notice>
+              {linkerNotesOpen ? "Show less" : "Learn More"}
+              <ChevronDown
+                className={cn(
+                  "w-3.5 h-3.5 transition-transform",
+                  linkerNotesOpen && "rotate-180",
+                )}
+              />
+            </button>
+
+            {linkerNotesOpen && (
+              <>
+                <p className="text-xs text-gray-400 mb-4 max-w-3xl leading-relaxed">
+                  The order follows one argument rather than a measurement: a short functional
+                  peptide has to stay reachable on the outside of a large structural protein, so
+                  flexible Gly-Ser linkers come first - they hold the peptide clear without
+                  occluding it and without disturbing the scaffold's own assembly - and the rigid
+                  α-helical and proline entries come last, because fixing the geometry is a
+                  specialist answer rather than a default. Every entry states why it sits where it
+                  does when it is selected. No experiment in the pipeline compared two linkers on
+                  one fusion, so the order is a judgement about assembly, not a claim about
+                  activity.
+                </p>
+
+                <Notice
+                  tone="caution"
+                  title="The linker is an assembly target, not a filter"
+                  className="mb-4"
+                >
+                  Every stored construct records the same sample-table entry, which the assembly
+                  script attached as the first available row rather than chose. Choosing here
+                  therefore does not narrow the candidate list below, and it changes no score.
+                  What it changes is the sequence each candidate is built into on the next step,
+                  and the fused length reported beside it.
+                </Notice>
+              </>
+            )}
 
             <div className="space-y-2">
               {linkers.map((linker) => (
@@ -1424,15 +1451,15 @@ function ResultStep({
 
       {data && (
         <div className="space-y-2 mb-6">
-          <Notice tone="info" title="Where the scaffold assignment came from">
+          <CollapsibleNotice tone="info" title="Where the scaffold assignment came from">
             {data.binding_note}
-          </Notice>
-          <Notice tone="info" title="Where the linker came from">
+          </CollapsibleNotice>
+          <CollapsibleNotice tone="info" title="Where the linker came from">
             {data.linker_note}
-          </Notice>
-          <Notice tone="caution" title="What these scores describe">
+          </CollapsibleNotice>
+          <CollapsibleNotice tone="caution" title="What these scores describe">
             {data.scope_note}
-          </Notice>
+          </CollapsibleNotice>
         </div>
       )}
 

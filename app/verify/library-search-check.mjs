@@ -255,9 +255,138 @@ if (field) {
     text().includes('Nothing matches') || rowsInDom() === 0)
 
   await click(buttonContaining('Clear'), 'Clear')
-  await waitFor(() => text().includes('constructs match'), 'the restored list')
+  await waitFor(() => rowsInDom() > 0, 'the restored list')
   check('clearing the field restores the full list',
-    !text().includes('Nothing matches'))
+    !text().includes('Nothing matches') && rowsInDom() > 0)
+}
+
+// ---------------------------------------------------------------------------
+// The function filter holds more than one at a time
+// ---------------------------------------------------------------------------
+
+console.log('\n=== More than one function can be held at once ===')
+
+const directionOf = (node) => {
+  const badge = [...node.querySelectorAll('div')].find((d) =>
+    ['Antioxidant', 'Antibacterial', 'Anti-inflammatory', 'Anti-melanin Deposition'].includes(
+      d.textContent?.trim() ?? '',
+    ),
+  )
+  return badge?.textContent?.trim() ?? null
+}
+
+const directionsOnScreen = () =>
+  [...host.querySelectorAll('[data-construct-id]')].map(directionOf)
+
+/** The line that says how many constructs match. */
+const countLine = () => {
+  const node = [...host.querySelectorAll('p')].find((p) =>
+    /constructs? match/.test(p.textContent ?? ''),
+  )
+  return node?.textContent ?? ''
+}
+
+const totalMatched = () => (countLine().match(/(\d+) constructs? match/) ?? [])[1] ?? ''
+
+/**
+ * Wait for the list to carry the directions that were asked for.
+ *
+ * The rows stay on screen while a request is in flight and are replaced when it lands, so
+ * reading them straight after a click reads the previous selection. Waiting for the rows to
+ * match the selection is what makes the assertion about the new list rather than the old one.
+ */
+const rowsShow = (wanted) =>
+  waitFor(() => {
+    const shown = directionsOnScreen().filter(Boolean)
+    return shown.length > 0 && shown.every((d) => wanted.includes(d))
+  }, `the rows for ${wanted.join(' + ')}`)
+
+const antioxidant = host.querySelector('[data-direction="antioxidant"]')
+const antibacterial = host.querySelector('[data-direction="antibacterial"]')
+const allChip = host.querySelector('[data-filter="all-functions"]')
+check('the function chips are offered', Boolean(antioxidant && antibacterial && allChip))
+
+if (antioxidant && antibacterial && allChip) {
+  // The whole library, as the service counts it. The page's own count line is compared
+  // against this, so the check does not depend on how many rows fit on a page.
+  const fullTotal = String(allRows.total)
+  await waitFor(() => totalMatched() === fullTotal, 'the unfiltered list')
+
+  await click(antioxidant, 'the antioxidant chip')
+  await waitFor(
+    () => requested.some((u) => u.includes('direction=antioxidant')),
+    'the direction request',
+  )
+  await rowsShow(['Antioxidant'])
+  check(
+    'choosing a function sends it to the service',
+    requested.some((u) => u.includes('direction=antioxidant')),
+  )
+  const held = directionsOnScreen().filter(Boolean)
+  check(
+    'the list narrows to the chosen function',
+    held.length > 0 && held.every((d) => d === 'Antioxidant'),
+    held.join(','),
+  )
+
+  await click(antibacterial, 'the antibacterial chip')
+  await waitFor(
+    () =>
+      requested.some(
+        (u) => u.includes('direction=antioxidant') && u.includes('direction=antibacterial'),
+      ),
+    'the second direction request',
+  )
+  await rowsShow(['Antioxidant', 'Antibacterial'])
+  check(
+    'holding a second function sends both to the service',
+    requested.some(
+      (u) => u.includes('direction=antioxidant') && u.includes('direction=antibacterial'),
+    ),
+    requested.filter((u) => u.startsWith('/api/constructs?')).slice(-1)[0],
+  )
+  const both = directionsOnScreen().filter(Boolean)
+  check(
+    'the list holds only the chosen functions',
+    both.length > 0 &&
+      [...new Set(both)].every((d) => ['Antioxidant', 'Antibacterial'].includes(d)),
+    [...new Set(both)].join(','),
+  )
+  check(
+    'the page says the composite cannot be compared across functions',
+    text().includes('functions are held at once'),
+  )
+  check(
+    'the count line names both functions',
+    text().includes('Antioxidant + Antibacterial'),
+  )
+
+  // Clicking a held function again lets it go, and the "All" chip clears the rest.
+  await click(antibacterial, 'the antibacterial chip again')
+  await waitFor(
+    () => !requested.at(-1)?.includes('direction=antibacterial'),
+    'the narrowed request',
+  )
+  await rowsShow(['Antioxidant'])
+  check(
+    'clicking a held function again lets it go',
+    !requested.at(-1)?.includes('direction=antibacterial'),
+    requested.at(-1),
+  )
+
+  await click(allChip, 'the All chip')
+  await waitFor(() => !requested.at(-1)?.includes('direction='), 'the unfiltered request')
+  await waitFor(() => totalMatched() === fullTotal, 'the unfiltered count')
+  check(
+    'the All chip clears the selection',
+    !requested.at(-1)?.includes('direction='),
+    requested.at(-1),
+  )
+  check(
+    'the full list is back',
+    totalMatched() === fullTotal,
+    `${totalMatched()} against ${fullTotal}`,
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -271,15 +400,15 @@ for (const label of sortLabels) {
   check(`the sort control offers "${label}"`, Boolean(buttonContaining(label)))
 }
 
-const totalBeforeSort = text()
+const totalBeforeSort = totalMatched()
 await click(buttonContaining('Peptide length'), 'the length sort')
 await waitFor(() => requested.some((u) => u.includes('order=peptide_length')), 'the length order')
 check(
   'choosing a sort sends it to the service',
   requested.some((u) => u.includes('order=peptide_length')),
 )
-check('sorting does not change how many constructs match', totalBeforeSort === text(),
-  `${totalBeforeSort} -> ${text()}`)
+check('sorting does not change how many constructs match', totalBeforeSort === totalMatched(),
+  `${totalBeforeSort} -> ${totalMatched()}`)
 
 // ---------------------------------------------------------------------------
 // Pagination
@@ -311,6 +440,14 @@ if (pagingNeeded) {
   await waitFor(() => requested.some((u) => u.includes('offset=25')), 'the second page request')
   check('the second page is fetched by offset rather than by a larger limit',
     requested.some((u) => u.includes('offset=25')))
+  // The rows stay on screen while the request is in flight, so the new page has to be waited
+  // for rather than read at once: reading straight away reads the page that is still there.
+  await waitFor(() => {
+    const ids = [...host.querySelectorAll('[data-construct-id]')].map((n) =>
+      n.getAttribute('data-construct-id'),
+    )
+    return ids.length > 0 && ids[0] !== firstPageIds[0]
+  }, 'the second page rows')
   const secondPageIds = [...host.querySelectorAll('[data-construct-id]')].map((n) =>
     n.getAttribute('data-construct-id'),
   )

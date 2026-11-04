@@ -70,7 +70,7 @@ _PEPTIDES_JOIN = "JOIN peptides sp ON sp.id = c.peptide_id"
 
 
 def _where(
-    direction: str | None,
+    directions: Sequence[str] | None,
     channel: str | None,
     status: str | None,
     min_rank: int | None,
@@ -90,13 +90,18 @@ def _where(
     because the two engines disagree on the default: Postgres already reads a backslash as an
     escape, SQLite does not, so without it the same term would match different rows on the
     real database and on the local fixture.
+
+    The direction filter takes a list rather than a single value, because the Library lets a
+    reader hold more than one function at a time. `= ANY(%s)` is the form both backends can
+    answer: the SQLite fallback rewrites it into an `IN` list, so the same statement selects
+    the same rows against either one.
     """
     clauses: list[str] = []
     params: list[Any] = []
     join = ""
-    if direction:
-        clauses.append("c.direction = %s")
-        params.append(direction)
+    if directions:
+        clauses.append("c.direction = ANY(%s)")
+        params.append(list(directions))
     if channel:
         clauses.append("c.channel = %s")
         params.append(channel)
@@ -133,7 +138,7 @@ def _escape_like(term: str) -> str:
 
 def list_constructs(
     *,
-    direction: str | None = None,
+    directions: Sequence[str] | None = None,
     channel: str | None = None,
     status: str | None = None,
     min_rank: int | None = None,
@@ -142,7 +147,7 @@ def list_constructs(
     offset: int = 0,
     order: str = "rank",
 ) -> tuple[list[dict[str, Any]], int]:
-    where, params, join = _where(direction, channel, status, min_rank, search)
+    where, params, join = _where(directions, channel, status, min_rank, search)
     order_by = _ORDER.get(order, _ORDER["rank"])
     if order in _ORDER_NEEDS_PEPTIDES and not join:
         join = _PEPTIDES_JOIN

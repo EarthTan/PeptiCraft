@@ -176,7 +176,7 @@ def _raw_component_values(direction: str) -> tuple[dict[str, list[float]], int, 
     per direction, so this is a pair of small queries and the result is cached.
     """
     rows, _ = constructs_repo.list_constructs(
-        direction=direction, channel="top", limit=1000, offset=0
+        directions=[direction], channel="top", limit=1000, offset=0
     )
     if not rows:
         return {}, 0, {}

@@ -202,7 +202,10 @@ function PeptidesPanel({
   reference: ReferenceData | null
   loading: boolean
 }) {
-  const [direction, setDirection] = useState<string>("all")
+  // The functions a reader is holding at once. An empty set means every direction, so the
+  // "All" chip is the state of holding nothing rather than a direction of its own.
+  const [directions, setDirections] = useState<string[]>([])
+  const [channel, setChannel] = useState<"all" | "top">("all")
   const [routeId, setRouteId] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [order, setOrder] = useState<SortOrder>("rank")
@@ -222,24 +225,26 @@ function PeptidesPanel({
   const load = useCallback(async () => {
     if (!effectiveRoute) return null
     return fetchConstructs({
-      direction: direction === "all" ? null : direction,
+      direction: directions.length > 0 ? directions : null,
+      channel: channel === "all" ? null : channel,
       route_id: effectiveRoute,
       search: search || null,
       order,
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
     })
-  }, [direction, effectiveRoute, search, order, page])
+  }, [directions, channel, effectiveRoute, search, order, page])
 
   const { data, loading: rowsLoading, error, reload, refreshing } = useAsync(load, [
-    direction,
+    directions,
+    channel,
     effectiveRoute,
     search,
     order,
     page,
   ])
 
-  const directions = reference?.directions ?? []
+  const directionList = reference?.directions ?? []
   const rows = data?.items ?? []
   const total = data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -248,10 +253,27 @@ function PeptidesPanel({
   // the same render as the page it applies to, so no intermediate frame shows a stale number.
   const currentPage = Math.min(page, pageCount - 1)
 
-  const selectDirection = (id: string) => {
-    setDirection(id)
+  const toggleDirection = (id: string) => {
+    setDirections((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    )
     setPage(0)
     setExpandedId(null)
+  }
+
+  /**
+   * How many rows an arm holds under the functions the reader is holding.
+   *
+   * The counts follow the selection rather than the whole library, so the two rows describe
+   * the same set as the list below them: holding two functions and asking for the candidate
+   * arm has to answer with the two functions' candidates, not with all of them.
+   */
+  const scopeCount = (key: "total" | "top" | "bottom") => {
+    const scope =
+      directions.length > 0
+        ? directionList.filter((item) => directions.includes(item.id))
+        : directionList
+    return scope.reduce((sum, item) => sum + (item.counts?.[key] ?? 0), 0)
   }
 
   if (loading || !reference) {
@@ -267,19 +289,27 @@ function PeptidesPanel({
       <section className="border-b border-gray-200 bg-surface-alt/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-gray-400 mr-1">Function:</span>
+            <span className="text-xs text-gray-400 mr-1 inline-flex items-center gap-1">
+              Function:
+              <InfoTip content={GLOSSARY.multi_function} />
+            </span>
             <FilterChip
-              active={direction === "all"}
-              onClick={() => selectDirection("all")}
+              active={directions.length === 0}
+              onClick={() => {
+                setDirections([])
+                setPage(0)
+                setExpandedId(null)
+              }}
               label="All"
-              count={directions.reduce((sum, item) => sum + item.construct_count, 0)}
+              count={directionList.reduce((sum, item) => sum + item.construct_count, 0)}
+              filter="all-functions"
             />
-            {directions.map((item) => (
+            {directionList.map((item) => (
               <span key={item.id} className="inline-flex items-center gap-1">
                 <DirectionChip
                   direction={item}
-                  active={direction === item.id}
-                  onClick={() => selectDirection(item.id)}
+                  active={directions.includes(item.id)}
+                  onClick={() => toggleDirection(item.id)}
                 />
                 {item.status === "wip" && (
                   <>
@@ -289,6 +319,35 @@ function PeptidesPanel({
                 )}
               </span>
             ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-gray-400 mr-1 inline-flex items-center gap-1">
+              Arm:
+              <InfoTip content={GLOSSARY.control_arm} />
+            </span>
+            <FilterChip
+              active={channel === "all"}
+              onClick={() => {
+                setChannel("all")
+                setPage(0)
+                setExpandedId(null)
+              }}
+              label="All rows"
+              count={scopeCount("total")}
+              filter="all-rows"
+            />
+            <FilterChip
+              active={channel === "top"}
+              onClick={() => {
+                setChannel("top")
+                setPage(0)
+                setExpandedId(null)
+              }}
+              label="Candidates only"
+              count={scopeCount("top")}
+              filter="candidates-only"
+            />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -356,6 +415,16 @@ function PeptidesPanel({
             the one gate where a lower value is safer: it is the predicted MHC-I presentation
             score, so a higher number means stronger predicted binding and greater risk.
           </p>
+
+          {directions.length > 1 && (
+            <p className="text-xs text-gray-400">
+              <strong>{directions.length} functions are held at once</strong>, so the rows are
+              grouped by function and each group is ranked on its own. The composite is
+              normalised inside each function's own pool, so composites from different
+              functions are not comparable; the # badge is each construct's rank inside its own
+              function.
+            </p>
+          )}
         </div>
       </section>
 
@@ -368,6 +437,17 @@ function PeptidesPanel({
             <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
               <p className="text-xs text-gray-400">
                 {total.toLocaleString()} construct{total === 1 ? "" : "s"} match
+                {directions.length > 0 && (
+                  <>
+                    {" in "}
+                    <span className="text-gray-600">
+                      {directionList
+                        .filter((item) => directions.includes(item.id))
+                        .map((item) => item.name)
+                        .join(" + ")}
+                    </span>
+                  </>
+                )}
                 {search ? (
                   <>
                     {" "}
@@ -461,6 +541,7 @@ function DirectionChip({
     <button
       onClick={onClick}
       disabled={unavailable}
+      data-direction={direction.id}
       className={cn(
         "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-all duration-200",
         unavailable
@@ -527,6 +608,17 @@ function ConstructRow({
               <Badge variant="secondary" className="text-[10px]">
                 {construct.direction_label}
               </Badge>
+              {/* The negative-control arm carries real scores but was written as a
+                  comparison baseline, not as a candidate. Without a marker it reads as one
+                  more screened candidate. */}
+              {construct.channel === "bottom" && (
+                <span className="inline-flex items-center gap-1">
+                  <Badge variant="outline" className="text-[10px] text-gray-400">
+                    Control
+                  </Badge>
+                  <InfoTip content={GLOSSARY.control_arm} />
+                </span>
+              )}
               {!isCandidate && (
                 <span className="inline-flex items-center gap-1">
                   <Badge variant="warning" className="text-[10px]">
@@ -733,6 +825,7 @@ function ScaffoldPanel({
               onClick={() => setCategory("all")}
               label="All"
               count={scaffolds.length}
+              filter="all-categories"
             />
             {reference.categories.map((group) => (
               <FilterChip
@@ -741,6 +834,7 @@ function ScaffoldPanel({
                 onClick={() => setCategory(group.id)}
                 label={group.label}
                 count={group.scaffold_ids.length}
+                filter={`category-${group.id}`}
               />
             ))}
           </div>
@@ -874,6 +968,7 @@ function LinkerPanel({ linkers, loading }: { linkers: LinkerView[]; loading: boo
               onClick={() => setRigidity("all")}
               label="All"
               count={linkers.length}
+              filter="all-rigidities"
             />
             {counts.map((entry) => (
               <FilterChip
@@ -882,6 +977,7 @@ function LinkerPanel({ linkers, loading }: { linkers: LinkerView[]; loading: boo
                 onClick={() => setRigidity(entry.id)}
                 label={entry.id}
                 count={entry.count}
+                filter={`rigidity-${entry.id}`}
               />
             ))}
           </div>
@@ -953,6 +1049,7 @@ function FilterChip({
   label,
   count,
   icon,
+  filter,
 }: {
   active: boolean
   onClick: () => void
@@ -960,11 +1057,14 @@ function FilterChip({
   label: string
   count: number
   icon?: ReactNode
+  /** A stable name for the control, so a check can address this chip and not another. */
+  filter: string
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      data-filter={filter}
       className={cn(
         "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-all duration-200",
         disabled

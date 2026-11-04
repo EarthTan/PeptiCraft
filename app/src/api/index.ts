@@ -27,12 +27,22 @@ import type {
   ToolDefinition,
 } from "./types"
 
-type QueryValue = string | number | boolean | null | undefined
+type QueryValue = string | number | boolean | null | undefined | (string | number)[]
 
 function queryString(params: Record<string, QueryValue>): string {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value === null || value === undefined || value === "") continue
+    // A list travels as a repeated parameter rather than a joined string: a direction id is
+    // free-form text, and any separator the ids could contain would merge two requests into
+    // one.
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item === null || item === undefined || item === "") continue
+        search.append(key, String(item))
+      }
+      continue
+    }
     search.set(key, String(value))
   }
   const rendered = search.toString()
@@ -75,7 +85,8 @@ export function fetchPipeline(): Promise<PipelineView> {
 // ── Constructs ──────────────────────────────────────────────────────────────
 
 export interface ConstructQuery {
-  direction?: string | null
+  /** One or more function directions. An empty list or `null` lists every direction. */
+  direction?: string[] | null
   channel?: "top" | "bottom" | null
   status?: "passed" | "failed_safety" | "failed_score" | "WIP" | null
   /** Application route whose screening profile the composite and safety verdict use. */

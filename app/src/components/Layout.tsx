@@ -86,9 +86,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/" aria-label="PeptiCraft home" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 rounded-lg gradient-accent flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
-                <Dna className="w-5 h-5 text-white" />
-              </div>
+              <svg viewBox="115 140 580 820" className="h-12 w-10" aria-hidden="true"><image href="/brand/pepticraft.png" width="800" height="1200" /></svg>
               <span className="text-lg font-bold text-primary-900 tracking-tight">
                 PeptiCraft
               </span>

@@ -1,3 +1,6 @@
+import { functionalScoreTiles } from "@/lib/functional-scores"
+import { listBuildRecords } from "@/lib/buildRecords"
+import { sequenceColor, sequenceWeight } from "@/lib/sequence-colors"
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { Link, useParams, useSearchParams } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -253,7 +256,7 @@ export default function ResultsPage() {
       context_key: contextKey,
     }
     // The turns before this one travel as history; this question travels as the question. It
-    // is shown in the transcript immediately — that is what the reader just typed — but it is
+    // is shown in the transcript immediately - that is what the reader just typed - but it is
     // not also sent as history, or the model would read it twice and tend to answer the first
     // copy, the one with no fact block under it.
     setConversation({ contextKey, messages: [...messages, outgoing], input: "", pending: true })
@@ -365,7 +368,7 @@ export default function ResultsPage() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <Badge variant="accent">Construct</Badge>
-                {detail.rank !== null && <Badge variant="outline">#{detail.rank}</Badge>}
+
                 <Badge variant="outline">{detail.direction_label}</Badge>
                 <Badge variant={skin.badge} className="text-xs">
                   {skin.label}
@@ -395,7 +398,7 @@ export default function ResultsPage() {
             </div>
 
             <div className="text-left sm:text-right flex-shrink-0">
-              <p className="text-xs text-gray-400">Composite · {activeRouteName}</p>
+              <p className="text-xs text-gray-400">Developability score · {activeRouteName}</p>
               <p className="text-5xl font-extrabold gradient-accent-text font-mono leading-none mt-1">
                 {formatScore(detail.scores.composite)}
               </p>
@@ -443,6 +446,7 @@ export default function ResultsPage() {
                 reference={reference}
                 activeRouteId={routeId}
                 activeRouteName={activeRouteName}
+                selectedFunctions={listBuildRecords().find(record => record.id === fromBuild)?.params.direction ?? [detail.direction]}
                 previewingPairing={Boolean(scaffoldId || linkerId)}
                 onSelectRoute={setRoute}
               />
@@ -506,11 +510,11 @@ export default function ResultsPage() {
               </CardHeader>
               <CardContent className="space-y-2.5">
                 <StatRow
-                  label={`Composite · ${activeRouteName}`}
+                  label={`Developability · ${activeRouteName}`}
                   value={formatScore(detail.scores.composite)}
                   highlight
                 />
-                <StatRow label="Rank" value={detail.rank !== null ? `#${detail.rank}` : "—"} />
+
                 <StatRow label="Function" value={detail.direction_label} />
                 <StatRow
                   label="Scaffold"
@@ -522,7 +526,7 @@ export default function ResultsPage() {
                   value={detail.backbone_binding}
                   tone={detail.backbone_binding === "placeholder" ? "danger" : "ok"}
                 />
-                <StatRow label="Linker" value={detail.linker?.name ?? "—"} />
+                <StatRow label="Linker" value={detail.linker?.name ?? "-"} />
                 <StatRow label="Safety gates" value={skin.label} tone={skin.dot === "bg-accent-500" ? "ok" : "danger"} />
 
                 <div className="pt-2 border-t border-gray-100">
@@ -696,7 +700,7 @@ export default function ResultsPage() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Tab 1 — peptide
+// Tab 1 - peptide
 // ════════════════════════════════════════════════════════════════════════════
 
 function PeptideTab({ detail }: { detail: ConstructDetail }) {
@@ -707,7 +711,7 @@ function PeptideTab({ detail }: { detail: ConstructDetail }) {
     {
       label: "MHC-II percent rank (NetMHCIIpan)",
       value: supplementary.immunogenicity_ii_pct_rank,
-      note: "0–100, lower is a stronger binder. A percent rank, not a probability.",
+      note: "0-100, lower is a stronger binder. A percent rank, not a probability.",
     },
     {
       label: "Allergenicity (AlgPred2)",
@@ -871,7 +875,7 @@ function PeptideTab({ detail }: { detail: ConstructDetail }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Tab 2 — construct
+// Tab 2 - construct
 // ════════════════════════════════════════════════════════════════════════════
 
 function ConstructTab({
@@ -880,6 +884,7 @@ function ConstructTab({
   activeRouteId,
   activeRouteName,
   previewingPairing,
+  selectedFunctions,
   onSelectRoute,
 }: {
   detail: ConstructDetail
@@ -888,10 +893,12 @@ function ConstructTab({
   activeRouteName: string
   /** Whether the URL names a scaffold or a linker, which the page shows as a preview. */
   previewingPairing: boolean
+  selectedFunctions: string[]
   onSelectRoute: (routeId: string) => void
 }) {
   const [copied, setCopied] = useState(false)
   const aggregation = detail.supplementary.aggregation_a3v
+  const functionTiles = functionalScoreTiles(detail, reference, selectedFunctions)
 
   const copySequence = () => {
     if (!detail.full_sequence) return
@@ -909,32 +916,18 @@ function ConstructTab({
             Construct Overview
           </CardTitle>
           <CardDescription>
-            Composite under the {activeRouteName} profile, the rank in the stored library, and the
-            aggregation propensity the pipeline computes at assembly.
+            Functional prediction scores and the Winsor-weighted developability score for {activeRouteName}.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             <ScoreTile
-              label="Composite"
+              label="Winsor-weighted developability"
               value={formatScore(detail.scores.composite)}
-              tone={
-                detail.scores.composite === null
-                  ? "neutral"
-                  : detail.scores.composite >= 0.8
-                    ? "ok"
-                    : detail.scores.composite >= 0.6
-                      ? "warn"
-                      : "danger"
-              }
-              footnote={activeRouteName}
-            />
-            <ScoreTile
-              label="Rank"
-              value={detail.rank !== null ? `#${detail.rank}` : "—"}
               tone="neutral"
-              footnote="stored library order"
+              footnote={`0-1 comparison score for ${activeRouteName}. Higher scores indicate stronger combined developability signals under this route's weights.`}
             />
+            {functionTiles.map(item => <ScoreTile key={item.id} label={`${item.label} prediction`} value={formatScore(item.value)} tone="neutral" footnote={item.tool} />)}
             <ScoreTile
               label="Aggregation A3v"
               value={formatScore(aggregation)}
@@ -986,7 +979,7 @@ function ConstructTab({
                     "w-3 h-3 rounded-sm",
                     !segment.available && "opacity-30",
                   )}
-                  style={{ backgroundColor: segment.color }}
+                  style={{ backgroundColor: sequenceColor(segment) }}
                 />
                 <span className="text-gray-500">{segment.label}</span>
                 <span className="text-gray-400">({segment.sequence.length} aa)</span>
@@ -999,8 +992,8 @@ function ConstructTab({
               <span
                 key={index}
                 style={{
-                  color: segment.available ? segment.color : "#9ca3af",
-                  fontWeight: segment.type === "peptide" ? 600 : 400,
+                  color: sequenceColor(segment),
+                  fontWeight: sequenceWeight(segment),
                 }}
               >
                 {segment.available ? segment.sequence : `[${segment.type}: sequence unavailable]`}
@@ -1135,7 +1128,7 @@ function ConstructTab({
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Tab 3 — scaffold
+// Tab 3 - scaffold
 // ════════════════════════════════════════════════════════════════════════════
 
 function ScaffoldTab({
@@ -1252,7 +1245,7 @@ function ScaffoldTab({
           <p className="text-[11px] text-gray-400 leading-relaxed mt-3 pt-3 border-t border-gray-100">
             The vector recorded in the source and the vector recommended are separate fields on
             purpose: a patent can name a vector it does not propose to reuse, and
-            &ldquo;无明确推荐&rdquo; is the source's conclusion rather than a gap in the data.
+            &ldquo;No specific recommendation&rdquo; is the source's conclusion rather than a gap in the data.
           </p>
         </CardContent>
       </Card>
@@ -1319,7 +1312,7 @@ function ScaffoldTab({
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Tab 4 — linker
+// Tab 4 - linker
 // ════════════════════════════════════════════════════════════════════════════
 
 function LinkerTab({
@@ -1412,7 +1405,7 @@ function LinkerTab({
                     <span className="font-mono text-xs text-primary-900 font-medium">
                       {unit.unit}
                     </span>
-                    <span className="text-xs text-gray-500">— {unit.label}</span>
+                    <span className="text-xs text-gray-500">- {unit.label}</span>
                   </div>
                   <span className="text-xs font-mono text-primary-700 font-semibold">
                     ×{unit.count}

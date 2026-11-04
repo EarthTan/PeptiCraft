@@ -137,7 +137,7 @@ async function loadModuleWithTs(specifier) {
   const rewritten = source.replace(
     /(\bfrom\s+["'])(\.[^"']*?)(["'])/g,
     (match, prefix, spec, quote) =>
-      spec.endsWith('.ts') ? match : `${prefix}${spec}.ts${quote}`,
+      `${prefix}${pathToFileURL(resolve(dirname(target), spec.endsWith('.ts') ? spec : `${spec}.ts`)).href}${quote}`,
   )
   // The cache file keeps the `.ts` extension on purpose: Node strips types from `.ts` and not
   // from `.mjs`, so writing it out as `.mjs` would hand the parser raw TypeScript.

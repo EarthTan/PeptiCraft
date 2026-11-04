@@ -52,7 +52,7 @@ export const SCORE_GROUP_LABEL: Record<ScoreGroup, string> = {
 /**
  * The safety group is named without a count of hard gates. BepiPred-3.0 and the MHC-II percent
  * rank sit in this group and are soft signals, and how many hard gates there are is the
- * service's declaration — restating it here is what let the interface and the pipeline
+ * service's declaration - restating it here is what let the interface and the pipeline
  * disagree. Each entry now carries `is_veto_gate` and says for itself which it is.
  */
 export const SCORE_GROUP_HINT: Record<ScoreGroup, string> = {

@@ -36,8 +36,8 @@ import { cn } from "@/lib/utils"
 /**
  * Panels shared by the library row and the results page.
  *
- * Both surfaces show the same three things about a construct — its gates, its per-tool scores,
- * and its generated analysis — so they are defined once here. Two copies would be the same
+ * Both surfaces show the same three things about a construct - its gates, its per-tool scores,
+ * and its generated analysis - so they are defined once here. Two copies would be the same
  * kind of duplicate that let the safety thresholds drift apart in the previous interface.
  */
 
@@ -141,7 +141,7 @@ export function SafetyGateList({ safety }: { safety: SafetyVerdict }) {
       {safety.unassessed.length > 0 && (
         <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
           Not assessed: {joinNames(safety.unassessed.map(gateLabeller(safety.gates)))}. An
-          unassessed metric does not eliminate a candidate — the pipeline's null-passthrough
+          unassessed metric does not eliminate a candidate - the pipeline's null-passthrough
           rule is that a score removes a candidate only when it is present and out of bounds.
         </p>
       )}
@@ -392,7 +392,7 @@ function AnalysisBlocksForContext({
           <p className="text-sm font-semibold text-primary-900">Analysis</p>
           <p className="text-[11px] text-gray-400">
             {resolvedProvider === "template"
-              ? "Deterministic template over this construct's own fields — not model output"
+              ? "Deterministic template over this construct's own fields - not model output"
               : `provider: ${resolvedProvider}`}
           </p>
         </div>

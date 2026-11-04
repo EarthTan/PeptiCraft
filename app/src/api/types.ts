@@ -5,7 +5,7 @@
  * That is deliberate: keeping one spelling from the database column through the SQL layer
  * to the React prop means a broken field shows up as a type error rather than as a silently
  * undefined value. Translating to camelCase here would reintroduce exactly the drift this
- * rewrite removes — `score_meta` used to be keyed differently from `scores`, and the pair
+ * rewrite removes - `score_meta` used to be keyed differently from `scores`, and the pair
  * that mismatched was the pair nobody noticed.
  *
  * Every score is nullable. A null means the predictor did not cover this peptide, which is
@@ -31,7 +31,7 @@ export type WeightTier = "high" | "medium" | "low"
 
 /**
  * How a functional score may be read. `ranking_only` may order candidates but must never be
- * presented as a probability — the anti-inflammatory and anti-melanin predictors separate
+ * presented as a probability - the anti-inflammatory and anti-melanin predictors separate
  * "looks like a functional peptide" from "is anti-inflammatory", which makes their output a
  * ranking signal.
  */
@@ -39,7 +39,7 @@ export type ScoreSemantics = "probability" | "ranking_only" | "class_label"
 
 /**
  * Where a construct's scaffold came from. `verified` is a scaffold recorded on the construct
- * itself — which after the backfill is the application route's default, chosen by the platform
+ * itself - which after the backfill is the application route's default, chosen by the platform
  * rather than by the pipeline. `inferred` marks a scaffold named at request time, a faithful
  * assembly of real parts but not a stored pairing. `placeholder` remains for a row whose
  * scaffold is still a marker string, which is what an unbackfilled database holds.
@@ -96,7 +96,7 @@ export interface ConstructScores {
 }
 
 export interface SupplementaryScores {
-  /** NetMHCIIpan percent rank, 0–100 where lower is a stronger binder. Not a probability. */
+  /** NetMHCIIpan percent rank, 0-100 where lower is a stronger binder. Not a probability. */
   immunogenicity_ii_pct_rank: number | null
   allergenicity: number | null
   aggregation_a3v: number | null
@@ -194,7 +194,7 @@ export interface ConstructSummary {
   linker_name: string | null
   functional_score: number | null
   /** The `peptide_enrichment.tool` key the value came from, verbatim. An identifier, not a
-   *  label — the four directions use `anoxpepred-frs`, `amp-esm`, `imfp_lg_AIP` and `tipred`,
+   *  label - the four directions use `anoxpepred-frs`, `amp-esm`, `imfp_lg_AIP` and `tipred`,
    *  which do not share a spelling convention because the pipeline wrote them. */
   functional_score_key: string
   /** The predictor's name for display. Print this, never the key. */
@@ -233,10 +233,10 @@ export interface ConstructDetail extends ConstructSummary {
 /** One candidate in a build, assembled against the scaffold and linker the build used.
  *
  *  `ConstructSummary` still holds in full, with one change of meaning: `backbone_name`,
- *  `backbone_binding` and `linker_name` describe what this build assembled the row with —
+ *  `backbone_binding` and `linker_name` describe what this build assembled the row with -
  *  the caller's choice for whichever of the two was named, the row's stored value otherwise. */
 export interface BuiltConstruct extends ConstructSummary {
-  /** Backbone + linker + peptide. Null when any segment has no known sequence — which is what
+  /** Backbone + linker + peptide. Null when any segment has no known sequence - which is what
    *  a placeholder-binding row returns from a build that named no scaffold. */
   full_sequence: string | null
   /** Residue count of `full_sequence`. The gap between it and `peptide_length` is what the
@@ -264,7 +264,7 @@ export interface BuildResult {
    *  row fell back to its stored binding. */
   scaffold: ScaffoldSummary | null
   /** The linker every candidate was assembled with, or null when none was named and each row
-   *  fell back to the linker its own stored row records — in which case the rows can differ
+   *  fell back to the linker its own stored row records - in which case the rows can differ
    *  from one another, which is what `linker_name` on each row reports. `source_table` on it
    *  says which of the two linker tables answered. */
   linker: LinkerView | null
@@ -399,7 +399,7 @@ export interface ReferenceData {
  * Values are verbatim from the sheet, Chinese included, because the wording carries its own
  * scope: `无明确推荐` is a conclusion, and against it `E. coli BL21(DE3)` is a route the source
  * actually supports. On a cluster summary the values describe `sequence_id`, the representative
- * variant — the longest sequence, and the one an assembly uses.
+ * variant - the longest sequence, and the one an assembly uses.
  */
 export interface ScaffoldExpression {
   system: string | null
@@ -494,7 +494,7 @@ export interface LinkerView {
   /** Position in the library's recommendation order, 1 first; null when the entry is not
    *  ranked. The list arrives in this order, so the first entry is the standing choice. */
   priority_rank: number | null
-  /** Why the entry sits where it does — the library's own column when it is populated, the
+  /** Why the entry sits where it does - the library's own column when it is populated, the
    *  service's recommendation table otherwise. */
   priority_reason: string | null
 }
@@ -511,7 +511,7 @@ export interface LinkerDetail extends LinkerView {
  * The recommended host-to-purification path for a construct.
  *
  * A recommendation derived from the peptide's predicted properties and the bound carrier's
- * class — never a condition read from the record, which carries none.
+ * class - never a condition read from the record, which carries none.
  */
 export interface ExpressionPlan {
   host: string

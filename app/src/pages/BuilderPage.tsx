@@ -1,3 +1,6 @@
+import { sequenceColor, sequenceWeight } from "@/lib/sequence-colors"
+import { BuilderJourney } from "@/components/builder-journey"
+import { EvidenceLegend } from "@/components/evidence-badge"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
@@ -47,8 +50,8 @@ import { cn } from "@/lib/utils"
  * candidate is assembled from: step 5 is not a filtered list of stored rows but a build, with
  * the fused sequence of every candidate as its output.
  *
- * Neither assembly target narrows the candidate list — a scaffold and a linker are assembly
- * targets, not filters — and it is worth being exact about what that means now that the build
+ * Neither assembly target narrows the candidate list - a scaffold and a linker are assembly
+ * targets, not filters - and it is worth being exact about what that means now that the build
  * is real. The *peptides* that come back do not change when either one changes. The *sequences
  * they are built into* do, and so does the fused length on every card. That is the difference
  * between this page and a query over stored constructs.
@@ -56,8 +59,8 @@ import { cn } from "@/lib/utils"
  * No stored construct carries a real scaffold binding, so the assembly is reported as
  * `inferred`: a faithful concatenation of a real scaffold, a real linker and a real peptide,
  * whose pairing came from this page rather than from the pipeline. The linker is reported
- * separately, because a stored construct does record one — the sample table's first entry,
- * which the assembly script attached rather than chose — so naming one here is the first
+ * separately, because a stored construct does record one - the sample table's first entry,
+ * which the assembly script attached rather than chose - so naming one here is the first
  * actual decision made about it.
  */
 
@@ -101,7 +104,7 @@ function newSessionId(): string {
   return `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-/** "Build · Nov 3 23:48" — a name that says when, for a build nobody has named yet. */
+/** "Build · Nov 3 23:48" - a name that says when, for a build nobody has named yet. */
 function defaultSessionTitle(): string {
   const now = new Date()
   return `Build · ${now.toLocaleDateString(undefined, {
@@ -165,9 +168,9 @@ export default function BuilderPage() {
    * Which build this page is.
    *
    * Three arrivals reach this page and they mean different things. "Start Building" carries
-   * `new`, and wants a build of its own — a fresh name rather than the last one, and no
+   * `new`, and wants a build of its own - a fresh name rather than the last one, and no
    * choices carried over. A history record carries `record`, and wants to be put back
-   * together. Anything else — a reload, a step away and back — continues the build this tab
+   * together. Anything else - a reload, a step away and back - continues the build this tab
    * was already on.
    */
   const [boot] = useState(() => {
@@ -229,7 +232,7 @@ export default function BuilderPage() {
   const selectedScaffold = scaffolds.find((scaffold) => scaffold.id === scaffoldId) ?? null
 
   // The linker library is short, is not narrowed by the route, and is the one choice on this
-  // page a user has no basis for making from nothing — so the first entry stands in until an
+  // page a user has no basis for making from nothing - so the first entry stands in until an
   // explicit choice is made, rather than blocking the step on a click. That the first entry is
   // the library's own recommendation is what makes the fallback defensible rather than
   // arbitrary: the list arrives in recommendation order, most suitable first. Deriving it here
@@ -433,7 +436,7 @@ export default function BuilderPage() {
               Build Your Construct
             </h1>
             <p className="text-sm text-gray-500 mt-1 max-w-3xl leading-relaxed">
-              One choice drives everything — your application route decides which scaffolds stay
+              One choice drives everything - your application route decides which scaffolds stay
               eligible, how they are screened, and how the results are ranked.
             </p>
             {/* On the results step the build's name is the heading, so it is not repeated
@@ -453,54 +456,14 @@ export default function BuilderPage() {
         </div>
       </section>
 
-      <section className="border-b border-gray-200 bg-white">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <nav aria-label="Construct builder progress">
-            <p className="sr-only" aria-live="polite">
-              Step {step} of {STEP_COUNT}: {STEP_LABELS[step - 1]}
-            </p>
-            <ol className="flex">
-            {STEP_LABELS.map((label, offset) => {
-              const index = offset + 1
-              return (
-                <li key={label} className="relative flex flex-1 flex-col items-center">
-                  {index < STEP_COUNT && (
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        "absolute top-3.5 left-1/2 h-0.5 w-full rounded-full",
-                        index < step ? "bg-accent-500" : "bg-surface-muted",
-                      )}
-                    />
-                  )}
-                  {index < step ? (
-                    <button
-                      type="button"
-                      onClick={() => setStep(index as Step)}
-                      aria-label={`Go back to ${label}`}
-                      className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium transition-all duration-200 bg-accent-500 text-white cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    </button>
-                  ) : (
-                    <span
-                      aria-current={index === step ? "step" : undefined}
-                      className={cn(
-                        "relative z-10 flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium transition-all duration-200",
-                        index === step ? "bg-primary-500 text-white" : "bg-surface-muted text-gray-400",
-                      )}
-                    >
-                      {index}
-                    </span>
-                  )}
-                  <span className="mt-1 text-center text-[11px] text-gray-400">{label}</span>
-                </li>
-              )
-            })}
-            </ol>
-          </nav>
-        </div>
-      </section>
+      <BuilderJourney
+        step={step}
+        route={routeObj?.name}
+        functions={directions.filter(direction => directionIds.includes(direction.id)).map(direction => direction.name)}
+        scaffold={selectedScaffold?.short_name}
+        linker={selectedLinker?.name}
+        onBack={target => setStep(target as Step)}
+      />
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {step === 1 && (
@@ -521,8 +484,7 @@ export default function BuilderPage() {
               Step 2: Select Function Directions
             </h2>
             <p className="text-sm text-gray-500 mb-4 max-w-3xl leading-relaxed">
-              Multi-select supported for dual-function combinations. This step is independent of
-              the route — a peptide does the same job whether it ships in a dressing or a mask.
+              Choose the functions you want your peptide to have. You can select more than one.
             </p>
 
             <div className="grid sm:grid-cols-2 gap-3">
@@ -553,6 +515,7 @@ export default function BuilderPage() {
             <h2 className="text-lg font-semibold text-primary-900 mb-2">
               Step 3: Scaffold Protein
             </h2>
+            <EvidenceLegend />
             <p className="text-sm text-gray-500 mb-1 max-w-3xl leading-relaxed">
               {candidates.length === 0 ? (
                 <>
@@ -563,7 +526,7 @@ export default function BuilderPage() {
               ) : (
                 <>
                   Already narrowed by <strong>{routeObj.name}</strong> to {candidates.length}{" "}
-                  scaffold{candidates.length === 1 ? "" : "s"} — the ones the patent dataset tags
+                  scaffold{candidates.length === 1 ? "" : "s"} - the ones the patent dataset tags
                   for this application.
                 </>
               )}
@@ -665,7 +628,7 @@ export default function BuilderPage() {
             {crumb()}
             <h2 className="text-lg font-semibold text-primary-900 mb-2">Step 4: Linker</h2>
             <p className="text-sm text-gray-500 mb-1 max-w-3xl leading-relaxed">
-              The whole library, {linkers.length} entries — the linker sits between the scaffold
+              The whole library, {linkers.length} entries - the linker sits between the scaffold
               and the peptide, and the route does not narrow this choice. The list is in the
               library's recommendation order, most suitable first, and the entry the reader does
               not change is the one at the top.
@@ -673,8 +636,8 @@ export default function BuilderPage() {
             <p className="text-xs text-gray-400 mb-4 max-w-3xl leading-relaxed">
               The order follows one argument rather than a measurement: a short functional
               peptide has to stay reachable on the outside of a large structural protein, so
-              flexible Gly-Ser linkers come first — they hold the peptide clear without occluding
-              it and without disturbing the scaffold's own assembly — and the rigid α-helical and
+              flexible Gly-Ser linkers come first - they hold the peptide clear without occluding
+              it and without disturbing the scaffold's own assembly - and the rigid α-helical and
               proline entries come last, because fixing the geometry is a specialist answer
               rather than a default. Every entry states why it sits where it does when it is
               selected. No experiment in the pipeline compared two linkers on one fusion, so the
@@ -779,8 +742,8 @@ function RouteStep({
         Step 1: Choose Your Application Route
       </h2>
       <p className="text-sm text-gray-500 mb-5 max-w-3xl leading-relaxed">
-        Five routes, one choice. Every card states which scaffolds it admits, how it reweights the
-        screening, and the immunogenicity gate it applies.
+        Every card states which scaffolds are applicable to the corresponding route, how it reweights
+        the screening, and the immunogenicity hard-veto it applies.
       </p>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1254,7 +1217,7 @@ function ResultStep({
 }) {
   // The parameters travel with the response rather than being read again at write time.
   // A request is in flight for a moment after the choices change, and for that moment the
-  // page's own state describes a build that has not arrived — recording from it would file
+  // page's own state describes a build that has not arrived - recording from it would file
   // one build's figures under another's choices.
   const load = useCallback(async () => {
     const params = {
@@ -1513,8 +1476,8 @@ function ResultStep({
                         <span
                           key={index}
                           style={{
-                            color: segment.available ? segment.color : "#9ca3af",
-                            fontWeight: segment.type === "peptide" ? 600 : 400,
+                            color: sequenceColor(segment),
+                            fontWeight: sequenceWeight(segment),
                           }}
                         >
                           {segment.available

@@ -100,7 +100,7 @@ export function fetchConstruct(
   } = {},
 ): Promise<ConstructDetail> {
   // A named scaffold or linker travels in the query string. The service assembles the fused
-  // sequence from it, and so does the static export, each on its own path — so whichever one
+  // sequence from it, and so does the static export, each on its own path - so whichever one
   // answers, the sequence came from that source and neither overwrites the other.
   return request<ConstructDetail>(`/api/constructs/${id}${queryString({ ...options })}`)
 }
@@ -168,7 +168,7 @@ export function sendChat(id: string, payload: ChatRequestPayload): Promise<ChatR
 
 export interface BuildQuery {
   /** One or more function directions. Sent as a repeated parameter, which is what the
-   *  service reads — see `fetchBuild`. */
+   *  service reads - see `fetchBuild`. */
   direction: string[]
   route_id?: string | null
   /** The scaffold every candidate is assembled against. When omitted, each row inherits its

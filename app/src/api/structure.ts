@@ -28,7 +28,7 @@ export interface StructureMeta {
   aa_length: number
   fused_length_expected: number
   peptide_length: number
-  /** Mean pLDDT over the whole chain, normalised to 0–1. Null when the file carried none. */
+  /** Mean pLDDT over the whole chain, normalised to 0-1. Null when the file carried none. */
   confidence: number | null
   /** Mean pLDDT over the peptide's own residues only. */
   peptide_confidence: number | null
@@ -61,17 +61,11 @@ export function structureEnabled(): boolean {
 let lookupPromise: Promise<Record<string, string>> | null = null
 let indexPromise: Promise<StructureIndex | null> | null = null
 
-async function fetchJson<T>(url: string): Promise<T | null> {
-  try {
-    const response = await fetch(url, { headers: { Accept: "application/json" } })
-    if (!response.ok) return null
-    return (await response.json()) as T
-  } catch (error) {
-    if (error instanceof Error && error.name !== "AbortError") {
-      console.warn("[pepticraft] structure store unreadable:", error.message)
-    }
-    return null
-  }
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-cache" })
+  if (!response.ok) throw new Error(`Structure store returned HTTP ${response.status}. Try again later.`)
+  try { return await response.json() as T }
+  catch { throw new Error("The structure index could not be read. Try again later.") }
 }
 
 /** The alias table, loaded once. An empty table means the store is not reachable yet. */
@@ -79,9 +73,10 @@ export function fetchStructureLookup(): Promise<Record<string, string>> {
   const base = structureBase()
   if (!base) return Promise.resolve({})
   if (!lookupPromise) {
-    lookupPromise = fetchJson<Record<string, string>>(`${base}/structure_lookup.json`).then(
-      (value) => value ?? {},
-    )
+    lookupPromise = fetchJson<Record<string, string>>(`${base}/structure_lookup.json`).catch(error => {
+      lookupPromise = null
+      throw error
+    })
   }
   return lookupPromise
 }
@@ -91,7 +86,10 @@ export function fetchStructureIndex(): Promise<StructureIndex | null> {
   const base = structureBase()
   if (!base) return Promise.resolve(null)
   if (!indexPromise) {
-    indexPromise = fetchJson<StructureIndex>(`${base}/structures.json`)
+    indexPromise = fetchJson<StructureIndex>(`${base}/structures.json`).catch(error => {
+      indexPromise = null
+      throw error
+    })
   }
   return indexPromise
 }

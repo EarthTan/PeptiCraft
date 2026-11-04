@@ -37,7 +37,7 @@ function stamp(iso: string): string {
  * refreshes that line's figures and its time instead of adding a second one.
  *
  * Loading an entry puts its parameters back into the Builder and builds it again, which is
- * the point of keeping it — the record remembers the question, and the answer comes from
+ * the point of keeping it - the record remembers the question, and the answer comes from
  * the library as it stands now.
  *
  * The records live in this browser. Export and import are what carry them to another

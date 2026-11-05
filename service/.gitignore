@@ -14,8 +14,12 @@ local/*.sqlite3-journal
 # the site, so they are operations tooling and not project content.
 scripts/daycycle.sh
 scripts/split_fold_work.py
+scripts/split_cloud_work.py
+scripts/assign_fold_work.py
 scripts/progress_dashboard.py
 scripts/sync_structures.py
 
-# Its test, for the same reason: it imports a script that is no longer in the repository.
+# Their tests, for the same reason: they import a script that is no longer in the repository.
 tests/test_progress_dashboard.py
+tests/test_split_cloud_work.py
+tests/test_assign_fold_work.py

@@ -39,61 +39,70 @@ check('the panel says nothing is set', (await panel.textContent())?.includes('no
 
 // The panel opens
 await panel.click()
+const panelText = (await panelBody.innerText()) ?? ''
 check('the panel opens', await page.getByText('Activity score floor').isVisible())
 check(
-  'the allergenicity ceiling is offered, named after the predictor it comes from',
+  'the allergenicity ceiling is quoted, named after the predictor it comes from',
   await page.getByText('AlgPred2 allergenicity ceiling').isVisible(),
 )
 check('the peptide length range is offered', await page.getByText('Peptide length').isVisible())
 check('the per-function cap is offered', await page.getByText('Candidates per function').isVisible())
-check(
-  'the score floor quotes the boundary the predictor declares',
-  (await page.getByText(/boundary 0\.50/).count()) > 0,
-)
 
-// The route's own immunogenicity gate is stated in the panel, because it varies by
-// application route and a fixed number in the same panel reads as the same thing. It is
-// the gate of the route selected in step one — Wound Dressing, at 0.35.
+// The platform's own screening standards are quoted, not offered. A standard the reader can
+// drag is a standard that means whatever the reader made it mean, so neither the activity
+// boundary nor the allergenicity ceiling carries a switch.
 check(
-  'the panel states the route\'s immunogenicity gate',
-  await page.getByText('MHC-I ≤ 0.35').isVisible(),
-  (await panel.textContent())?.match(/.{0,60}MHC-I.{0,60}/)?.[0],
+  'the activity boundary is not a switch',
+  (await page.getByRole('switch', { name: /activity score floor/i }).count()) === 0,
 )
 check(
-  'the gate says the route owns it',
-  /route owns it/i.test((await panelBody.textContent()) ?? ''),
+  'the allergenicity ceiling is not a switch',
+  (await page.getByRole('switch', { name: /allergenicity/i }).count()) === 0,
 )
 check(
-  'the allergenicity card says it is a different predictor',
-  /different predictor from the route's immunogenicity gate/i.test(
-    (await panelBody.textContent()) ?? '',
-  ),
+  'the activity boundary is quoted for the held function',
+  /Antioxidant\s+0\.50/.test(panelText),
+  panelText.match(/.{0,40}Antioxidant.{0,60}/)?.[0],
+)
+check(
+  'the allergenicity ceiling is quoted at the boundary the predictor declares',
+  /0\.30/.test(panelText),
+  panelText.match(/.{0,40}0\.30.{0,40}/)?.[0],
+)
+check(
+  'both are marked as the platform\'s own values',
+  (await page.getByText('platform value').count()) === 2,
 )
 
-// The floor is a switch per function rather than one switch over all of them: a switch
-// over several could not say which of them were on.
-const floorSwitch = page.getByRole('switch', { name: 'Antioxidant activity score floor' })
-check('the floor has a switch of its own', (await floorSwitch.count()) === 1)
-check('the floor starts off', (await floorSwitch.getAttribute('aria-checked')) === 'false')
+// The route's immunogenicity gate does not belong to this panel. It belongs to the route,
+// it cannot be set, and putting it here would read as another setting.
+check(
+  'the route\'s immunogenicity gate is not in the panel',
+  !/MHC-I|Immunogenicity gate/i.test(panelText),
+  panelText.match(/.{0,40}(MHC-I|Immunogenicity gate).{0,40}/i)?.[0],
+)
 
-const floorBox = page.locator('input[aria-label="Antioxidant activity score floor"]')
-await floorSwitch.click()
-check('the floor input appears', (await floorBox.count()) === 1)
-await floorBox.fill('0.5')
+// The two settings that are the reader's own.
+const lengthSwitch = page.getByRole('switch', { name: 'Peptide length' })
+const shortest = page.locator('input[aria-label="Shortest peptide to keep"]')
+const longest = page.locator('input[aria-label="Longest peptide to keep"]')
+await lengthSwitch.click()
+check('the peptide length fields appear', (await shortest.count()) === 1 && (await longest.count()) === 1)
+await shortest.fill('20')
+await longest.fill('30')
 
-// The allergenicity ceiling at the boundary the predictor declares
-const allergenSwitch = page.getByRole('switch', { name: 'AlgPred2 allergenicity ceiling' })
-const allergenBox = page.locator('input[aria-label="AlgPred2 allergenicity ceiling"]')
-await allergenSwitch.click()
-check('the allergenicity input appears', (await allergenBox.count()) === 1)
-await allergenBox.fill('0.3')
+const capSwitch = page.getByRole('switch', { name: 'Candidates per function' })
+const capBox = page.locator('input[aria-label="Candidates each function contributes"]')
+await capSwitch.click()
+check('the per-function cap field appears', (await capBox.count()) === 1)
+await capBox.fill('5')
 
 // The panel counts what is set
 check('the panel counts what is set', (await panel.textContent())?.includes('2 set'))
 
-// A direction whose score orders candidates rather than measuring activity gets no floor
-// control: the note below the panel says so, and a control that does nothing would read as
-// one that does. This is checked on a second page so it does not disturb the build above.
+// A direction whose score orders candidates rather than measuring activity has no activity
+// boundary to quote: the note below the panel says so. This is checked on a second page so
+// it does not disturb the build above.
 const rankingPage = await browser.newPage()
 await rankingPage.goto(`${SITE}/builder?new=1`, { waitUntil: 'networkidle' })
 const rankingNameDialog = rankingPage.getByRole('button', { name: 'Start building', exact: true })
@@ -104,7 +113,7 @@ await rankingPage.getByRole('button', { name: /^Anti-melanin/i }).first().click(
 const rankingPanel = rankingPage.locator('[data-panel="thresholds"]')
 await rankingPanel.click()
 check(
-  'a ranking-only direction gets no floor control',
+  'a ranking-only direction gets no activity boundary',
   (await rankingPage
     .getByRole('switch', { name: 'Anti-melanin Deposition activity score floor' })
     .count()) === 0,
@@ -117,31 +126,10 @@ check(
   (await rankingPage.locator('body').innerText())?.match(/.{0,60}orders candidates.{0,90}/i)?.[0],
 )
 check(
-  'the cap is offered as the substitute',
+  'the cap is offered as the way to hold that direction',
   await rankingPage.getByText('Candidates per function', { exact: true }).isVisible(),
 )
 await rankingPage.close()
-
-// The gate follows the route: the same panel, a different application, a different number.
-const hairPage = await browser.newPage()
-await hairPage.goto(`${SITE}/builder?new=1`, { waitUntil: 'networkidle' })
-const hairNameDialog = hairPage.getByRole('button', { name: 'Start building', exact: true })
-if (await hairNameDialog.count()) await hairNameDialog.click()
-await hairPage.getByRole('button', { name: /Hair Care/i }).first().click()
-await hairPage.getByRole('button', { name: /Next: Function Direction/i }).click()
-await hairPage.getByRole('button', { name: /^Antioxidant/ }).first().click()
-await hairPage.locator('[data-panel="thresholds"]').click()
-const hairPanelBody = hairPage.locator('[data-panel-body="thresholds"]')
-check(
-  'the gate follows the route',
-  await hairPage.getByText('MHC-I ≤ 0.60').isVisible(),
-  (await hairPanelBody.textContent())?.match(/.{0,60}MHC-I.{0,60}/)?.[0],
-)
-check(
-  'the panel names the route the gate came from',
-  /Hair Care/.test((await hairPanelBody.textContent()) ?? ''),
-)
-await hairPage.close()
 
 // On to the results
 await page.getByRole('button', { name: /Next: Scaffold/i }).click()
@@ -162,23 +150,34 @@ check(
   body.match(/antioxidant:.{0,80}/i)?.[0],
 )
 
-// The two thresholds move together in this pool: the candidates with the highest antioxidant
-// score are also the ones the allergenicity predictor scores highest, so only one of the 27
-// that clear the floor is under the ceiling.
-check('the floor and the ceiling together leave one candidate', /antioxidant: 1 of 113/.test(body), body.match(/antioxidant:.{0,60}/i)?.[0])
-check('a narrow set is called out', /narrow set/i.test(body), body.match(/.{0,60}narrow.{0,60}/i)?.[0])
+// The peptide length range and the cap are the two settings that can narrow a pool, so the
+// report has to account for what they removed.
+const kept = Number(body.match(/antioxidant: (\d+) of (\d+)/)?.[1] ?? '0')
+const pool = Number(body.match(/antioxidant: \d+ of (\d+)/)?.[1] ?? '0')
+check(
+  'the range and the cap narrow the pool',
+  kept > 0 && kept <= 5 && kept < pool,
+  `kept ${kept} of ${pool}`,
+)
 
 await page.screenshot({ path: '/tmp/pc-verify/threshold-results.png', fullPage: false })
 
-// The thresholds are remembered with the rest of the build
+// The settings are remembered with the rest of the build
 const stored = await page.evaluate(() =>
   window.sessionStorage.getItem('pepticraft.builder-session.v2'),
 )
 const session = stored ? JSON.parse(stored) : {}
 check(
-  'the thresholds are kept with the build',
-  session.thresholds?.functional_floor?.antioxidant === 0.5 &&
-    session.thresholds?.max_allergenicity === 0.3,
+  'the settings are kept with the build',
+  session.thresholds?.min_peptide_length === 20 &&
+    session.thresholds?.max_peptide_length === 30 &&
+    session.thresholds?.per_direction_limit === 5,
+  JSON.stringify(session.thresholds),
+)
+check(
+  'the platform standards are not carried as settings',
+  session.thresholds?.functional_floor === undefined &&
+    session.thresholds?.max_allergenicity === undefined,
   JSON.stringify(session.thresholds),
 )
 

@@ -2,7 +2,7 @@ import { sequenceColor, sequenceWeight } from "@/lib/sequence-colors"
 import { BuilderJourney } from "@/components/builder-journey"
 import { EvidenceLegend } from "@/components/evidence-badge"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { CSSProperties, ReactNode } from "react"
+import type { ReactNode } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -26,7 +26,6 @@ import {
   History,
   Layers,
   Ruler,
-  Shield,
   ShieldAlert,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -114,16 +113,18 @@ interface BuilderSession extends BuildIdentity {
 /**
  * The screening thresholds the reader set.
  *
+ * Two of them, and both are choices about which candidates to look at rather than about
+ * how good a candidate has to be: the peptide's length, and how many candidates each
+ * direction contributes. The platform's own screening values — the activity boundary each
+ * tool declares, and AlgPred2's allergenicity boundary — are stated in the panel for
+ * reference and are not settable, because a standard the reader can drag is a standard
+ * that means whatever the reader made it mean.
+ *
  * The thresholds narrow the candidate set before it is ranked. They can only remove
  * candidates: the library holds twenty million peptides and the candidate set is what the
  * pipeline already screened, so no threshold here brings a new peptide in.
- *
- * A direction is in `functional_floor` when its floor is switched on. Nothing is set by
- * default, so a build that sets no threshold ranks exactly what it always ranked.
  */
 interface BuilderThresholds {
-  functional_floor: Record<string, number>
-  max_allergenicity: number | null
   min_peptide_length: number | null
   max_peptide_length: number | null
   per_direction_limit: number | null
@@ -132,25 +133,15 @@ interface BuilderThresholds {
 /** Read the thresholds out of a stored session, ignoring anything unreadable. */
 function readStoredThresholds(raw: unknown): BuilderThresholds {
   const empty: BuilderThresholds = {
-    functional_floor: {},
-    max_allergenicity: null,
     min_peptide_length: null,
     max_peptide_length: null,
     per_direction_limit: null,
   }
   if (!raw || typeof raw !== "object") return empty
   const stored = raw as Partial<BuilderThresholds>
-  const floor: Record<string, number> = {}
-  if (stored.functional_floor && typeof stored.functional_floor === "object") {
-    for (const [direction, value] of Object.entries(stored.functional_floor)) {
-      if (typeof value === "number" && Number.isFinite(value)) floor[direction] = value
-    }
-  }
   const numberOrNull = (value: unknown): number | null =>
     typeof value === "number" && Number.isFinite(value) ? value : null
   return {
-    functional_floor: floor,
-    max_allergenicity: numberOrNull(stored.max_allergenicity),
     min_peptide_length: numberOrNull(stored.min_peptide_length),
     max_peptide_length: numberOrNull(stored.max_peptide_length),
     per_direction_limit: numberOrNull(stored.per_direction_limit),
@@ -183,8 +174,6 @@ function newSession(): BuilderSession {
     scaffold_id: "",
     linker_id: "",
     thresholds: {
-      functional_floor: {},
-      max_allergenicity: null,
       min_peptide_length: null,
       max_peptide_length: null,
       per_direction_limit: null,
@@ -580,7 +569,6 @@ export default function BuilderPage() {
                 thresholds={thresholds}
                 onChange={setThresholds}
                 directions={directions.filter((direction) => directionIds.includes(direction.id))}
-                route={routeObj}
                 reference={reference.thresholds ?? null}
               />
             )}
@@ -1086,58 +1074,6 @@ function KnobSwitch({
 }
 
 /**
- * A number with a dial beside it.
- *
- * The dial gives the scale and the field lets an exact value be typed, which matters because
- * the boundaries the predictors declare are not round numbers. Both write the same value, so
- * neither is the one that is authoritative.
- */
-function Dial({
-  value,
-  min,
-  max,
-  step,
-  accent,
-  onChange,
-  label,
-}: {
-  value: number
-  min: number
-  max: number
-  step: number
-  accent: string
-  onChange: (next: number) => void
-  label: string
-}) {
-  const fill = max > min ? ((value - min) / (max - min)) * 100 : 0
-  return (
-    <div className="flex items-center gap-3">
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        aria-label={`${label} dial`}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="knob min-w-[7rem] flex-1"
-        style={{ "--fill": fill, "--accent": accent } as CSSProperties}
-      />
-      <input
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        aria-label={label}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="num-field h-9 w-[4.5rem] shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 text-center font-mono text-sm tabular-nums text-primary-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200"
-      />
-    </div>
-  )
-}
-
-/**
  * One threshold, as a card of its own.
  *
  * The icon carries the threshold's colour and the card takes that colour when the threshold
@@ -1152,7 +1088,6 @@ function ThresholdBlock({
   accent,
   title,
   hint,
-  tip,
   active,
   badge,
   toggle,
@@ -1163,8 +1098,6 @@ function ThresholdBlock({
   accent: string
   title: string
   hint: string
-  /** An explanation of the term, shown beside the title. */
-  tip?: string
   /** Whether the threshold is in force. Decides whether the card is filled or bare. */
   active: boolean
   /** A short note on the right, beside the switch. */
@@ -1193,10 +1126,7 @@ function ThresholdBlock({
           <Icon className="h-[18px] w-[18px]" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-primary-900">
-            {title}
-            {tip && <InfoTip content={tip} className="ml-1 align-middle" />}
-          </p>
+          <p className="text-sm font-semibold text-primary-900">{title}</p>
           <p className="text-xs text-gray-500">{hint}</p>
         </div>
         {badge && (
@@ -1229,15 +1159,12 @@ function ThresholdPanel({
   thresholds,
   onChange,
   directions,
-  route,
   reference,
 }: {
   thresholds: BuilderThresholds
   onChange: (next: BuilderThresholds) => void
-  /** The functions the reader is holding. A floor is offered per function. */
+  /** The functions the reader is holding. The platform's activity boundary is quoted per function. */
   directions: FunctionDirection[]
-  /** The application route this build runs under. It owns the immunogenicity gate. */
-  route: DeliveryRoute | null
   reference: ThresholdReference | null
 }) {
   const [open, setOpen] = useState(false)
@@ -1250,34 +1177,17 @@ function ThresholdPanel({
     value: BuilderThresholds[K],
   ) => onChange({ ...thresholds, [key]: value })
 
-  /** Switch one direction's score floor on or off, keeping its value either way. */
-  const toggleFloor = (direction: string, on: boolean) => {
-    const floor = { ...thresholds.functional_floor }
-    if (on) {
-      const declared = functionalReference[direction]?.declared_boundary ?? 0
-      floor[direction] = floor[direction] ?? declared
-    } else {
-      delete floor[direction]
-    }
-    set("functional_floor", floor)
-  }
-
-  // A floor is offered only where the direction's score measures activity. The two
-  // ranking-only directions are named in the note below instead, because a control that
-  // does nothing would read as one that does.
+  // The activity boundary is quoted only for the functions whose score measures activity.
+  // The two ranking-only directions are named in the note below instead, because a
+  // boundary for them would be a number with no meaning behind it.
   const floorDirections = directions.filter(
     (direction) => functionalReference[direction.id]?.floor_applies !== false,
   )
   const rankingOnly = directions.filter(
     (direction) => functionalReference[direction.id]?.floor_applies === false,
   )
-  const floorsOn = floorDirections.filter(
-    (direction) => thresholds.functional_floor[direction.id] !== undefined,
-  )
 
   const setCount =
-    Object.keys(thresholds.functional_floor).length +
-    (thresholds.max_allergenicity !== null ? 1 : 0) +
     (thresholds.min_peptide_length !== null || thresholds.max_peptide_length !== null ? 1 : 0) +
     (thresholds.per_direction_limit !== null ? 1 : 0)
 
@@ -1321,104 +1231,44 @@ function ThresholdPanel({
       {open && (
         <div className="space-y-3 px-4 pb-4">
           <p className="text-xs leading-relaxed text-gray-500">
-            These narrow the candidates before they are ranked. They can only remove candidates:
-            the peptide library holds twenty million sequences and these act on the ones the
-            pipeline has already screened.
+            Two of the values below are the platform's own screening standards, quoted for
+            reference and not adjustable here. The two settings narrow the candidates before
+            they are ranked, and can only remove candidates: the peptide library holds twenty
+            million sequences and these act on the ones the pipeline has already screened.
           </p>
 
-          {/* The route's own immunogenicity gate, stated where the thresholds are read.
-              It is not one of the four thresholds below and it is not adjustable here: the
-              route owns it, and it is applied to every candidate in the build whether or not
-              this panel is touched. It is shown because a gate that varies by application
-              route and a fixed number in the same panel read as the same thing, and the two
-              are different predictors on different scales. */}
-          {route && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3">
-              <div className="flex items-start gap-3">
-                <Shield className="mt-0.5 h-[18px] w-[18px] shrink-0 text-amber-600" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-primary-900">
-                    Immunogenicity gate (MHC-I)
-                    <InfoTip content={GLOSSARY.immunogenicity_gate} className="ml-1 align-middle" />
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-600">
-                    Set by the application route — {route.name} — and already applied to every
-                    candidate in this build. It is not adjustable here, because the route owns
-                    it.
-                  </p>
-                  <p className="mt-2 font-mono text-sm tabular-nums text-amber-700">
-                    MHC-I ≤ {route.screening.immunogenicity_threshold.toFixed(2)}
-                  </p>
-                  <p className="mt-1.5 text-[11px] leading-relaxed text-gray-500">
-                    {route.screening.threshold_note}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Score floor, one per function whose score is a probability. The block has no
-              switch of its own: each function below carries one, and a switch over all of
-              them could not say which of them were on. */}
+          {/* The activity boundary each tool declares. It is the platform's standard, so it
+              is quoted rather than offered: a standard the reader can drag is a standard
+              that means whatever the reader made it mean. */}
           {floorDirections.length > 0 && (
             <ThresholdBlock
               icon={Activity}
               accent="#0ea5e9"
               title="Activity score floor"
-              hint="The lowest score a candidate may have"
-              active={floorsOn.length > 0}
+              hint="the boundary each tool declares for its own score"
+              active={false}
+              badge="platform value"
               reveal="always"
-              badge={
-                floorsOn.length > 0
-                  ? `${floorsOn.length} of ${floorDirections.length} set`
-                  : undefined
-              }
             >
               <div className="space-y-1">
                 {floorDirections.map((direction) => {
                   const entry = functionalReference[direction.id]
-                  const value = thresholds.functional_floor[direction.id]
-                  const on = value !== undefined
                   const pool = direction.counts?.top ?? 0
-                  const accent = direction.color ?? "#0ea5e9"
                   return (
                     <div
                       key={direction.id}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-2 py-1.5"
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5"
                     >
-                      <KnobSwitch
-                        on={on}
-                        onChange={(next) => toggleFloor(direction.id, next)}
-                        label={`${direction.name} activity score floor`}
-                      />
-                      <span className="w-32 shrink-0 text-sm font-medium text-primary-900">
+                      <span className="w-40 shrink-0 text-sm font-medium text-primary-900">
                         {direction.name}
                       </span>
-                      <div className="w-full max-w-md">
-                        {on ? (
-                          <Dial
-                            value={value}
-                            min={0}
-                            max={1}
-                            step={0.01}
-                            accent={accent}
-                            label={`${direction.name} activity score floor`}
-                            onChange={(next) =>
-                              set("functional_floor", {
-                                ...thresholds.functional_floor,
-                                [direction.id]: next,
-                              })
-                            }
-                          />
-                        ) : (
-                          <span className="text-xs text-gray-400">not set</span>
-                        )}
-                      </div>
-                      <span className="w-56 shrink-0 text-right text-xs tabular-nums text-gray-400">
+                      <span className="font-mono text-sm tabular-nums text-primary-700">
                         {entry?.declared_boundary !== null && entry?.declared_boundary !== undefined
-                          ? `boundary ${entry.declared_boundary.toFixed(2)}`
+                          ? entry.declared_boundary.toFixed(2)
                           : "no boundary declared"}
-                        {` · ${pool} candidates`}
+                      </span>
+                      <span className="text-xs tabular-nums text-gray-400">
+                        {`· ${pool} candidates`}
                       </span>
                     </div>
                   )
@@ -1431,51 +1281,34 @@ function ThresholdPanel({
             <p className="px-1 text-[11px] leading-relaxed text-gray-400">
               {rankingOnly.map((direction) => direction.name).join(" and ")}{" "}
               {rankingOnly.length === 1 ? "is" : "are"} ranked by a score that orders
-              candidates rather than measuring activity, so no floor applies to
-              {rankingOnly.length === 1 ? " it" : " them"}. Use the candidates per function cap
-              instead.
+              candidates rather than measuring activity, so no activity boundary applies to
+              {rankingOnly.length === 1 ? " it" : " them"}. They are held by the candidates per
+              function cap instead.
             </p>
           )}
 
-          {/* Allergenicity ceiling. Named after the predictor that produces it, because
-              "allergenicity" and "immunogenicity" are two different risks measured by two
-              different predictors, and only the second one varies with the route. */}
+          {/* AlgPred2's own allergenicity boundary. Named after the predictor that produces
+              it, because "allergenicity" and "immunogenicity" are two different risks
+              measured by two different predictors. */}
           <ThresholdBlock
             icon={ShieldAlert}
             accent="#f59e0b"
             title={`${allergenicityReference?.tool ?? "AlgPred2"} allergenicity ceiling`}
-            hint="the lower the value the safer the peptide · a different predictor from the route's immunogenicity gate"
-            tip={GLOSSARY.allergenicity_ceiling}
-            active={thresholds.max_allergenicity !== null}
-            badge={
-              allergenicityReference
-                ? `boundary ${allergenicityReference.boundary.toFixed(2)}`
-                : undefined
-            }
-            toggle={{
-              on: thresholds.max_allergenicity !== null,
-              onChange: (next) =>
-                set("max_allergenicity", next ? (allergenicityReference?.boundary ?? 0.3) : null),
-              label: "AlgPred2 allergenicity ceiling",
-            }}
+            hint="the boundary the predictor declares · the lower the value the safer the peptide"
+            active={false}
+            badge="platform value"
+            reveal="always"
           >
-            {thresholds.max_allergenicity !== null && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                {/* A dial of a fixed width, so it reads as one control rather than as a
-                    rule stretched across the panel. */}
-                <div className="w-full max-w-md">
-                  <Dial
-                    value={thresholds.max_allergenicity}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    accent="#f59e0b"
-                    label="AlgPred2 allergenicity ceiling"
-                    onChange={(next) => set("max_allergenicity", next)}
-                  />
-                </div>
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-sm tabular-nums text-primary-700">
+                {allergenicityReference
+                  ? allergenicityReference.boundary.toFixed(2)
+                  : "—"}
+              </span>
+              <span className="text-xs text-gray-400">
+                a candidate above this is reported as more allergenic, not eliminated
+              </span>
+            </div>
           </ThresholdBlock>
 
           {/* Peptide length range. */}
@@ -1574,8 +1407,6 @@ function ThresholdPanel({
                 type="button"
                 onClick={() =>
                   onChange({
-                    functional_floor: {},
-                    max_allergenicity: null,
                     min_peptide_length: null,
                     max_peptide_length: null,
                     per_direction_limit: null,
@@ -1884,8 +1715,6 @@ function ResultStep({
       scaffold_id: scaffold?.id ?? null,
       linker_id: linker?.id ?? null,
       limit: RESULT_LIMIT,
-      min_functional_score: thresholds.functional_floor,
-      max_allergenicity: thresholds.max_allergenicity,
       min_peptide_length: thresholds.min_peptide_length,
       max_peptide_length: thresholds.max_peptide_length,
       per_direction_limit: thresholds.per_direction_limit,
@@ -1908,8 +1737,6 @@ function ResultStep({
   const thresholdRemoved =
     (thresholdReport?.removed ?? 0) + (thresholdReport?.removed_by_cap ?? 0)
   const thresholdSetCount =
-    Object.keys(thresholds.functional_floor).length +
-    (thresholds.max_allergenicity !== null ? 1 : 0) +
     (thresholds.min_peptide_length !== null || thresholds.max_peptide_length !== null ? 1 : 0) +
     (thresholds.per_direction_limit !== null ? 1 : 0)
 

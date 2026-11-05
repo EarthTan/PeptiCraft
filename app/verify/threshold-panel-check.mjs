@@ -40,42 +40,31 @@ check('the panel says nothing is set', (await panel.textContent())?.includes('no
 // The panel opens
 await panel.click()
 const panelText = (await panelBody.innerText()) ?? ''
-check('the panel opens', await page.getByText('Activity score floor').isVisible())
-check(
-  'the allergenicity ceiling is quoted, named after the predictor it comes from',
-  await page.getByText('AlgPred2 allergenicity ceiling').isVisible(),
-)
+check('the panel opens', (await panelBody.innerText())?.includes('Peptide length'))
 check('the peptide length range is offered', await page.getByText('Peptide length').isVisible())
 check('the per-function cap is offered', await page.getByText('Candidates per function').isVisible())
 
-// The platform's own screening standards are quoted, not offered. A standard the reader can
-// drag is a standard that means whatever the reader made it mean, so neither the activity
-// boundary nor the allergenicity ceiling carries a switch.
+// The platform's own screening standards are not adjustable, so they are not on the panel
+// at all: a card that shows a number the reader cannot change is a card that only adds
+// noise. The standards themselves are applied by the pipeline and reported beside each
+// construct on the results page.
 check(
-  'the activity boundary is not a switch',
-  (await page.getByRole('switch', { name: /activity score floor/i }).count()) === 0,
+  'the activity boundary is not on the panel',
+  !/Activity score floor/i.test(panelText),
+  panelText.match(/.{0,40}Activity score floor.{0,40}/i)?.[0],
 )
 check(
-  'the allergenicity ceiling is not a switch',
-  (await page.getByRole('switch', { name: /allergenicity/i }).count()) === 0,
+  'the allergenicity ceiling is not on the panel',
+  !/allergenicity/i.test(panelText),
+  panelText.match(/.{0,40}allergenicity.{0,40}/i)?.[0],
 )
 check(
-  'the activity boundary is quoted for the held function',
-  /Antioxidant\s+0\.50/.test(panelText),
-  panelText.match(/.{0,40}Antioxidant.{0,60}/)?.[0],
-)
-check(
-  'the allergenicity ceiling is quoted at the boundary the predictor declares',
-  /0\.30/.test(panelText),
-  panelText.match(/.{0,40}0\.30.{0,40}/)?.[0],
-)
-check(
-  'both are marked as the platform\'s own values',
-  (await page.getByText('platform value').count()) === 2,
+  'no platform value is quoted',
+  (await page.getByText('platform value').count()) === 0,
 )
 
-// The route's immunogenicity gate does not belong to this panel. It belongs to the route,
-// it cannot be set, and putting it here would read as another setting.
+// The route's immunogenicity gate does not belong to this panel either. It belongs to the
+// route, it cannot be set, and putting it here would read as another setting.
 check(
   'the route\'s immunogenicity gate is not in the panel',
   !/MHC-I|Immunogenicity gate/i.test(panelText),
@@ -100,9 +89,9 @@ await capBox.fill('5')
 // The panel counts what is set
 check('the panel counts what is set', (await panel.textContent())?.includes('2 set'))
 
-// A direction whose score orders candidates rather than measuring activity has no activity
-// boundary to quote: the note below the panel says so. This is checked on a second page so
-// it does not disturb the build above.
+// A direction whose score orders candidates rather than measuring activity is held by the
+// per-function cap alone. This is checked on a second page so it does not disturb the build
+// above.
 const rankingPage = await browser.newPage()
 await rankingPage.goto(`${SITE}/builder?new=1`, { waitUntil: 'networkidle' })
 const rankingNameDialog = rankingPage.getByRole('button', { name: 'Start building', exact: true })
@@ -112,19 +101,6 @@ await rankingPage.getByRole('button', { name: /Next: Function Direction/i }).cli
 await rankingPage.getByRole('button', { name: /^Anti-melanin/i }).first().click()
 const rankingPanel = rankingPage.locator('[data-panel="thresholds"]')
 await rankingPanel.click()
-check(
-  'a ranking-only direction gets no activity boundary',
-  (await rankingPage
-    .getByRole('switch', { name: 'Anti-melanin Deposition activity score floor' })
-    .count()) === 0,
-)
-check(
-  'the panel says why',
-  /orders candidates rather than measuring activity/i.test(
-    (await rankingPage.locator('body').innerText()) ?? '',
-  ),
-  (await rankingPage.locator('body').innerText())?.match(/.{0,60}orders candidates.{0,90}/i)?.[0],
-)
 check(
   'the cap is offered as the way to hold that direction',
   await rankingPage.getByText('Candidates per function', { exact: true }).isVisible(),

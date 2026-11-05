@@ -14,7 +14,6 @@ import { CollapsibleNotice, Notice } from "@/components/ui/notice"
 import { InfoTip } from "@/components/ui/tooltip"
 import { BuildNameDialog } from "@/components/build-history"
 import {
-  Activity,
   AlertTriangle,
   ArrowRight,
   Bot,
@@ -115,10 +114,9 @@ interface BuilderSession extends BuildIdentity {
  *
  * Two of them, and both are choices about which candidates to look at rather than about
  * how good a candidate has to be: the peptide's length, and how many candidates each
- * direction contributes. The platform's own screening values — the activity boundary each
- * tool declares, and AlgPred2's allergenicity boundary — are stated in the panel for
- * reference and are not settable, because a standard the reader can drag is a standard
- * that means whatever the reader made it mean.
+ * direction contributes. The platform's own screening standards are not here: the ones that
+ * decide a candidate's fate are applied by the pipeline, and the ones that are only
+ * reported are shown beside each construct on the results page.
  *
  * The thresholds narrow the candidate set before it is ranked. They can only remove
  * candidates: the library holds twenty million peptides and the candidate set is what the
@@ -568,7 +566,6 @@ export default function BuilderPage() {
               <ThresholdPanel
                 thresholds={thresholds}
                 onChange={setThresholds}
-                directions={directions.filter((direction) => directionIds.includes(direction.id))}
                 reference={reference.thresholds ?? null}
               />
             )}
@@ -1151,41 +1148,27 @@ function ThresholdBlock({
  * scaffold, the linker or the sequence. A step of their own would put a filter in the middle
  * of a flow that assembles.
  *
- * Each threshold shows the value its own predictor declares, so nobody is asked to guess what
- * a meaningful number looks like. Nothing is set until it is switched on, so a build that
- * leaves the panel alone ranks exactly what it always ranked.
+ * Only the reader's own choices are here. The platform's screening standards are not
+ * adjustable, so they are not offered here either: the ones that decide a candidate's fate
+ * are applied by the pipeline before the candidates reach this panel, and the ones that are
+ * only reported are shown beside each construct on the results page.
  */
 function ThresholdPanel({
   thresholds,
   onChange,
-  directions,
   reference,
 }: {
   thresholds: BuilderThresholds
   onChange: (next: BuilderThresholds) => void
-  /** The functions the reader is holding. The platform's activity boundary is quoted per function. */
-  directions: FunctionDirection[]
   reference: ThresholdReference | null
 }) {
   const [open, setOpen] = useState(false)
-  const functionalReference = reference?.functional_score ?? {}
-  const allergenicityReference = reference?.allergenicity
   const lengthReference = reference?.peptide_length
 
   const set = <K extends keyof BuilderThresholds>(
     key: K,
     value: BuilderThresholds[K],
   ) => onChange({ ...thresholds, [key]: value })
-
-  // The activity boundary is quoted only for the functions whose score measures activity.
-  // The two ranking-only directions are named in the note below instead, because a
-  // boundary for them would be a number with no meaning behind it.
-  const floorDirections = directions.filter(
-    (direction) => functionalReference[direction.id]?.floor_applies !== false,
-  )
-  const rankingOnly = directions.filter(
-    (direction) => functionalReference[direction.id]?.floor_applies === false,
-  )
 
   const setCount =
     (thresholds.min_peptide_length !== null || thresholds.max_peptide_length !== null ? 1 : 0) +
@@ -1231,85 +1214,11 @@ function ThresholdPanel({
       {open && (
         <div className="space-y-3 px-4 pb-4">
           <p className="text-xs leading-relaxed text-gray-500">
-            Two of the values below are the platform's own screening standards, quoted for
-            reference and not adjustable here. The two settings narrow the candidates before
-            they are ranked, and can only remove candidates: the peptide library holds twenty
-            million sequences and these act on the ones the pipeline has already screened.
+            Two settings, both about which candidates to look at. They narrow the candidates
+            before they are ranked, and can only remove candidates: the peptide library holds
+            twenty million sequences and these act on the ones the pipeline has already
+            screened.
           </p>
-
-          {/* The activity boundary each tool declares. It is the platform's standard, so it
-              is quoted rather than offered: a standard the reader can drag is a standard
-              that means whatever the reader made it mean. */}
-          {floorDirections.length > 0 && (
-            <ThresholdBlock
-              icon={Activity}
-              accent="#0ea5e9"
-              title="Activity score floor"
-              hint="the boundary each tool declares for its own score"
-              active={false}
-              badge="platform value"
-              reveal="always"
-            >
-              <div className="space-y-1">
-                {floorDirections.map((direction) => {
-                  const entry = functionalReference[direction.id]
-                  const pool = direction.counts?.top ?? 0
-                  return (
-                    <div
-                      key={direction.id}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5"
-                    >
-                      <span className="w-40 shrink-0 text-sm font-medium text-primary-900">
-                        {direction.name}
-                      </span>
-                      <span className="font-mono text-sm tabular-nums text-primary-700">
-                        {entry?.declared_boundary !== null && entry?.declared_boundary !== undefined
-                          ? entry.declared_boundary.toFixed(2)
-                          : "no boundary declared"}
-                      </span>
-                      <span className="text-xs tabular-nums text-gray-400">
-                        {`· ${pool} candidates`}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </ThresholdBlock>
-          )}
-
-          {rankingOnly.length > 0 && (
-            <p className="px-1 text-[11px] leading-relaxed text-gray-400">
-              {rankingOnly.map((direction) => direction.name).join(" and ")}{" "}
-              {rankingOnly.length === 1 ? "is" : "are"} ranked by a score that orders
-              candidates rather than measuring activity, so no activity boundary applies to
-              {rankingOnly.length === 1 ? " it" : " them"}. They are held by the candidates per
-              function cap instead.
-            </p>
-          )}
-
-          {/* AlgPred2's own allergenicity boundary. Named after the predictor that produces
-              it, because "allergenicity" and "immunogenicity" are two different risks
-              measured by two different predictors. */}
-          <ThresholdBlock
-            icon={ShieldAlert}
-            accent="#f59e0b"
-            title={`${allergenicityReference?.tool ?? "AlgPred2"} allergenicity ceiling`}
-            hint="the boundary the predictor declares · the lower the value the safer the peptide"
-            active={false}
-            badge="platform value"
-            reveal="always"
-          >
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-sm tabular-nums text-primary-700">
-                {allergenicityReference
-                  ? allergenicityReference.boundary.toFixed(2)
-                  : "—"}
-              </span>
-              <span className="text-xs text-gray-400">
-                a candidate above this is reported as more allergenic, not eliminated
-              </span>
-            </div>
-          </ThresholdBlock>
 
           {/* Peptide length range. */}
           <ThresholdBlock

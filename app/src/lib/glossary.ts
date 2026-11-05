@@ -31,6 +31,7 @@ export type GlossaryKey =
   | "multi_function"
   | "control_arm"
   | "screening_thresholds"
+  | "allergenicity_ceiling"
 
 export const GLOSSARY: Record<GlossaryKey, string> = {
   composite:
@@ -115,6 +116,14 @@ export const GLOSSARY: Record<GlossaryKey, string> = {
     "Limits applied to the candidates before they are ranked. They can only remove " +
     "candidates: the peptide library holds twenty million sequences and the candidates are " +
     "the ones the pipeline has already screened, so no threshold here brings a new peptide in.",
+
+  allergenicity_ceiling:
+    "A ceiling on the peptide's predicted allergenicity, read from AlgPred2. It is a " +
+    "different predictor from the route's immunogenicity gate: this one asks how likely " +
+    "the peptide is to be recognised as an allergen, while the gate reads the MHC-I " +
+    "presentation score, which is a proxy for T-cell immunogenicity. The platform reports " +
+    "allergenicity rather than eliminating candidates on it, so this ceiling is off until " +
+    "it is switched on.",
 }
 
 /** The explanation that belongs to each safety verdict. */

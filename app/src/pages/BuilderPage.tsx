@@ -26,6 +26,7 @@ import {
   History,
   Layers,
   Ruler,
+  Shield,
   ShieldAlert,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -579,6 +580,7 @@ export default function BuilderPage() {
                 thresholds={thresholds}
                 onChange={setThresholds}
                 directions={directions.filter((direction) => directionIds.includes(direction.id))}
+                route={routeObj}
                 reference={reference.thresholds ?? null}
               />
             )}
@@ -1150,6 +1152,7 @@ function ThresholdBlock({
   accent,
   title,
   hint,
+  tip,
   active,
   badge,
   toggle,
@@ -1160,6 +1163,8 @@ function ThresholdBlock({
   accent: string
   title: string
   hint: string
+  /** An explanation of the term, shown beside the title. */
+  tip?: string
   /** Whether the threshold is in force. Decides whether the card is filled or bare. */
   active: boolean
   /** A short note on the right, beside the switch. */
@@ -1188,7 +1193,10 @@ function ThresholdBlock({
           <Icon className="h-[18px] w-[18px]" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-primary-900">{title}</p>
+          <p className="text-sm font-semibold text-primary-900">
+            {title}
+            {tip && <InfoTip content={tip} className="ml-1 align-middle" />}
+          </p>
           <p className="text-xs text-gray-500">{hint}</p>
         </div>
         {badge && (
@@ -1221,12 +1229,15 @@ function ThresholdPanel({
   thresholds,
   onChange,
   directions,
+  route,
   reference,
 }: {
   thresholds: BuilderThresholds
   onChange: (next: BuilderThresholds) => void
   /** The functions the reader is holding. A floor is offered per function. */
   directions: FunctionDirection[]
+  /** The application route this build runs under. It owns the immunogenicity gate. */
+  route: DeliveryRoute | null
   reference: ThresholdReference | null
 }) {
   const [open, setOpen] = useState(false)
@@ -1274,7 +1285,10 @@ function ThresholdPanel({
     thresholds.min_peptide_length !== null || thresholds.max_peptide_length !== null
 
   return (
-    <div className="mt-4 rounded-2xl border border-gray-200 bg-surface-alt/60 shadow-sm">
+    <div
+      className="mt-4 rounded-2xl border border-gray-200 bg-surface-alt/60 shadow-sm"
+      data-panel-body="thresholds"
+    >
       <div className="flex items-center gap-2 px-4 py-3">
         <button
           type="button"
@@ -1311,6 +1325,37 @@ function ThresholdPanel({
             the peptide library holds twenty million sequences and these act on the ones the
             pipeline has already screened.
           </p>
+
+          {/* The route's own immunogenicity gate, stated where the thresholds are read.
+              It is not one of the four thresholds below and it is not adjustable here: the
+              route owns it, and it is applied to every candidate in the build whether or not
+              this panel is touched. It is shown because a gate that varies by application
+              route and a fixed number in the same panel read as the same thing, and the two
+              are different predictors on different scales. */}
+          {route && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3">
+              <div className="flex items-start gap-3">
+                <Shield className="mt-0.5 h-[18px] w-[18px] shrink-0 text-amber-600" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-primary-900">
+                    Immunogenicity gate (MHC-I)
+                    <InfoTip content={GLOSSARY.immunogenicity_gate} className="ml-1 align-middle" />
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-600">
+                    Set by the application route — {route.name} — and already applied to every
+                    candidate in this build. It is not adjustable here, because the route owns
+                    it.
+                  </p>
+                  <p className="mt-2 font-mono text-sm tabular-nums text-amber-700">
+                    MHC-I ≤ {route.screening.immunogenicity_threshold.toFixed(2)}
+                  </p>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-gray-500">
+                    {route.screening.threshold_note}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Score floor, one per function whose score is a probability. The block has no
               switch of its own: each function below carries one, and a switch over all of
@@ -1392,12 +1437,15 @@ function ThresholdPanel({
             </p>
           )}
 
-          {/* Allergenicity ceiling. */}
+          {/* Allergenicity ceiling. Named after the predictor that produces it, because
+              "allergenicity" and "immunogenicity" are two different risks measured by two
+              different predictors, and only the second one varies with the route. */}
           <ThresholdBlock
             icon={ShieldAlert}
             accent="#f59e0b"
-            title="Allergenicity ceiling"
-            hint={`${allergenicityReference?.tool ?? "AlgPred2"} · the lower the value the safer the peptide`}
+            title={`${allergenicityReference?.tool ?? "AlgPred2"} allergenicity ceiling`}
+            hint="the lower the value the safer the peptide · a different predictor from the route's immunogenicity gate"
+            tip={GLOSSARY.allergenicity_ceiling}
             active={thresholds.max_allergenicity !== null}
             badge={
               allergenicityReference
@@ -1408,7 +1456,7 @@ function ThresholdPanel({
               on: thresholds.max_allergenicity !== null,
               onChange: (next) =>
                 set("max_allergenicity", next ? (allergenicityReference?.boundary ?? 0.3) : null),
-              label: "Allergenicity ceiling",
+              label: "AlgPred2 allergenicity ceiling",
             }}
           >
             {thresholds.max_allergenicity !== null && (
@@ -1422,7 +1470,7 @@ function ThresholdPanel({
                     max={1}
                     step={0.01}
                     accent="#f59e0b"
-                    label="Allergenicity ceiling"
+                    label="AlgPred2 allergenicity ceiling"
                     onChange={(next) => set("max_allergenicity", next)}
                   />
                 </div>

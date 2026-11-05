@@ -32,18 +32,42 @@ await page.getByRole('button', { name: /Next: Function Direction/i }).click()
 await page.getByRole('button', { name: /^Antioxidant/ }).first().click()
 
 const panel = page.locator('[data-panel="thresholds"]')
+// The panel's own body, below the button that opens it.
+const panelBody = page.locator('[data-panel-body="thresholds"]')
 check('the threshold panel appears once a function is held', (await panel.count()) === 1)
 check('the panel says nothing is set', (await panel.textContent())?.includes('none set'))
 
 // The panel opens
 await panel.click()
 check('the panel opens', await page.getByText('Activity score floor').isVisible())
-check('the allergenicity ceiling is offered', await page.getByText('Allergenicity ceiling').isVisible())
+check(
+  'the allergenicity ceiling is offered, named after the predictor it comes from',
+  await page.getByText('AlgPred2 allergenicity ceiling').isVisible(),
+)
 check('the peptide length range is offered', await page.getByText('Peptide length').isVisible())
 check('the per-function cap is offered', await page.getByText('Candidates per function').isVisible())
 check(
   'the score floor quotes the boundary the predictor declares',
   (await page.getByText(/boundary 0\.50/).count()) > 0,
+)
+
+// The route's own immunogenicity gate is stated in the panel, because it varies by
+// application route and a fixed number in the same panel reads as the same thing. It is
+// the gate of the route selected in step one — Wound Dressing, at 0.35.
+check(
+  'the panel states the route\'s immunogenicity gate',
+  await page.getByText('MHC-I ≤ 0.35').isVisible(),
+  (await panel.textContent())?.match(/.{0,60}MHC-I.{0,60}/)?.[0],
+)
+check(
+  'the gate says the route owns it',
+  /route owns it/i.test((await panelBody.textContent()) ?? ''),
+)
+check(
+  'the allergenicity card says it is a different predictor',
+  /different predictor from the route's immunogenicity gate/i.test(
+    (await panelBody.textContent()) ?? '',
+  ),
 )
 
 // The floor is a switch per function rather than one switch over all of them: a switch
@@ -58,8 +82,8 @@ check('the floor input appears', (await floorBox.count()) === 1)
 await floorBox.fill('0.5')
 
 // The allergenicity ceiling at the boundary the predictor declares
-const allergenSwitch = page.getByRole('switch', { name: 'Allergenicity ceiling' })
-const allergenBox = page.locator('input[aria-label="Allergenicity ceiling"]')
+const allergenSwitch = page.getByRole('switch', { name: 'AlgPred2 allergenicity ceiling' })
+const allergenBox = page.locator('input[aria-label="AlgPred2 allergenicity ceiling"]')
 await allergenSwitch.click()
 check('the allergenicity input appears', (await allergenBox.count()) === 1)
 await allergenBox.fill('0.3')
@@ -97,6 +121,27 @@ check(
   await rankingPage.getByText('Candidates per function', { exact: true }).isVisible(),
 )
 await rankingPage.close()
+
+// The gate follows the route: the same panel, a different application, a different number.
+const hairPage = await browser.newPage()
+await hairPage.goto(`${SITE}/builder?new=1`, { waitUntil: 'networkidle' })
+const hairNameDialog = hairPage.getByRole('button', { name: 'Start building', exact: true })
+if (await hairNameDialog.count()) await hairNameDialog.click()
+await hairPage.getByRole('button', { name: /Hair Care/i }).first().click()
+await hairPage.getByRole('button', { name: /Next: Function Direction/i }).click()
+await hairPage.getByRole('button', { name: /^Antioxidant/ }).first().click()
+await hairPage.locator('[data-panel="thresholds"]').click()
+const hairPanelBody = hairPage.locator('[data-panel-body="thresholds"]')
+check(
+  'the gate follows the route',
+  await hairPage.getByText('MHC-I ≤ 0.60').isVisible(),
+  (await hairPanelBody.textContent())?.match(/.{0,60}MHC-I.{0,60}/)?.[0],
+)
+check(
+  'the panel names the route the gate came from',
+  /Hair Care/.test((await hairPanelBody.textContent()) ?? ''),
+)
+await hairPage.close()
 
 // On to the results
 await page.getByRole('button', { name: /Next: Scaffold/i }).click()

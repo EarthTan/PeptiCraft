@@ -19,12 +19,21 @@ coordinates on disk.
 
 Failure handling
 -----------------
-Two failures are possible and they are not the same kind. A request can fail outright, in
+Three failures are possible and they are not the same kind. A request can fail outright, in
 which case the sequence produced no file and is simply absent from the output directory, and
 the batch carries on. A request can also come back successfully with an empty coordinate
 string, which is what the service returns when the pipeline raised or produced nothing; that
 case is recorded as a failure rather than written as an empty file, because an empty file
-would look complete to every later step.
+would look complete to every later step. And the service can be not ready yet, which is not a
+failure of any sequence but of the service itself: the model is still loading, so every
+request is refused with the same message. That third case is the one the batch must not treat
+as a failure, because it would mark an entire list as failed in a single moment — and the
+list it is working through is then overwritten by the next phase's failures, so the loss is
+invisible afterwards.
+
+The distinction matters because these batches run for weeks on a machine that is started and
+stopped by other means. A service that is not ready is a condition to wait for, not a verdict
+on ten thousand sequences.
 
 Failures are collected in two files. `failed.txt` holds the failures of the most recent
 pass, and is what a caller retries from. `failed.log` accumulates every failure with a
@@ -99,6 +108,59 @@ def _failure_reason(payload: dict) -> str:
     return str(details.get("error") or "no coordinates returned")
 
 
+def _service_not_ready(payload: dict) -> bool:
+    """Whether the service refused the request because it is not loaded yet.
+
+    The service answers a request that arrives before the model has finished loading with a
+    refusal that carries the reason, and the reason names the model rather than the sequence.
+    Such a refusal says nothing about the sequence, so recording it as that sequence's
+    failure would be a statement about the service's readiness mistaken for a statement
+    about the peptide.
+    """
+    error = str(payload.get("error") or "").lower()
+    details = payload.get("result") or {}
+    nested = str((details.get("details") or {}).get("error") or "").lower()
+    for text in (error, nested):
+        if "not loaded" in text or "not checked yet" in text:
+            return True
+    return False
+
+
+def wait_for_service(url: str, timeout: float = 300.0, interval: float = 5.0) -> bool:
+    """Wait until the service reports that its model is loaded, or give up.
+
+    The service binds its port before the weights are loaded, so a port that answers is not
+    evidence that the model is ready to predict. Its health endpoint is: it says whether the
+    model is loaded. Asking for a prediction instead would work too, but it would spend a
+    real prediction to find out — on a machine whose every second of the GPU is accounted
+    for, that is not a question worth asking.
+
+    The health endpoint cannot be served while a prediction is running, because the model is
+    called synchronously inside the request handler and the event loop is busy for the whole
+    of it. A timeout therefore says nothing about readiness — the service is busy with a
+    prediction, which means it is alive — so a timeout is taken as readiness. Only an answer
+    that plainly reports the model as unloaded is a reason to keep waiting.
+    """
+    health = url.rsplit("/", 1)[0] + "/health"
+    deadline = time.time() + timeout
+    while True:
+        try:
+            with urllib.request.urlopen(health, timeout=10) as resp:
+                payload = json.loads(resp.read())
+        except Exception:
+            # No answer. The service is busy with a prediction, which means it is alive.
+            return True
+        if payload.get("model_loaded") is True or payload.get("status") == "healthy":
+            return True
+        if payload.get("model_loaded") is False or payload.get("status") == "loading":
+            if time.time() >= deadline:
+                return False
+            time.sleep(min(interval, max(0.0, deadline - time.time())))
+            continue
+        # An answer that says neither way is not evidence that the model is unloaded.
+        return True
+
+
 def run(
     fasta: str,
     out: str,
@@ -139,9 +201,23 @@ def run(
         flush=True,
     )
 
+    # The service may still be loading its weights, in which case it refuses every request
+    # with the same message. Running the list anyway would mark every sequence in it as
+    # failed, and the next phase's failure list would then overwrite that record.
+    if records and not wait_for_service(url):
+        print("SERVICE NOT READY — stopping without touching the list", flush=True)
+        return {
+            "folded": 0,
+            "failed": [],
+            "done": len(done),
+            "elapsed_h": 0.0,
+            "service_not_ready": True,
+        }
+
     t_start = time.time()
     folded = 0
     failed: list[str] = []
+    stopped_early = False
     with open(log_path, "a") as log:
         for n, (sid, seq) in enumerate(records, 1):
             if budget and time.time() - t_start > budget:
@@ -153,6 +229,13 @@ def run(
                 failed.append(sid)
                 print(f"FAIL {sid}: {exc}", flush=True)
                 continue
+            if _service_not_ready(payload):
+                # The service stopped answering mid-list. The sequences after this point
+                # are untouched, so the pass ends here and the list is picked up again by
+                # the next one.
+                print(f"SERVICE NOT READY at {sid} — stopping the pass", flush=True)
+                stopped_early = True
+                break
             result = payload.get("result") or {}
             pdb = result.get("pdb_content") or ""
             if not pdb:
@@ -190,10 +273,13 @@ def run(
     )
     # `failed.txt` describes this pass and nothing else, so it is rewritten even when the
     # pass had no failures — otherwise a stale list would invite a retry of sequences that
-    # have since succeeded.
-    with open(os.path.join(out, "failed.txt"), "w") as fh:
-        if failed:
-            fh.write("\n".join(failed) + "\n")
+    # have since succeeded. A pass that stopped early is the exception: it did not reach
+    # the end of its list, so the failures it collected are only part of what is still
+    # outstanding, and overwriting the list would lose the part it did not reach.
+    if not stopped_early:
+        with open(os.path.join(out, "failed.txt"), "w") as fh:
+            if failed:
+                fh.write("\n".join(failed) + "\n")
     if failed:
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         with open(os.path.join(out, "failed.log"), "a") as fh:
@@ -205,6 +291,7 @@ def run(
         "failed": failed,
         "done": len(done),
         "elapsed_h": round(elapsed / 3600, 3),
+        "service_not_ready": stopped_early,
     }
 
 
@@ -218,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--retry", default=None, help="file of identifiers to fold again")
     args = ap.parse_args(argv)
 
-    run(
+    summary = run(
         args.fasta,
         args.out,
         url=args.url,
@@ -226,6 +313,10 @@ def main(argv: list[str] | None = None) -> int:
         budget=args.budget,
         retry=args.retry,
     )
+    # A pass that stopped because the service was not ready has folded nothing, and the
+    # caller must be able to tell that from a pass that simply had nothing to do.
+    if summary.get("service_not_ready"):
+        return 2
     return 0
 
 

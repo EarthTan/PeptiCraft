@@ -211,7 +211,8 @@ function RollingNumber({ value }: { value: string }) {
 
 function HighlightBar({ reference, scaffolds, linkers, pipeline }: { reference: ReferenceData; scaffolds: ScaffoldSummary[]; linkers: LinkerView[]; pipeline: PipelineView }) {
   const searchSpace = Math.max(0, ...reference.directions.map(d => d.precursor_count))
-  const tools = [...new Set(pipeline.included.filter(s => s.round < 4).flatMap(s => s.tools))]
+  const screeningTools = pipeline.included.filter(stage => stage.round < 4).flatMap(stage => stage.tools)
+  const tools = [...new Set([...screeningTools, "AnOxPePred", "NetMHCIIpan"])]
   const highlights = [
     { value: formatCount(searchSpace), label: "Peptide records", href: "#modules", note: "Sequences from metagenomic datasets, UniProt, UniRef90, PDB and archived snapshots." },
     { value: String(reference.directions.reduce((sum, d) => sum + d.construct_count, 0)), label: "Scored constructs", href: "/library?tab=peptides", note: "Browse the screened construct records in the Library." },

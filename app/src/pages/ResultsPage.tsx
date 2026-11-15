@@ -724,19 +724,9 @@ function PeptideTab({ detail }: { detail: ConstructDetail }) {
       note: "One-dimensional AGGRESCAN, computed at assembly time. Lower is better.",
     },
     {
-      label: "Free-radical scavenging (AnOxPePred)",
-      value: supplementary.anoxpepred_frs,
-      note: "The head that ranks the antioxidant direction.",
-    },
-    {
-      label: "Metal chelation (AnOxPePred)",
-      value: supplementary.anoxpepred_chel,
-      note: "The predictor's second head.",
-    },
-    {
-      label: "Antioxidant SVM (AOPxSVM)",
+      label: "Antioxidant ranking (AOPxSVM)",
       value: supplementary.aopxsvm,
-      note: "Stored as a class index; the probability lives in the tool's own details.",
+      note: "Higher scores indicate higher antioxidant screening priority.",
     },
     {
       label: "Antibacterial (AMPlify v0.1.0)",

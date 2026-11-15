@@ -131,7 +131,7 @@ export default function LandingPage() {
             <div className="pipeline-round">R{stage.round}</div>
             <div className="pipeline-body"><div className="pipeline-stage-heading"><h3>{stage.name}</h3><span className="home-small">{stage.duration}</span></div>
               <p>{[
-                "Rank peptides by functional direction: AnOxPePred for antioxidant activity, iMFP-LG for antimicrobial and anti-inflammatory signals, and TIPred for tyrosinase inhibition.",
+                "Rank peptides by functional direction: AOPxSVM for antioxidant screening, iMFP-LG for antimicrobial and anti-inflammatory signals, and TIPred for tyrosinase inhibition.",
                 "Screen toxicity with ToxinPred3, haemolysis with HemoPI2 and MHC-I presentation with MHCflurry. Assessed scores must satisfy the applicable gates.",
                 "Compare BepiPred-3.0, TemStaPro, SoDoPE and pLM4CPPs signals using the scenario-specific composite ranking.",
                 "Combine selected peptides, scaffolds and linkers into construct sequences for review in the Builder.",

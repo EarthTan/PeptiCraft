@@ -194,7 +194,7 @@ export interface ConstructSummary {
   linker_name: string | null
   functional_score: number | null
   /** The `peptide_enrichment.tool` key the value came from, verbatim. An identifier, not a
-   *  label - the four directions use `anoxpepred-frs`, `amp-esm`, `imfp_lg_AIP` and `tipred`,
+   *  label - the four directions use `aopxsvm`, `amp-esm`, `imfp_lg_AIP` and `tipred`,
    *  which do not share a spelling convention because the pipeline wrote them. */
   functional_score_key: string
   /** The predictor's name for display. Print this, never the key. */

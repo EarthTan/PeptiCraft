@@ -117,7 +117,7 @@ CREATE OR REPLACE VIEW public.v_peptide_enrichment_coverage AS
         END AS coverage_pct
    FROM ( VALUES
             ('toxinpred3'::text), ('tipred'::text), ('algpred2'::text), ('sodope'::text),
-            ('anoxpepred'::text), ('anoxpepred-frs'::text), ('anoxpepred-chelating'::text),
+            ('anoxpepred'::text), ('anoxpepred-frs'::text), ('anoxpepred-chelating'::text), ('aopxsvm'::text),
             ('hemopi2'::text), ('plm4cpps'::text), ('temstapro'::text),
             ('mhcflurry'::text), ('amp-esm'::text),
             ('imfp_lg_ACP'::text), ('imfp_lg_ADP'::text), ('imfp_lg_AHP'::text),
@@ -133,9 +133,9 @@ CREATE OR REPLACE VIEW public.v_peptide_enrichment_coverage AS
 COMMIT;
 
 -- ---------------------------------------------------------------------------
--- [3] 自检：四个方向的功能工具都应报 20,248,885
+-- [3] 自检：核对四个方向的功能工具覆盖数
 -- ---------------------------------------------------------------------------
 SELECT tool, done_count, eligible_count, coverage_pct
   FROM public.v_peptide_enrichment_coverage
- WHERE tool IN ('anoxpepred-frs', 'amp-esm', 'imfp_lg_AIP', 'tipred')
+ WHERE tool IN ('aopxsvm', 'amp-esm', 'imfp_lg_AIP', 'tipred')
  ORDER BY tool;

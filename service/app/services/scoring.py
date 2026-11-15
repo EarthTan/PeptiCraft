@@ -261,9 +261,7 @@ def _as_float(v: Any) -> float | None:
 # Functional score key per direction, taken from the key each direction's `select.py`
 # actually ranked on:
 #
-#   antioxidant        the pool is cut at the aopxsvm P90, but aopxsvm's stored value is a
-#                      class label (1) with the probability in `details.prob`, so the
-#                      reported activity score is AnOxPePred's free-radical-scavenging head
+#   antioxidant        AOPxSVM candidate-pool ranking and reported score
 #   antibacterial      amp-esm, which is AMPlify v0.1.0 over the whole library
 #   anti_inflammatory   imfp_lg_AIP
 #   antimelanin        tipred
@@ -272,15 +270,13 @@ def _as_float(v: Any) -> float | None:
 # scores carry it, because that field is the pipeline's own statement about what its number
 # may be read as.
 FUNCTIONAL_SCORE: dict[str, tuple[str, ScoreSemantics]] = {
-    "antioxidant": (enrichment.ANOXPEPRED_FRS, ScoreSemantics.probability),
+    "antioxidant": (enrichment.AOPXSVM, ScoreSemantics.ranking_only),
     "antibacterial": (enrichment.AMP_ESM, ScoreSemantics.probability),
     "anti_inflammatory": (enrichment.IMFP_LG_AIP, ScoreSemantics.ranking_only),
     "antimelanin": (enrichment.TIPRED, ScoreSemantics.ranking_only),
 }
 
-# The pooling key each direction used to build its candidate pool, reported alongside the
-# activity score so the two are not confused. Antioxidant pools on aopxsvm, which is a
-# classifier output rather than a probability.
+# The pooling key each direction used to build its candidate pool.
 POOLING_KEY: dict[str, str] = {
     "antioxidant": enrichment.AOPXSVM,
     "antibacterial": enrichment.AMP_ESM,
@@ -313,8 +309,10 @@ def functional_score(
     rendered as a probability or a confidence.
     """
     key, default_semantics = FUNCTIONAL_SCORE.get(
-        direction, (enrichment.ANOXPEPRED_FRS, ScoreSemantics.probability)
+        direction, FUNCTIONAL_SCORE["antioxidant"]
     )
+    if key == enrichment.AOPXSVM:
+        return _antioxidant_score(enriched), key, default_semantics
     semantics = default_semantics
     if stored:
         stored_meaning = stored.get("func_score_meaning")
@@ -323,6 +321,12 @@ def functional_score(
 
     entry = enriched.get(key)
     return (_as_float(entry["score"]) if entry else None), key, semantics
+
+
+def _antioxidant_score(enriched: dict[str, dict[str, Any]]) -> float | None:
+    """Read the AOPxSVM model score even when the legacy score column stores a class index."""
+    details = enriched.get(enrichment.AOPXSVM, {}).get("details")
+    return _as_float(details.get("prob")) if isinstance(details, dict) else None
 
 
 def assemble_scores(
@@ -372,7 +376,7 @@ def assemble_scores(
         aggregation_a3v=_as_float(stored.get("aggrescan_a3v")),
         anoxpepred_frs=from_tool(enrichment.ANOXPEPRED_FRS),
         anoxpepred_chel=from_tool(enrichment.ANOXPEPRED_CHEL),
-        aopxsvm=from_tool(enrichment.AOPXSVM),
+        aopxsvm=_antioxidant_score(enriched),
         amp_esm=from_tool(enrichment.AMP_ESM),
         imfp_lg_amp=from_tool(enrichment.IMFP_LG_AMP),
         imfp_lg_aip=from_tool(enrichment.IMFP_LG_AIP),
@@ -431,7 +435,7 @@ def assemble_scores(
 
 
 _FUNCTIONAL_TOOL_LABEL = {
-    enrichment.ANOXPEPRED_FRS: "AnOxPePred (FRS head)",
+    enrichment.AOPXSVM: "AOPxSVM",
     enrichment.AMP_ESM: "AMPlify v0.1.0",
     enrichment.IMFP_LG_AIP: "iMFP-LG (AIP channel)",
     enrichment.TIPRED: "TIPred",
@@ -447,10 +451,7 @@ def functional_label(tool_key: str) -> str:
     return _FUNCTIONAL_TOOL_LABEL.get(tool_key, tool_key)
 
 _FUNCTIONAL_TOOL_MEASURES = {
-    enrichment.ANOXPEPRED_FRS: (
-        "Probability that the peptide scavenges free radicals. The candidate pool was cut "
-        "at the 90th percentile of AOPxSVM; this head is the reported activity measure."
-    ),
+    enrichment.AOPXSVM: "AOPxSVM antioxidant ranking score for the peptide. Higher scores indicate higher screening priority.",
     enrichment.AMP_ESM: (
         "Antibacterial activity from AMPlify v0.1.0, scored across the whole library and "
         "used as this direction's ranking key."
@@ -475,7 +476,6 @@ def _functional_threshold(func_key: str) -> AppliedThreshold | None:
     if func_key in _FUNCTIONAL_THRESHOLD_CACHE:
         return _FUNCTIONAL_THRESHOLD_CACHE[func_key]
     spec = {
-        enrichment.ANOXPEPRED_FRS: (0.5, "free-radical-scavenging head declares 0.5"),
         enrichment.TIPRED: (0.5, "TIPred declares 0.5"),
         enrichment.IMFP_LG_AIP: (0.5, "the AIP channel declares 0.5"),
     }.get(func_key)

@@ -175,7 +175,7 @@ class ConstructSummary(BaseModel):
     functional_score: float | None = None
     functional_score_key: str = Field(
         description="The `peptide_enrichment.tool` key the value was read from, verbatim. It "
-        "is an identifier, not a label: the four directions read from `anoxpepred-frs`, "
+        "is an identifier, not a label: the four directions read from `aopxsvm`, "
         "`amp-esm`, `imfp_lg_AIP` and `tipred`, which do not share a spelling convention "
         "because they are the keys the pipeline wrote.",
     )

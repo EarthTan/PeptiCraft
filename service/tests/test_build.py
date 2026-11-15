@@ -373,10 +373,8 @@ def test_the_route_shapes_the_ranking_and_is_reported(client):
 # Screening thresholds
 # ---------------------------------------------------------------------------
 #
-# The fixture gives each threshold something to bite on. The two antioxidant candidates score
-# 0.78 and 0.66 on the free-radical head, carry allergenicity values of 0.12 and 0.05, and
-# are 7 and 8 residues long, so a floor, a ceiling and a length range each remove exactly
-# one of them and can be told apart from one another.
+# The antioxidant fixture has two AOPxSVM scores and two different lengths and allergenicity
+# values. The antibacterial fixture has a top-channel AMPlify score of 0.21.
 
 def test_no_threshold_keeps_the_whole_candidate_set(client):
     body = client.get("/api/build", params={"direction": "antioxidant"}).json()
@@ -398,17 +396,16 @@ def test_no_threshold_keeps_the_whole_candidate_set(client):
 def test_a_score_floor_removes_the_candidates_below_it(client):
     body = client.get(
         "/api/build",
-        params=[("direction", "antioxidant"), ("min_functional_score", "antioxidant:0.7")],
+        params=[("direction", "antibacterial"), ("min_functional_score", "antibacterial:0.5")],
     ).json()
-    assert body["total"] == 1
-    assert body["items"][0]["functional_score"] == pytest.approx(0.78)
+    assert body["total"] == 0
     thresholds = body["thresholds"]
     assert thresholds["removed"] == 1
     outcome = thresholds["directions"][0]
-    assert outcome["pool"] == 2
-    assert outcome["kept"] == 1
+    assert outcome["pool"] == 1
+    assert outcome["kept"] == 0
     assert outcome["removed_by_threshold"] == 1
-    assert outcome["functional_score_floor"] == 0.7
+    assert outcome["functional_score_floor"] == 0.5
     assert outcome["functional_score_floor_applied"] is True
     assert outcome["note"] is None
 
@@ -416,11 +413,13 @@ def test_a_score_floor_removes_the_candidates_below_it(client):
 def test_a_score_floor_on_a_ranking_only_direction_is_reported_as_not_applied(client):
     body = client.get(
         "/api/build",
-        params=[("direction", "antimelanin"), ("min_functional_score", "antimelanin:0.5")],
+        params=[("direction", "antioxidant"), ("min_functional_score", "antioxidant:0.99")],
     ).json()
-    assert body["total"] == 0
+    assert body["total"] == 2
+    assert sorted(item["functional_score"] for item in body["items"]) == pytest.approx([0.77, 0.83])
+    assert all(item["functional_score_key"] == "aopxsvm" for item in body["items"])
     outcome = body["thresholds"]["directions"][0]
-    assert outcome["functional_score_floor"] == 0.5
+    assert outcome["functional_score_floor"] == 0.99
     assert outcome["functional_score_floor_applied"] is False
     assert outcome["note"] is not None
     assert "orders candidates" in outcome["note"]
@@ -477,8 +476,8 @@ def test_thresholds_are_reported_and_the_candidates_are_still_ranked(client):
         "/api/build",
         params=[
             ("direction", "antioxidant"),
-            ("min_functional_score", "antioxidant:0.7"),
-            ("max_allergenicity", "0.5"),
+            ("min_functional_score", "antioxidant:0.99"),
+            ("max_allergenicity", "0.06"),
         ],
     ).json()
     # The tally covers what survived the thresholds, not what the page returned.
@@ -521,12 +520,13 @@ def test_the_reference_data_carries_the_thresholds_the_service_applies(client):
     body = client.get("/api/meta/reference").json()
     thresholds = body["thresholds"]
     antioxidant = thresholds["functional_score"]["antioxidant"]
-    assert antioxidant["floor_applies"] is True
-    assert antioxidant["declared_boundary"] == 0.5
+    assert antioxidant["floor_applies"] is False
+    assert antioxidant["declared_boundary"] is None
+    assert antioxidant["tool"] == "AOPxSVM"
+    assert thresholds["functional_score"]["antibacterial"]["floor_applies"] is True
     assert thresholds["allergenicity"]["boundary"] == 0.3
     assert thresholds["peptide_length"]["min"] == 1
     assert thresholds["peptide_length"]["max"] == 30
-    # The two ranking-only directions say so, so the interface does not offer a floor on a
-    # number that cannot carry one.
+    # The other ranking-only directions also have no floor.
     assert thresholds["functional_score"]["antimelanin"]["floor_applies"] is False
     assert thresholds["functional_score"]["anti_inflammatory"]["floor_applies"] is False

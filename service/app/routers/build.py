@@ -115,7 +115,7 @@ def build(
     min_functional_score: list[str] = Query(
         default_factory=list,
         description="A floor on a direction's functional score, written as "
-        "`direction:value` — for example `antioxidant:0.5`. Repeat the parameter or separate "
+        "`direction:value` — for example `antibacterial:0.5`. Repeat the parameter or separate "
         "several with commas. The floor applies only where the direction's score is a "
         "probability; on the two ranking-only directions it is reported as not applied "
         "rather than silently ignored. A score the pipeline did not measure is not excluded "

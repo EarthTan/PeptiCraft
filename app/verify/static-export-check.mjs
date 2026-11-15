@@ -673,27 +673,23 @@ console.log('\nthe screening thresholds, applied to an exported ranking')
       direction: 'antioxidant',
       route_id: route,
       limit: '500',
-      min_functional_score: 'antioxidant:0.5',
+      min_functional_score: 'antioxidant:1',
     }),
   )
-  const expected = rows.filter((r) => (r.functional_score ?? 0) >= 0.5)
   check(
-    'a score floor keeps exactly the rows above it',
-    floor.total === expected.length &&
-      floor.items.every((r) => (r.functional_score ?? 0) >= 0.5),
-    `${floor.total} against ${expected.length}`,
+    'the antioxidant ranking ignores an activity floor',
+    floor.total === whole.total &&
+      floor.thresholds?.removed === 0 &&
+      floor.thresholds?.directions?.[0]?.functional_score_floor_applied === false,
   )
   check(
-    'the report says what the floor removed',
-    floor.thresholds?.removed === whole.total - expected.length &&
-      floor.thresholds?.directions?.[0]?.pool === whole.total &&
-      floor.thresholds?.directions?.[0]?.kept === expected.length,
-    JSON.stringify(floor.thresholds?.directions?.[0]),
+    'the build reports AOPxSVM ranking scores',
+    floor.items.length > 0 && floor.items.every((row) =>
+      row.functional_score_key === 'aopxsvm' && row.semantics === 'ranking_only'),
   )
   check(
-    'the tally describes the survivors rather than the whole set',
-    floor.counts?.ranked === expected.length,
-    `${floor.counts?.ranked} against ${expected.length}`,
+    'the tally describes the whole set',
+    floor.counts?.ranked === whole.total,
   )
   check(
     'the tally sums to the survivors',

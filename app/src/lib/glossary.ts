@@ -134,10 +134,9 @@ export const VERDICT_GLOSSARY: Record<SafetyVerdictKind, GlossaryKey> = {
  * not - so the lookup is by that key rather than by direction.
  */
 export const FUNCTIONAL_SCORE_NOTES: Record<string, string> = {
-  "anoxpepred-frs":
-    "The antioxidant direction's activity score: the probability that the peptide scavenges " +
-    "free radicals, from the free-radical-scavenging head of AnOxPePred. The predictor emits " +
-    "a separate chelating head, which is not this number.",
+  aopxsvm:
+    "AOPxSVM ranks peptides for antioxidant screening. A higher score gives a peptide higher " +
+    "screening priority.",
 
   "amp-esm":
     "The antibacterial direction's activity score: AMPlify's probability that the sequence is " +

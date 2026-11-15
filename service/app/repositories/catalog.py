@@ -18,10 +18,7 @@ _coverage_lock = threading.Lock()
 
 # The functional predictor each direction's score is taken from. These are the keys the
 # pipeline actually ranked on, read out of each direction's `select.py`:
-#   antioxidant      aopxsvm P90 cutoff, with AnOxPePred's FRS head as the reported
-#                    activity probability — aopxsvm's stored value is a class label (0/1)
-#                    with the probability tucked into `details.prob`, so it makes a poor
-#                    displayed score
+#   antioxidant      aopxsvm candidate-pool ranking and reported score
 #   antibacterial    amp-esm, which is AMPlify v0.1.0 scored over the whole library
 #   anti_inflammatory imfp_lg_AIP
 #   antimelanin      tipred
@@ -29,7 +26,7 @@ _coverage_lock = threading.Lock()
 # `v_peptide_enrichment_coverage` does not track the iMFP-LG channels, so a direction whose
 # tool is absent from it falls back to a direct count.
 DIRECTION_FUNCTIONAL_TOOL = {
-    "antioxidant": "anoxpepred-frs",
+    "antioxidant": "aopxsvm",
     "antibacterial": "amp-esm",
     "anti_inflammatory": "imfp_lg_AIP",
     "antimelanin": "tipred",

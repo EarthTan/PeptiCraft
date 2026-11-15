@@ -229,19 +229,12 @@ WEIGHT_MULTIPLIER = {"high": 1.8, "medium": 1.0, "low": 0.4}
 TOOLS: list[ToolDefinition] = [
     ToolDefinition(
         key="antioxidant",
-        tool="AnOxPePred (FRS head)",
-        measures=(
-            "Probability that the peptide scavenges free radicals. The predictor emits a "
-            "separate chelating head; the free-radical-scavenging head is what ranks the "
-            "antioxidant direction."
-        ),
+        tool="AOPxSVM",
+        measures="AOPxSVM antioxidant ranking score for the peptide. Higher scores indicate higher screening priority.",
         higher_is_better=True,
         group="function",
-        semantics="probability",
-        threshold=0.5,
-        threshold_source="tool",
-        threshold_note="The predictor's own activity boundary is 0.5 on the FRS head.",
-        coverage_note="All 496 constructs carry a value.",
+        semantics="ranking_only",
+        coverage_note="Shown when an AOPxSVM score is available.",
     ),
     ToolDefinition(
         key="toxicity",
@@ -407,11 +400,11 @@ PIPELINE_INCLUDED: list[PipelineStage] = [
         input="~20.2 M peptides",
         output="Ranked candidate pool",
         duration="~30 min",
-        tools=["AnOxPePred", "iMFP-LG", "TIPred", "AMPlify"],
+        tools=["AOPxSVM", "iMFP-LG", "TIPred", "AMPlify"],
         description=(
             "One functional predictor per direction ranks the full peptide library. Which "
             "predictor is used depends on the direction: the antioxidant direction is ranked "
-            "by AnOxPePred's free-radical-scavenging head, antimicrobial by iMFP-LG's AMP "
+            "by AOPxSVM, antimicrobial by iMFP-LG's AMP "
             "channel, anti-melanin by TIPred, and anti-inflammatory by iMFP-LG's AIP channel."
         ),
     ),
@@ -555,10 +548,10 @@ DIRECTION_META: list[dict[str, Any]] = [
         "icon": "shield-check",
         "color": "#10b981",
         "description": (
-            "Peptides screened for free-radical scavenging for wound dressings, tissue "
-            "engineering and antioxidant coatings. Ranked by AnOxPePred's FRS head."
+            "Peptides ranked by AOPxSVM for antioxidant applications in wound dressings, "
+            "tissue engineering and coatings."
         ),
-        "functional_predictor": "AnOxPePred (FRS head)",
+        "functional_predictor": "AOPxSVM",
     },
     {
         "id": "antibacterial",

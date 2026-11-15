@@ -5,12 +5,9 @@ the ranking. There are four, and each has a different reach — which is why the
 separately rather than gathered into one "strictness" dial:
 
   * **A floor on the direction's functional score.** Per direction, because the four
-    directions are ranked by four different predictors on four different scales: a floor of
-    0.5 means something for AnOxPePred's free-radical head and something else entirely for
-    AMPlify. It applies only where the score is a probability. The anti-inflammatory and
-    anti-melanin scores are ranking signals — they order candidates and are not probabilities
-    — so a floor on them would be a number with no meaning behind it. Those two directions
-    are capped by count instead.
+    directions are ranked by four predictors. The floor applies to the AMPlify score in the
+    antibacterial direction. Antioxidant, anti-inflammatory and anti-melanin scores are used
+    for ranking, with an optional per-direction candidate cap.
 
   * **A ceiling on the allergenicity score.** AlgPred2's own boundary, and the only threshold
     here that applies identically to every direction.
@@ -85,7 +82,7 @@ def parse_functional_floor(raw: Sequence[str] | None) -> dict[str, float]:
     `direction:value`.
 
     The separator is a colon rather than an equals sign because the equals sign already
-    separates the parameter from its value, and `?min_functional_score=antioxidant=0.5`
+    separates the parameter from its value, and `?min_functional_score=antibacterial=0.5`
     reads as a mistake even where it is not one.
 
     An entry that cannot be read is rejected rather than skipped. A floor the caller believes
@@ -103,7 +100,7 @@ def parse_functional_floor(raw: Sequence[str] | None) -> dict[str, float]:
             if not separator:
                 raise ValueError(
                     f"cannot read {text!r}: expected `direction:value`, for example "
-                    "`antioxidant:0.5`"
+                    "`antibacterial:0.5`"
                 )
             try:
                 floor = float(number.strip())

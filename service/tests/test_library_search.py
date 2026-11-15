@@ -35,6 +35,80 @@ def sequences(response) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Directions
+# ---------------------------------------------------------------------------
+#
+# The Library lets a reader hold more than one function at a time. The fixture holds two
+# directions, two rows each, so the assertions below are about the set that comes back rather
+# than about a count that would change with the dataset.
+
+
+def test_a_single_direction_narrows_the_list(client):
+    body = client.get("/api/constructs", params={"direction": "antioxidant"}).json()
+    assert body["total"] == 2
+    assert {item["direction"] for item in body["items"]} == {"antioxidant"}
+
+
+def test_two_directions_return_the_rows_of_both(client):
+    body = client.get(
+        "/api/constructs",
+        params=[("direction", "antioxidant"), ("direction", "antibacterial")],
+    ).json()
+    assert body["total"] == 4
+    assert {item["direction"] for item in body["items"]} == {"antioxidant", "antibacterial"}
+
+
+def test_the_repeated_and_the_comma_separated_spellings_agree(client):
+    """Both spellings name the same set, so the same selection cannot list different rows."""
+    repeated = client.get(
+        "/api/constructs",
+        params=[("direction", "antioxidant"), ("direction", "antibacterial")],
+    ).json()
+    joined = client.get(
+        "/api/constructs", params={"direction": "antioxidant,antibacterial"}
+    ).json()
+    assert repeated["total"] == joined["total"]
+    assert [item["id"] for item in repeated["items"]] == [item["id"] for item in joined["items"]]
+
+
+def test_naming_a_direction_twice_does_not_double_the_rows(client):
+    body = client.get(
+        "/api/constructs",
+        params=[("direction", "antioxidant"), ("direction", "antioxidant")],
+    ).json()
+    assert body["total"] == 2
+
+
+def test_holding_no_direction_lists_every_direction(client):
+    body = client.get("/api/constructs").json()
+    assert body["total"] == 4
+    assert {item["direction"] for item in body["items"]} == {"antioxidant", "antibacterial"}
+
+
+def test_a_direction_that_names_nothing_is_rejected(client):
+    """A direction that is not declared would silently widen the list, and a wider list looks
+    like a wider answer rather than a mistyped request. A declared direction that happens to
+    hold no rows is a different thing, and returns an empty page."""
+    response = client.get("/api/constructs", params={"direction": "antiviral"})
+    assert response.status_code == 400
+    assert "antiviral" in response.json()["detail"]
+
+    empty = client.get("/api/constructs", params={"direction": "antimelanin"})
+    assert empty.status_code == 200
+    assert empty.json()["total"] == 0
+
+
+def test_the_direction_filter_combines_with_the_others(client):
+    scoped = client.get(
+        "/api/constructs",
+        params={"direction": "antibacterial", "channel": "top"},
+    ).json()
+    assert scoped["total"] == 1
+    assert scoped["items"][0]["direction"] == "antibacterial"
+    assert scoped["items"][0]["channel"] == "top"
+
+
+# ---------------------------------------------------------------------------
 # Search
 # ---------------------------------------------------------------------------
 

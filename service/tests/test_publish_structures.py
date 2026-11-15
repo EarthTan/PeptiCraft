@@ -428,3 +428,56 @@ def test_a_renewal_that_changes_nothing_is_not_a_renewal(tmp_path, monkeypatch):
 def test_a_missing_wrangler_is_reported_rather_than_raised(tmp_path, monkeypatch):
     monkeypatch.setattr("scripts.publish_structures.wrangler_commands", lambda: [])
     assert refresh_token() is None
+
+
+def test_renewal_never_opens_a_browser(tmp_path, monkeypatch):
+    """A login is a person's decision.
+
+    This runs from a timer every half hour. If a failed renewal left `login` in the fallback
+    chain, it would put an authentication page on somebody's desktop every half hour and walk
+    away from it — which is what it used to do.
+    """
+    config = tmp_path / "default.toml"
+    config.write_text('oauth_token = "same"\n')
+    monkeypatch.setattr("scripts.publish_structures.WRANGLER_CONFIG", config)
+
+    calls: list[list[str]] = []
+
+    class Result:
+        returncode = 0
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return Result()
+
+    monkeypatch.setattr("scripts.publish_structures.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "scripts.publish_structures.wrangler_commands",
+        lambda: [["/opt/homebrew/bin/npx", "wrangler"], ["/usr/local/bin/npx", "wrangler"]],
+    )
+
+    assert refresh_token() is None
+    assert [call[-1] for call in calls] == ["whoami"]
+    assert "login" not in " ".join(str(part) for call in calls for part in call)
+
+
+def test_a_refused_token_is_asked_about_once_not_once_per_file(monkeypatch):
+    """Every worker shares the uploader, so an unrenewable token is learned once."""
+    def fake_urlopen(request, timeout=None):
+        raise urllib.error.HTTPError(
+            request.full_url, 401, "Unauthorized", {}, io.BytesIO(b"expired"))
+
+    asked: list[int] = []
+
+    monkeypatch.setattr("scripts.publish_structures.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "scripts.publish_structures.refresh_token",
+        lambda: asked.append(1) or None,
+    )
+
+    uploader = RestUploader("bucket", "account", "old", workers=1)
+    first = uploader.put("structures/s0.pdb", b"ATOM", "chemical/x-pdb")
+    second = uploader.put("structures/s1.pdb", b"ATOM", "chemical/x-pdb")
+
+    assert not first[1] and not second[1]
+    assert len(asked) == 1

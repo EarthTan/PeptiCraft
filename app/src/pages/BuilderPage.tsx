@@ -2,6 +2,7 @@ import { sequenceColor, sequenceWeight } from "@/lib/sequence-colors"
 import { BuilderJourney } from "@/components/builder-journey"
 import { EvidenceLegend } from "@/components/evidence-badge"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { ReactNode } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -9,23 +10,25 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ErrorState } from "@/components/ui/error-state"
 import { CardGridSkeleton, ListSkeleton } from "@/components/ui/loading-state"
-import { Notice } from "@/components/ui/notice"
-import { StructureViewer } from "@/components/structure-viewer"
+import { CollapsibleNotice, Notice } from "@/components/ui/notice"
+import { InfoTip } from "@/components/ui/tooltip"
 import { BuildNameDialog } from "@/components/build-history"
 import {
   AlertTriangle,
   ArrowRight,
   Bot,
-  Box,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Eye,
   FlaskConical,
   History,
+  Layers,
+  Ruler,
   ShieldAlert,
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { fetchBuild, fetchLinkers, fetchReference, fetchScaffolds } from "@/api"
-import { structureEnabled } from "@/api/structure"
 import type {
   BuildCounts,
   DeliveryRoute,
@@ -33,11 +36,18 @@ import type {
   LinkerView,
   MaterialForm,
   ScaffoldSummary,
+  ThresholdReference,
 } from "@/api/types"
 import { listBuildRecords, recordBuild, renameSession, type BuildRecord } from "@/lib/buildRecords"
 import { openHistoryPanel } from "@/lib/historyPanel"
 import { distinctForms, formLabel, groupScaffoldsByRoute, materialFormLabels } from "@/lib/derive"
-import { DIRECTION_STATUS_LABEL, iconFor, WEIGHT_TIER_LABEL } from "@/lib/display"
+import {
+  DIRECTION_STATUS_LABEL,
+  iconFor,
+  pipelineStatusLabel,
+  WEIGHT_TIER_LABEL,
+} from "@/lib/display"
+import { GLOSSARY, VERDICT_GLOSSARY } from "@/lib/glossary"
 import { formatScore, verdictSkin } from "@/lib/score"
 import { useAsync } from "@/lib/useAsync"
 import { cn } from "@/lib/utils"
@@ -96,6 +106,44 @@ interface BuilderSession extends BuildIdentity {
   direction: string[]
   scaffold_id: string
   linker_id: string
+  thresholds: BuilderThresholds
+}
+
+/**
+ * The screening thresholds the reader set.
+ *
+ * Two of them, and both are choices about which candidates to look at rather than about
+ * how good a candidate has to be: the peptide's length, and how many candidates each
+ * direction contributes. The platform's own screening standards are not here: the ones that
+ * decide a candidate's fate are applied by the pipeline, and the ones that are only
+ * reported are shown beside each construct on the results page.
+ *
+ * The thresholds narrow the candidate set before it is ranked. They can only remove
+ * candidates: the library holds twenty million peptides and the candidate set is what the
+ * pipeline already screened, so no threshold here brings a new peptide in.
+ */
+interface BuilderThresholds {
+  min_peptide_length: number | null
+  max_peptide_length: number | null
+  per_direction_limit: number | null
+}
+
+/** Read the thresholds out of a stored session, ignoring anything unreadable. */
+function readStoredThresholds(raw: unknown): BuilderThresholds {
+  const empty: BuilderThresholds = {
+    min_peptide_length: null,
+    max_peptide_length: null,
+    per_direction_limit: null,
+  }
+  if (!raw || typeof raw !== "object") return empty
+  const stored = raw as Partial<BuilderThresholds>
+  const numberOrNull = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value) ? value : null
+  return {
+    min_peptide_length: numberOrNull(stored.min_peptide_length),
+    max_peptide_length: numberOrNull(stored.max_peptide_length),
+    per_direction_limit: numberOrNull(stored.per_direction_limit),
+  }
 }
 
 function newSessionId(): string {
@@ -123,6 +171,11 @@ function newSession(): BuilderSession {
     direction: [],
     scaffold_id: "",
     linker_id: "",
+    thresholds: {
+      min_peptide_length: null,
+      max_peptide_length: null,
+      per_direction_limit: null,
+    },
   }
 }
 
@@ -143,6 +196,7 @@ function readSession(): BuilderSession | null {
       direction: Array.isArray(parsed.direction) ? parsed.direction.filter((id) => typeof id === "string") : [],
       scaffold_id: typeof parsed.scaffold_id === "string" ? parsed.scaffold_id : "",
       linker_id: typeof parsed.linker_id === "string" ? parsed.linker_id : "",
+      thresholds: readStoredThresholds(parsed.thresholds),
     }
   } catch {
     return null
@@ -185,7 +239,15 @@ export default function BuilderPage() {
   const [directionIds, setDirectionIds] = useState<string[]>(boot.session.direction)
   const [scaffoldId, setScaffoldId] = useState(boot.session.scaffold_id)
   const [linkerId, setLinkerId] = useState(boot.session.linker_id)
+  const [thresholds, setThresholds] = useState<BuilderThresholds>(
+    boot.session.thresholds ?? newSession().thresholds,
+  )
   const [formFilter, setFormFilter] = useState<MaterialForm | "all">("all")
+
+  // Step 4 carries two long passages about how the linker order is decided and what choosing
+  // one does not change. Both are true and both are qualifications rather than instructions,
+  // so they sit behind a single control the reader opens when the reasoning is wanted.
+  const [linkerNotesOpen, setLinkerNotesOpen] = useState(false)
 
   // The name of the build in progress. Every build that reaches its results is recorded
   // under it, so it is asked for before the choices are made rather than after them.
@@ -262,6 +324,7 @@ export default function BuilderPage() {
     setDirectionIds([])
     setScaffoldId("")
     setLinkerId("")
+    setThresholds(newSession().thresholds)
     setFormFilter("all")
     setNameOpen(true)
   }, [])
@@ -277,8 +340,9 @@ export default function BuilderPage() {
       direction: directionIds,
       scaffold_id: scaffoldId,
       linker_id: linkerId,
+      thresholds,
     })
-  }, [session, step, routeId, directionIds, scaffoldId, linkerId])
+  }, [session, step, routeId, directionIds, scaffoldId, linkerId, thresholds])
 
   // The address is read once for the two requests it can carry, and both are taken out of
   // it afterwards: a reload repeats neither a new build nor a record that was reopened.
@@ -498,6 +562,14 @@ export default function BuilderPage() {
               ))}
             </div>
 
+            {directionIds.length > 0 && (
+              <ThresholdPanel
+                thresholds={thresholds}
+                onChange={setThresholds}
+                reference={reference.thresholds ?? null}
+              />
+            )}
+
             {canProceed(2) && (
               <div className="mt-6 flex justify-end">
                 <Button variant="gradient" size="lg" onClick={() => setStep(3)}>
@@ -633,28 +705,49 @@ export default function BuilderPage() {
               library's recommendation order, most suitable first, and the entry the reader does
               not change is the one at the top.
             </p>
-            <p className="text-xs text-gray-400 mb-4 max-w-3xl leading-relaxed">
-              The order follows one argument rather than a measurement: a short functional
-              peptide has to stay reachable on the outside of a large structural protein, so
-              flexible Gly-Ser linkers come first - they hold the peptide clear without occluding
-              it and without disturbing the scaffold's own assembly - and the rigid α-helical and
-              proline entries come last, because fixing the geometry is a specialist answer
-              rather than a default. Every entry states why it sits where it does when it is
-              selected. No experiment in the pipeline compared two linkers on one fusion, so the
-              order is a judgement about assembly, not a claim about activity.
-            </p>
 
-            <Notice
-              tone="caution"
-              title="The linker is an assembly target, not a filter"
-              className="mb-4"
+            <button
+              type="button"
+              onClick={() => setLinkerNotesOpen((open) => !open)}
+              aria-expanded={linkerNotesOpen}
+              className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-800 cursor-pointer"
             >
-              Every stored construct records the same sample-table entry, which the assembly
-              script attached as the first available row rather than chose. Choosing here
-              therefore does not narrow the candidate list below, and it changes no score. What
-              it changes is the sequence each candidate is built into on the next step, and the
-              fused length reported beside it.
-            </Notice>
+              {linkerNotesOpen ? "Show less" : "Learn More"}
+              <ChevronDown
+                className={cn(
+                  "w-3.5 h-3.5 transition-transform",
+                  linkerNotesOpen && "rotate-180",
+                )}
+              />
+            </button>
+
+            {linkerNotesOpen && (
+              <>
+                <p className="text-xs text-gray-400 mb-4 max-w-3xl leading-relaxed">
+                  The order follows one argument rather than a measurement: a short functional
+                  peptide has to stay reachable on the outside of a large structural protein, so
+                  flexible Gly-Ser linkers come first - they hold the peptide clear without
+                  occluding it and without disturbing the scaffold's own assembly - and the rigid
+                  α-helical and proline entries come last, because fixing the geometry is a
+                  specialist answer rather than a default. Every entry states why it sits where it
+                  does when it is selected. No experiment in the pipeline compared two linkers on
+                  one fusion, so the order is a judgement about assembly, not a claim about
+                  activity.
+                </p>
+
+                <Notice
+                  tone="caution"
+                  title="The linker is an assembly target, not a filter"
+                  className="mb-4"
+                >
+                  Every stored construct records the same sample-table entry, which the assembly
+                  script attached as the first available row rather than chose. Choosing here
+                  therefore does not narrow the candidate list below, and it changes no score.
+                  What it changes is the sequence each candidate is built into on the next step,
+                  and the fused length reported beside it.
+                </Notice>
+              </>
+            )}
 
             <div className="space-y-2">
               {linkers.map((linker) => (
@@ -695,6 +788,7 @@ export default function BuilderPage() {
             route={routeObj}
             directionIds={directionIds}
             directions={directions}
+            thresholds={thresholds}
             scaffold={selectedScaffold}
             linker={selectedLinker}
             onBack={() => setStep(4)}
@@ -937,6 +1031,307 @@ function RouteStep({
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 2
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 2 — screening thresholds
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A switch that looks like a switch.
+ */
+function KnobSwitch({
+  on,
+  onChange,
+  label,
+}: {
+  on: boolean
+  onChange: (next: boolean) => void
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={() => onChange(!on)}
+      className={cn(
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 cursor-pointer",
+        on ? "bg-primary-500" : "bg-gray-300",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-4 w-4 items-center justify-center rounded-full bg-white shadow-sm transition-transform duration-200",
+          on ? "translate-x-[1rem]" : "translate-x-[0.125rem]",
+        )}
+      />
+    </button>
+  )
+}
+
+/**
+ * One threshold, as a card of its own.
+ *
+ * The icon carries the threshold's colour and the card takes that colour when the threshold
+ * is on, so which thresholds are in force is readable without reading any of them.
+ *
+ * A threshold that governs several things at once carries no switch of its own: each of the
+ * things it governs has a switch, and a second switch over them would only be able to lie
+ * about the ones in between.
+ */
+function ThresholdBlock({
+  icon: Icon,
+  accent,
+  title,
+  hint,
+  active,
+  badge,
+  toggle,
+  reveal = "whenActive",
+  children,
+}: {
+  icon: LucideIcon
+  accent: string
+  title: string
+  hint: string
+  /** Whether the threshold is in force. Decides whether the card is filled or bare. */
+  active: boolean
+  /** A short note on the right, beside the switch. */
+  badge?: string
+  /** The card's own switch, absent when the threshold governs several things separately. */
+  toggle?: { on: boolean; onChange: (next: boolean) => void; label: string }
+  /** Whether the card's contents are shown. */
+  reveal?: "whenActive" | "always"
+  children?: ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border transition-all duration-200",
+        active ? "border-gray-200 bg-white shadow-sm" : "border-gray-200 bg-white/50",
+      )}
+    >
+      <div className="flex items-center gap-3 px-4 py-3">
+        <span
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+            active ? "text-white shadow-sm" : "bg-gray-100 text-gray-400",
+          )}
+          style={active ? { backgroundColor: accent } : undefined}
+        >
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-primary-900">{title}</p>
+          <p className="text-xs text-gray-500">{hint}</p>
+        </div>
+        {badge && (
+          <span className="shrink-0 text-xs tabular-nums text-gray-400">{badge}</span>
+        )}
+        {toggle && (
+          <KnobSwitch on={toggle.on} onChange={toggle.onChange} label={toggle.label} />
+        )}
+      </div>
+      {(active || reveal === "always") && children ? (
+        <div className="border-t border-gray-100 px-4 py-3">{children}</div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * The screening thresholds, folded into the step that chooses the functions.
+ *
+ * They are not a step of their own because they are not another decision: a threshold narrows
+ * the candidates the chosen functions already produced, and it changes nothing about the
+ * scaffold, the linker or the sequence. A step of their own would put a filter in the middle
+ * of a flow that assembles.
+ *
+ * Only the reader's own choices are here. The platform's screening standards are not
+ * adjustable, so they are not offered here either: the ones that decide a candidate's fate
+ * are applied by the pipeline before the candidates reach this panel, and the ones that are
+ * only reported are shown beside each construct on the results page.
+ */
+function ThresholdPanel({
+  thresholds,
+  onChange,
+  reference,
+}: {
+  thresholds: BuilderThresholds
+  onChange: (next: BuilderThresholds) => void
+  reference: ThresholdReference | null
+}) {
+  const [open, setOpen] = useState(false)
+  const lengthReference = reference?.peptide_length
+
+  const set = <K extends keyof BuilderThresholds>(
+    key: K,
+    value: BuilderThresholds[K],
+  ) => onChange({ ...thresholds, [key]: value })
+
+  const setCount =
+    (thresholds.min_peptide_length !== null || thresholds.max_peptide_length !== null ? 1 : 0) +
+    (thresholds.per_direction_limit !== null ? 1 : 0)
+
+  const lengthOn =
+    thresholds.min_peptide_length !== null || thresholds.max_peptide_length !== null
+
+  return (
+    <div
+      className="mt-4 rounded-2xl border border-gray-200 bg-surface-alt/60 shadow-sm"
+      data-panel-body="thresholds"
+    >
+      <div className="flex items-center gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+          aria-expanded={open}
+          data-panel="thresholds"
+          className="flex flex-1 cursor-pointer items-center gap-2.5 text-left"
+        >
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-gray-400 transition-transform duration-200",
+              open && "rotate-180",
+            )}
+          />
+          <span className="text-sm font-semibold text-primary-900">Screening thresholds</span>
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[11px] font-medium",
+              setCount === 0
+                ? "bg-gray-200 text-gray-500"
+                : "bg-primary-100 text-primary-700",
+            )}
+          >
+            {setCount === 0 ? "none set" : `${setCount} set`}
+          </span>
+        </button>
+        <InfoTip content={GLOSSARY.screening_thresholds} />
+      </div>
+
+      {open && (
+        <div className="space-y-3 px-4 pb-4">
+          <p className="text-xs leading-relaxed text-gray-500">
+            Two settings, both about which candidates to look at. They narrow the candidates
+            before they are ranked, and can only remove candidates: the peptide library holds
+            twenty million sequences and these act on the ones the pipeline has already
+            screened.
+          </p>
+
+          {/* Peptide length range. */}
+          <ThresholdBlock
+            icon={Ruler}
+            accent="#8b5cf6"
+            title="Peptide length"
+            hint="Residues of the peptide on its own, before the scaffold and the linker"
+            active={lengthOn}
+            badge={
+              lengthReference
+                ? `${lengthReference.min}–${lengthReference.max} aa in the library`
+                : undefined
+            }
+            toggle={{
+              on: lengthOn,
+              onChange: (next) =>
+                onChange({
+                  ...thresholds,
+                  min_peptide_length: next ? (lengthReference?.min ?? 1) : null,
+                  max_peptide_length: next ? (lengthReference?.max ?? 30) : null,
+                }),
+              label: "Peptide length",
+            }}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="number"
+                min={lengthReference?.min ?? 1}
+                max={lengthReference?.max ?? 30}
+                placeholder={String(lengthReference?.min ?? 1)}
+                value={thresholds.min_peptide_length ?? ""}
+                onChange={(event) =>
+                  set(
+                    "min_peptide_length",
+                    event.target.value === "" ? null : Number(event.target.value),
+                  )
+                }
+                aria-label="Shortest peptide to keep"
+                className="num-field h-9 w-[4.5rem] rounded-lg border border-gray-200 bg-white px-2.5 text-center font-mono text-sm tabular-nums text-primary-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200"
+              />
+              <span className="text-xs text-gray-400">to</span>
+              <input
+                type="number"
+                min={lengthReference?.min ?? 1}
+                max={lengthReference?.max ?? 30}
+                placeholder={String(lengthReference?.max ?? 30)}
+                value={thresholds.max_peptide_length ?? ""}
+                onChange={(event) =>
+                  set(
+                    "max_peptide_length",
+                    event.target.value === "" ? null : Number(event.target.value),
+                  )
+                }
+                aria-label="Longest peptide to keep"
+                className="num-field h-9 w-[4.5rem] rounded-lg border border-gray-200 bg-white px-2.5 text-center font-mono text-sm tabular-nums text-primary-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200"
+              />
+              <span className="text-xs text-gray-400">residues</span>
+            </div>
+          </ThresholdBlock>
+
+          {/* Per-direction cap. */}
+          <ThresholdBlock
+            icon={Layers}
+            accent="#10b981"
+            title="Candidates per function"
+            hint="How many each function contributes to the ranking"
+            active={thresholds.per_direction_limit !== null}
+            toggle={{
+              on: thresholds.per_direction_limit !== null,
+              onChange: (next) => set("per_direction_limit", next ? 10 : null),
+              label: "Candidates per function",
+            }}
+          >
+            {thresholds.per_direction_limit !== null && (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={thresholds.per_direction_limit}
+                  onChange={(event) => set("per_direction_limit", Number(event.target.value))}
+                  aria-label="Candidates each function contributes"
+                  className="num-field h-9 w-[4.5rem] rounded-lg border border-gray-200 bg-white px-2.5 text-center font-mono text-sm tabular-nums text-primary-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                />
+                <span className="text-xs text-gray-400">
+                  counted within each function&apos;s own order
+                </span>
+              </div>
+            )}
+          </ThresholdBlock>
+
+          {setCount > 0 && (
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() =>
+                  onChange({
+                    min_peptide_length: null,
+                    max_peptide_length: null,
+                    per_direction_limit: null,
+                  })
+                }
+                className="cursor-pointer rounded-lg px-2.5 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-800"
+              >
+                Clear all thresholds
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function DirectionOption({
   direction,
@@ -1190,6 +1585,7 @@ function ResultStep({
   route,
   directionIds,
   directions,
+  thresholds,
   scaffold,
   linker,
   onBack,
@@ -1202,6 +1598,8 @@ function ResultStep({
   route: DeliveryRoute
   directionIds: string[]
   directions: FunctionDirection[]
+  /** The screening thresholds the reader set in step 2. */
+  thresholds: BuilderThresholds
   scaffold: ScaffoldSummary | null
   linker: LinkerView | null
   onBack: () => void
@@ -1226,22 +1624,30 @@ function ResultStep({
       scaffold_id: scaffold?.id ?? null,
       linker_id: linker?.id ?? null,
       limit: RESULT_LIMIT,
+      min_peptide_length: thresholds.min_peptide_length,
+      max_peptide_length: thresholds.max_peptide_length,
+      per_direction_limit: thresholds.per_direction_limit,
     }
     const result = await fetchBuild(params)
     return { params, result }
-  }, [directionIds, route.id, scaffold?.id, linker?.id])
+  }, [directionIds, route.id, scaffold?.id, linker?.id, thresholds])
 
-  const build = useAsync(load, [directionIds, route.id, scaffold?.id, linker?.id])
+  const build = useAsync(load, [directionIds, route.id, scaffold?.id, linker?.id, thresholds])
   const data = build.data?.result ?? null
   const loading = build.loading
   const error = build.error
   const reload = build.reload
 
-  /** The candidate whose predicted structure is on screen, if any. */
-  const [structureFor, setStructureFor] = useState<string | null>(null)
-
   const items = data?.items ?? []
   const counts = data?.counts ?? null
+
+  /** What the thresholds the reader set did to the candidate set. */
+  const thresholdReport = data?.thresholds ?? null
+  const thresholdRemoved =
+    (thresholdReport?.removed ?? 0) + (thresholdReport?.removed_by_cap ?? 0)
+  const thresholdSetCount =
+    (thresholds.min_peptide_length !== null || thresholds.max_peptide_length !== null ? 1 : 0) +
+    (thresholds.per_direction_limit !== null ? 1 : 0)
 
   const selectedNames = directions
     .filter((direction) => directionIds.includes(direction.id))
@@ -1333,6 +1739,7 @@ function ResultStep({
               <p className="text-sm text-gray-500 mt-1 leading-relaxed">
                 {route.name} · {route.barrier_label} · immunogenicity gate ≤{" "}
                 {route.screening.immunogenicity_threshold.toFixed(2)}
+                <InfoTip content={GLOSSARY.immunogenicity_gate} className="ml-1 align-middle" />
                 {linker && (
                   <>
                     {" · linker "}
@@ -1383,6 +1790,42 @@ function ResultStep({
                   } at the end of the ranking rather than counting as a zero.`}
               </p>
 
+              {thresholdReport && thresholdSetCount > 0 && (
+                <div className="mt-3 rounded-lg border border-gray-200 bg-surface-alt p-3">
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    The screening thresholds removed {thresholdRemoved} candidate
+                    {thresholdRemoved === 1 ? "" : "s"} before the ranking was cut.
+                    {thresholdReport.removed_by_cap > 0 &&
+                      ` ${thresholdReport.removed_by_cap} of them by the per-function cap.`}
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {thresholdReport.directions.map((outcome) => (
+                      <li key={outcome.direction} className="text-[11px] text-gray-500">
+                        {outcome.direction}: {outcome.kept} of {outcome.pool} candidate
+                        {outcome.pool === 1 ? "" : "s"} kept
+                        {outcome.removed_by_threshold > 0 &&
+                          `, ${outcome.removed_by_threshold} below the thresholds`}
+                        {outcome.removed_by_cap > 0 &&
+                          `, ${outcome.removed_by_cap} over the cap`}
+                        {outcome.unassessed > 0 &&
+                          `, ${outcome.unassessed} the thresholds could not judge`}
+                        {outcome.note && `. ${outcome.note}`}
+                      </li>
+                    ))}
+                  </ul>
+                  {thresholdReport.directions.some(
+                    (outcome) =>
+                      outcome.pool > 0 && outcome.kept / outcome.pool < 0.1,
+                  ) && (
+                    <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
+                      That is a narrow set. Loosening one of the thresholds brings the rest
+                      back, and the candidates that fall are often the ones that move together
+                      on the same predictor.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="mt-4 pt-3 border-t border-accent-100 flex items-center justify-between gap-3 flex-wrap">
                 {recordError ? (
                   <p className="text-xs text-red-600 max-w-md leading-relaxed">{recordError}</p>
@@ -1416,15 +1859,15 @@ function ResultStep({
 
       {data && (
         <div className="space-y-2 mb-6">
-          <Notice tone="info" title="Where the scaffold assignment came from">
+          <CollapsibleNotice tone="info" title="Where the scaffold assignment came from">
             {data.binding_note}
-          </Notice>
-          <Notice tone="info" title="Where the linker came from">
+          </CollapsibleNotice>
+          <CollapsibleNotice tone="info" title="Where the linker came from">
             {data.linker_note}
-          </Notice>
-          <Notice tone="caution" title="What these scores describe">
+          </CollapsibleNotice>
+          <CollapsibleNotice tone="caution" title="What these scores describe">
             {data.scope_note}
-          </Notice>
+          </CollapsibleNotice>
         </div>
       )}
 
@@ -1432,7 +1875,10 @@ function ResultStep({
         <p className="text-sm font-medium text-primary-900">
           {items.length} of {data?.total ?? 0} candidate{data?.total === 1 ? "" : "s"}
         </p>
-        <span className="text-xs text-gray-400">ranked by composite, {route.name} profile</span>
+        <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+          ranked by composite, {route.name} profile
+          <InfoTip content={GLOSSARY.composite} />
+        </span>
       </div>
 
       <div className="space-y-2">
@@ -1458,9 +1904,12 @@ function ResultStep({
                       {item.direction_label}
                     </Badge>
                     {item.status !== "passed" && (
-                      <Badge variant="warning" className="text-[10px]">
-                        {item.status}
-                      </Badge>
+                      <span className="inline-flex items-center gap-1">
+                        <Badge variant="warning" className="text-[10px]">
+                          {pipelineStatusLabel(item.status)}
+                        </Badge>
+                        <InfoTip content={GLOSSARY.pipeline_status} />
+                      </span>
                     )}
                   </div>
 
@@ -1491,10 +1940,13 @@ function ResultStep({
                   </div>
 
                   <div className="flex items-center gap-3 flex-wrap mt-1.5">
-                    <div className={cn("flex items-center gap-1.5 text-[11px]", skin.text)}>
-                      <span className={cn("w-1.5 h-1.5 rounded-full", skin.dot)} />
-                      {skin.label}
-                    </div>
+                  <div className={cn("flex items-center gap-1.5 text-[11px]", skin.text)}>
+                    <span className={cn("w-1.5 h-1.5 rounded-full", skin.dot)} />
+                    {skin.label}
+                    <InfoTip
+                      content={GLOSSARY[VERDICT_GLOSSARY[item.safety_verdict ?? "indeterminate"]]}
+                    />
+                  </div>
                     <span className="text-[11px] text-gray-400">
                       peptide {item.peptide_length} aa
                       {item.fused_length !== null && (
@@ -1507,7 +1959,10 @@ function ResultStep({
 
                 <div className="flex items-center gap-3">
                   <div className="text-center">
-                    <div className="text-xs text-gray-400">Composite</div>
+                    <div className="inline-flex items-center justify-center gap-1 text-xs text-gray-400">
+                      Composite
+                      <InfoTip content={GLOSSARY.composite} />
+                    </div>
                     <div className="text-lg font-bold font-mono text-accent-600">
                       {formatScore(item.composite)}
                     </div>
@@ -1533,29 +1988,8 @@ function ResultStep({
                       Details
                     </Button>
                   </Link>
-                  {scaffold && linker && structureEnabled() && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setStructureFor((current) => (current === item.id ? null : item.id))
-                      }
-                    >
-                      <Box className="w-4 h-4" />
-                      3D
-                    </Button>
-                  )}
                 </div>
               </div>
-              {structureFor === item.id && scaffold && linker && (
-                <div className="px-4 pb-4">
-                  <StructureViewer
-                    constructId={item.id}
-                    scaffoldId={scaffold.id}
-                    linkerId={linker.id}
-                  />
-                </div>
-              )}
             </Card>
           )
         })}

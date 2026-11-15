@@ -52,13 +52,13 @@ structure_lookup.json             construct_id|骨架|连接片段 → structure
 
 发布由 `service/scripts/publish_structures.py` 完成：先用 `service/scripts/build_structure_index.py` 重建索引（索引每次都从磁盘现状重建，因此跑批未结束时也能发布已完成的子集），再把桶里尚无的文件传上去。它走的是 HTTP API，用的是 wrangler 已经持有的 OAuth 令牌，不另需 R2 API token。上传是增量的：桶里已有且大小相同的文件不再重传。索引最后上传，因此中途被打断时，桶里描述的一定是一组全都到位的结构，而不是指向尚未到达的坐标。
 
-`service/scripts/sync_structures.py` 是包在外面的循环：从工作站拷贝已完成的坐标文件，重建索引，上传，然后重复。launch agent（`com.pepticraft.structure-sync`）每三十分钟跑一次，因此结构一算完就出现在站点上，而不是等整批跑完。脚本与清单放在 `~/pepticraft-sync` 而非仓库里——launch agent 运行在桌面会话的隐私授权之外，读不到 `~/Documents`；agent 的 plist 里也显式写了代理，因为会话的环境变量不会被继承。
+`~/pepticraft-sync/sync_structures.py` 是包在外面的循环：从工作站拷贝已完成的坐标文件，重建索引，上传，然后重复。launch agent（`com.pepticraft.structure-sync`）每三十分钟跑一次，因此结构一算完就出现在站点上，而不是等整批跑完。脚本与清单放在 `~/pepticraft-sync` 而非仓库里——launch agent 运行在桌面会话的隐私授权之外，读不到 `~/Documents`；agent 的 plist 里也显式写了代理，因为会话的环境变量不会被继承。
 
 ## 怎么呈现
 
 结构由 3Dmol.js 渲染（`app/public/vendor/3Dmol-min.js`，随站点自带，不在运行时从 CDN 取）。颜色是 pLDDT，用 AlphaFold 的惯例：深蓝表示高置信，浅蓝表示可信，黄色表示不确定，橙色表示无序。页面上同时给出全链 pLDDT 与只限肽段自身的 pLDDT，以及肽段高亮开关——肽段占融合链的 C 端，因此按链长倒推即可定位。
 
-入口有两处：构建器结果页每条候选行上的「3D」按钮，以及构造详情页（当 URL 指定了骨架与连接片段，即页面正在预览某个装配组合时）。两处都按同一个三元组 `construct_id|骨架|连接片段` 查找；组合不存在时页面明说「尚未预测」，不显示空框。桶地址由构建期环境变量 `VITE_STRUCTURE_BASE_URL` 给出，该值写在 `app/.env.production` 里；该变量未设时，整项功能不渲染，站点行为与该功能存在之前相同。这个地址与站点自身的数据目录一样是公开的，因此入版本库而非放在控制台设置里。
+入口只有一处：构造详情页（当 URL 指定了骨架与连接片段，即页面正在预览某个装配组合时）。按三元组 `construct_id|骨架|连接片段` 查找；组合不存在时页面明说「尚未预测」，不显示空框。桶地址由构建期环境变量 `VITE_STRUCTURE_BASE_URL` 给出，该值写在 `app/.env.production` 里；该变量未设时，整项功能不渲染，站点行为与该功能存在之前相同。这个地址与站点自身的数据目录一样是公开的，因此入版本库而非放在控制台设置里。
 
 ## 边界与未决
 

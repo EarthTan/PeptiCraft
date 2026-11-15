@@ -255,6 +255,7 @@ console.log('\nconstruct list: filters, search, ordering, pagination')
 {
   const staticMod = await loadAppModule('api/static.ts')
   const call = (q) => staticMod.serveStatic('GET', '/api/constructs', new URLSearchParams(q))
+  const callWith = (params) => staticMod.serveStatic('GET', '/api/constructs', params)
 
   const all = await call({ limit: '500' })
   check('every construct is listed', all.total >= 4, all.total)
@@ -269,6 +270,49 @@ console.log('\nconstruct list: filters, search, ordering, pagination')
     single.total <= all.total && single.items.every((r) => r.direction === single.items[0].direction),
     `${single.total} of ${all.total}`,
   )
+
+  // More than one function at a time. The parameter may be repeated or may carry several ids
+  // in one value, and the two spellings have to select the same rows — otherwise the same
+  // selection would list different constructs in development and in the deployment.
+  const firstDirection = all.items[0].direction
+  const secondDirection = all.items.find((r) => r.direction !== firstDirection)?.direction
+  if (secondDirection) {
+    const comma = await call({ direction: `${firstDirection},${secondDirection}`, limit: '500' })
+    const repeatedParams = new URLSearchParams({ limit: '500' })
+    repeatedParams.append('direction', firstDirection)
+    repeatedParams.append('direction', secondDirection)
+    const repeated = await callWith(repeatedParams)
+    const held = new Set([firstDirection, secondDirection])
+
+    check(
+      'two directions select the rows of both',
+      comma.total === repeated.total &&
+        comma.items.length === repeated.items.length &&
+        comma.items.every((r) => held.has(r.direction)) &&
+        comma.items.length === comma.total,
+      `${comma.total} rows for ${[...held].join(' + ')}`,
+    )
+    check(
+      'the repeated and the comma-separated spellings select the same rows',
+      comma.total === repeated.total &&
+        comma.items.map((r) => r.id).join() === repeated.items.map((r) => r.id).join(),
+      `${comma.total} vs ${repeated.total}`,
+    )
+    check(
+      'holding two directions returns more rows than holding one',
+      comma.total > single.total,
+      `${comma.total} against ${single.total}`,
+    )
+    check(
+      'naming a direction twice does not double the rows',
+      (await callWith((() => {
+        const params = new URLSearchParams({ limit: '500' })
+        params.append('direction', firstDirection)
+        params.append('direction', firstDirection)
+        return params
+      })())).total === single.total,
+    )
+  }
 
   const seq = all.items[0].peptide_sequence
   const needle = seq.slice(1, 4)
@@ -347,12 +391,37 @@ console.log('\nconstruct list: filters, search, ordering, pagination')
     lengths.join(','),
   )
 
+  // The service orders by direction, then puts each direction's top channel before its
+  // negative-control arm, then by the pipeline's rank. The static layer has to reproduce that
+  // rule rather than a rule of its own: a list that ranked globally would interleave the
+  // directions, which is exactly what stops a reader comparing one function's block with
+  // another's.
   const byRank = await call({ order: 'rank', limit: '500' })
-  const ranks = byRank.items.filter((r) => r.rank !== null).map((r) => r.rank)
+  const blocks = []
+  for (const row of byRank.items) {
+    const key = `${row.direction}/${row.channel}`
+    const current = blocks[blocks.length - 1]
+    if (!current || current.key !== key) blocks.push({ key, ranks: [] })
+    blocks[blocks.length - 1].ranks.push(row.rank)
+  }
   check(
-    'ordering by rank is ascending',
-    ranks.every((n, i) => i === 0 || ranks[i - 1] <= n),
-    ranks.join(','),
+    'each direction and channel forms one contiguous block',
+    new Set(blocks.map((block) => block.key)).size === blocks.length,
+    blocks.map((block) => block.key).join(' '),
+  )
+  check(
+    'the ranks ascend inside every block',
+    blocks.every((block) =>
+      block.ranks.every((n, i) => i === 0 || block.ranks[i - 1] <= n),
+    ),
+  )
+  check(
+    'a direction keeps its top channel above its control arm',
+    blocks.every((block, i) => {
+      const earlier = blocks.slice(0, i).find((b) => b.key.startsWith(`${block.key.split('/')[0]}/`))
+      return !earlier || earlier.key.endsWith('/top')
+    }),
+    blocks.map((block) => block.key).join(' '),
   )
 
   const page0 = await call({ limit: '1', offset: '0' })
@@ -579,6 +648,157 @@ console.log('\nthe Builder ranking')
   check(
     'a page of the ranking is the head of the whole ranking',
     paged.items[0]?.id === all.items[0]?.id,
+  )
+}
+
+console.log('\nthe screening thresholds, applied to an exported ranking')
+{
+  const staticMod = await loadAppModule('api/static.ts')
+  const route = 'topical-film'
+
+  // The exported rows carry the values the thresholds compare, so the rules can be checked
+  // against the data the service itself produced rather than against a number written here.
+  // The whole candidate set, not a page of it: the thresholds are compared against the
+  // rows they are supposed to have kept, and a page would make every comparison wrong.
+  const whole = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({ direction: 'antioxidant', route_id: route, limit: '500' }),
+  )
+  const rows = whole.items
+  check('the whole candidate set is on hand', rows.length === whole.total, `${rows.length} of ${whole.total}`)
+
+  const floor = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antioxidant',
+      route_id: route,
+      limit: '500',
+      min_functional_score: 'antioxidant:1',
+    }),
+  )
+  check(
+    'the antioxidant ranking ignores an activity floor',
+    floor.total === whole.total &&
+      floor.thresholds?.removed === 0 &&
+      floor.thresholds?.directions?.[0]?.functional_score_floor_applied === false,
+  )
+  check(
+    'the build reports AOPxSVM ranking scores',
+    floor.items.length > 0 && floor.items.every((row) =>
+      row.functional_score_key === 'aopxsvm' && row.semantics === 'ranking_only'),
+  )
+  check(
+    'the tally describes the whole set',
+    floor.counts?.ranked === whole.total,
+  )
+  check(
+    'the tally sums to the survivors',
+    floor.counts?.clear + floor.counts?.borderline + floor.counts?.vetoed +
+      floor.counts?.indeterminate === floor.counts?.ranked,
+  )
+
+  const ceiling = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antioxidant',
+      route_id: route,
+      limit: '500',
+      max_allergenicity: '0.3',
+    }),
+  )
+  const safe = rows.filter((r) => r.allergenicity !== null && r.allergenicity !== undefined &&
+    r.allergenicity <= 0.3)
+  check(
+    'an allergenicity ceiling keeps exactly the rows below it',
+    ceiling.total === safe.length &&
+      ceiling.items.every((r) => r.allergenicity <= 0.3),
+    `${ceiling.total} against ${safe.length}`,
+  )
+
+  const ranged = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antioxidant',
+      route_id: route,
+      limit: '500',
+      min_peptide_length: '15',
+      max_peptide_length: '25',
+    }),
+  )
+  const inRange = rows.filter((r) => r.peptide_length >= 15 && r.peptide_length <= 25)
+  check(
+    'a length range keeps exactly the rows inside it',
+    ranged.total === inRange.length &&
+      ranged.items.every((r) => r.peptide_length >= 15 && r.peptide_length <= 25),
+    `${ranged.total} against ${inRange.length}`,
+  )
+
+  const both = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antioxidant,antibacterial',
+      route_id: route,
+      limit: '500',
+    }),
+  )
+  const capped = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antioxidant,antibacterial',
+      route_id: route,
+      limit: '500',
+      per_direction_limit: '3',
+    }),
+  )
+  const perDirection = {}
+  for (const row of capped.items) perDirection[row.direction] = (perDirection[row.direction] ?? 0) + 1
+  check(
+    'the per-direction cap counts within each direction',
+    Object.values(perDirection).every((n) => n <= 3) &&
+      capped.thresholds?.removed_by_cap > 0,
+    JSON.stringify(perDirection),
+  )
+  check(
+    'the cap takes the head of each direction, not an arbitrary slice',
+    capped.items
+      .filter((r) => r.direction === 'antibacterial')
+      .every((r) => {
+        const head = both.items.filter((x) => x.direction === 'antibacterial').slice(0, 3)
+        return head.some((h) => h.id === r.id)
+      }),
+  )
+
+  // A floor on a direction whose score orders candidates rather than measuring activity is
+  // not applied. The service reports it as not applied; the static layer must do the same,
+  // because a threshold that quietly did nothing would read as one that did.
+  const rankingOnly = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({
+      direction: 'antimelanin',
+      route_id: route,
+      limit: '500',
+      min_functional_score: 'antimelanin:0.99',
+    }),
+  )
+  const outcome = rankingOnly.thresholds?.directions?.[0]
+  check(
+    'a floor on a ranking-only direction is reported as not applied',
+    outcome?.functional_score_floor_applied === false,
+    JSON.stringify(outcome),
+  )
+  check(
+    'the report says why it was not applied',
+    typeof outcome?.note === 'string' && outcome.note.length > 0,
+    outcome?.note,
+  )
+  const melanin = await staticMod.serveStatic(
+    'GET', '/api/build',
+    new URLSearchParams({ direction: 'antimelanin', route_id: route, limit: '500' }),
+  )
+  check(
+    'the candidates are all still there',
+    rankingOnly.total === melanin.total,
+    `${rankingOnly.total} against ${melanin.total}`,
   )
 }
 

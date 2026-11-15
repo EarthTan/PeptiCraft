@@ -96,10 +96,10 @@ upload is incremental: a file already stored at the same size is not sent again.
 uploaded last, so an interrupted run leaves the bucket describing a set of structures that are
 all present rather than pointing at coordinates that have not arrived.
 
-`service/scripts/sync_structures.py` is the loop around it: it copies the finished coordinate
+`~/pepticraft-sync/sync_structures.py` is the loop around it: it copies the finished coordinate
 files across from the workstation, rebuilds the index and uploads, and repeats. A launch agent
 (`com.pepticraft.structure-sync`) runs it every thirty minutes, so a structure appears on the
-site as soon as it exists rather than at the end of the run. The scripts and the manifest sit in
+site as soon as it exists rather than at the end of the run. The script and the manifest sit in
 `~/pepticraft-sync` rather than in the repository, because a launch agent runs outside the
 desktop session's privacy grants and cannot reach `~/Documents`; the agent's plist also sets the
 proxy explicitly, since the session's environment variables are not inherited.
@@ -113,10 +113,9 @@ page shows the whole-chain figure and the figure restricted to the peptide's own
 switch that highlights the peptide — the peptide occupies the C-terminal end of the fusion, so
 its position follows from the chain length.
 
-There are two entrances: a "3D" button on every candidate row of the Builder's results, and the
-construct page, where the structure appears when the URL names a scaffold and a linker, which is
-the state in which the page is previewing an assembly. Both look the structure up by the same
-triple, `construct_id|scaffold|linker`. A combination that has not been predicted is reported as
+The structure is presented on the construct page, where it appears when the URL names a scaffold
+and a linker, which is the state in which the page is previewing an assembly. The lookup is by the
+triple `construct_id|scaffold|linker`. A combination that has not been predicted is reported as
 such rather than shown as an empty frame. The bucket is named at build time by
 `VITE_STRUCTURE_BASE_URL`, which is set in `app/.env.production`; with that variable unset the
 whole feature renders nothing and the platform behaves as it did before it existed. The address

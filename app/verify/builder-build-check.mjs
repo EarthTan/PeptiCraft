@@ -172,7 +172,13 @@ await act(async () => {
 // ---------------------------------------------------------------------------
 
 console.log('\n=== Step 1: the route is chosen and the scaffold pool follows it ===')
-await waitFor(() => buttonContaining('Next: Function Direction') || buttons().length > 4, 'step 1')
+// The route cards appear only once the reference data has arrived, so the wait is on the
+// cards themselves. A looser condition (any four buttons) is satisfied by the header before
+// the library lands, and the assertions below then read an empty page.
+await waitFor(
+  () => routes.every((route) => (host.textContent ?? '').includes(route.name)),
+  'the route cards',
+)
 
 check(
   'every declared route is offered',
@@ -242,6 +248,11 @@ check(
   linkers.every((linker) => (host.textContent ?? '').includes(linker.name)),
   `${linkers.length} entries in the library`,
 )
+// The step's two notes about the linker sit behind one control, so the check opens it before
+// it reads what is behind it. A note that is folded away is still there, but the assertion
+// is about the note existing, not about it being in view.
+const learnMore = buttonContaining('Learn More')
+if (learnMore) await click(learnMore, 'the Learn More control')
 check(
   'the step states that the linker does not filter the candidates either',
   (host.textContent ?? '').includes('not a filter'),

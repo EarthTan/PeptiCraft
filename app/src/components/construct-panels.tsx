@@ -13,11 +13,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { RankingOnlyMarker } from "@/components/ui/notice"
 import { Skeleton } from "@/components/ui/skeleton"
+import { InfoTip } from "@/components/ui/tooltip"
 import {
   SCORE_GROUP_HINT,
   SCORE_GROUP_LABEL,
   thresholdSourceLabel,
 } from "@/lib/display"
+import { GLOSSARY, VERDICT_GLOSSARY } from "@/lib/glossary"
 import {
   barWidth,
   formatScore,
@@ -55,10 +57,12 @@ export function SafetyGateList({ safety }: { safety: SafetyVerdict }) {
         <Badge variant={skin.badge} className="text-[10px]">
           {skin.label}
         </Badge>
+        <InfoTip content={GLOSSARY[VERDICT_GLOSSARY[safety.verdict]]} />
         {safety.route_id && safety.immunogenicity_threshold !== null && (
-          <span className="text-[10px] text-gray-400">
+          <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
             immunogenicity gate {formatScore(safety.immunogenicity_threshold)} from this route's
             profile
+            <InfoTip content={GLOSSARY.immunogenicity_gate} />
           </span>
         )}
       </div>
@@ -90,6 +94,15 @@ export function SafetyGateList({ safety }: { safety: SafetyVerdict }) {
                         soft signal
                       </Badge>
                     )}
+                    <InfoTip
+                      content={
+                        gate.is_veto_gate
+                          ? gate.threshold_source === "route"
+                            ? `${GLOSSARY.veto_gate} ${GLOSSARY.route_gate}`
+                            : GLOSSARY.veto_gate
+                          : GLOSSARY.soft_signal
+                      }
+                    />
                   </div>
                   <p className="font-mono text-[11px] text-gray-400 mt-0.5">{gate.tool}</p>
                 </div>
